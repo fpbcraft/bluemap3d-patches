@@ -98,14 +98,15 @@ public final class ProceduralBlockSource implements BlockModelSource {
         double y = blockstateY(facing);
 
         addModel(out, "create:block/mechanical_roller/frame",
-                0, y, 0, 0, 0, 0);
+                0, y, 0, 0, -4.0, 0);
 
-        // RollerRenderer places the wheel just beyond the facing side, four model pixels
-        // lower than the block origin, then turns the wheel model 90 degrees around Y.
+        // RollerRenderer lowers the whole actor by 4 model pixels and the wheel by
+        // another 8, places it just beyond the facing side, then turns the wheel model
+        // 90 degrees around Y. Keep the zero-spin pose but match those fixed offsets.
         addModel(out, "create:block/mechanical_roller/wheel",
                 0, y + 90.0, 0,
                 facing.getStepX() * 17.0,
-                -4.0,
+                -12.0,
                 facing.getStepZ() * 17.0);
 
         return out.isEmpty() ? List.of() : List.copyOf(out);
