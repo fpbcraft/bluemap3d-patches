@@ -920,7 +920,6 @@ index e8199bf..f2a3e33 100644
  import dev.duzo.bluemap3d.bake.AssetIndex;
  import dev.duzo.bluemap3d.bake.BlockModelSource;
 +import dev.duzo.bluemap3d.bake.BitsNBobsStrutSource;
-+import dev.duzo.bluemap3d.bake.ProceduralBlockSource;
 +import dev.duzo.bluemap3d.bake.CopycatsSpecialSource;
 +import dev.duzo.bluemap3d.bake.CopycatsBoardSource;
 +import dev.duzo.bluemap3d.bake.CopycatsShapeSource;
@@ -934,7 +933,6 @@ index e8199bf..f2a3e33 100644
 +                // These mods generate important geometry in client code. Reconstruct it
 +                // from server blockstate/block-entity data before ordinary JSON lookup.
 +                sources.add(new BitsNBobsStrutSource(packs));
-+                sources.add(new ProceduralBlockSource(packs));
 +                sources.add(new CopycatsSpecialSource(packs));
 +                // Dynamic Copycats+ boards have no JSON geometry; their material lives in
 +                // block-entity NBT, so they must be resolved before the ordinary pack path.
