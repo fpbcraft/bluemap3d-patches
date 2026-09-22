@@ -1,0 +1,4 @@
+.tmp-bluemap3d/
+dist/
+.gradle/
+**/build/

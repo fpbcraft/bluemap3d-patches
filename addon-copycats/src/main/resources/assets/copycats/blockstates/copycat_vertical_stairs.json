@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "": {
+      "renderer": "bluemap_copycats:terrain",
+      "model": "bluemap_copycats:block/placeholder"
+    }
+  }
+}

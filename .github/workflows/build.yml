@@ -1,0 +1,31 @@
+name: Build BlueMap3D patches
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build BlueMap 5.7 compatibility artifacts
+        run: ./build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bluemap3d-patches-1.0.19
+          path: dist/*
+          if-no-files-found: error

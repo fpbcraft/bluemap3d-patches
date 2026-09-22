@@ -1,0 +1,2683 @@
+diff --git a/addon-create/src/main/java/dev/duzo/bluemap3d/create/BlocksBogiesStyles.java b/addon-create/src/main/java/dev/duzo/bluemap3d/create/BlocksBogiesStyles.java
+new file mode 100644
+index 0000000..445fb54
+--- /dev/null
++++ b/addon-create/src/main/java/dev/duzo/bluemap3d/create/BlocksBogiesStyles.java
+@@ -0,0 +1,238 @@
++package dev.duzo.bluemap3d.create;
++
++import dev.duzo.bluemap3d.api.ModelAttachment;
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Direction;
++import net.minecraft.core.registries.BuiltInRegistries;
++import net.minecraft.resources.ResourceLocation;
++import net.minecraft.world.level.block.state.BlockState;
++import org.joml.Matrix4f;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Map;
++
++/**
++ * Server-side reconstruction of Create: Blocks & Bogies ({@code create_bb}) bogey styles.
++ *
++ * <p>BnB's styles are client renderer code rather than block models. On a dedicated server
++ * BlueMap3D can still see the style id and the concrete bogey block, and all partial model
++ * assets are present in the mod jar. This class maps those stable inputs to the frame and
++ * axle models without linking against BnB classes.
++ *
++ * <p>V11 intentionally covers the structural running gear first: frame + every axle/wheel,
++ * with wheel motion. Connecting rods, Walschaerts links, sliders and belt UV scrolling are
++ * not required for the bogey to exist on the map and need their own compound motion model.
++ */
++final class BlocksBogiesStyles {
++    private static final String NAMESPACE = "create_bb";
++
++    private BlocksBogiesStyles() {
++    }
++
++    static List<ModelAttachment> attachmentsFor(
++            String styleId, BlockPos pos, Direction.Axis axis, BlockState state) {
++        if (styleId == null || !styleId.startsWith(NAMESPACE + ":")) {
++            return List.of();
++        }
++
++        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
++        if (!NAMESPACE.equals(blockId.getNamespace())) {
++            return List.of();
++        }
++
++        String style = styleId.substring(styleId.indexOf(':') + 1);
++        int axles = axleCount(style);
++        if (axles <= 0) {
++            return List.of();
++        }
++
++        String blockPath = blockId.getPath();
++        if (blockPath.startsWith("s_")) {
++            return small(style, pos, axis, axles);
++        }
++
++        boolean extraLarge = blockPath.startsWith("xl_");
++        if (!extraLarge && !blockPath.startsWith("l_")) {
++            return List.of();
++        }
++        return drivers(style, pos, axis, axles, extraLarge);
++    }
++
++    private static List<ModelAttachment> small(
++            String style, BlockPos pos, Direction.Axis axis, int axles) {
++        String stem;
++        if (style.endsWith("_trailing")) {
++            stem = "t" + (axles * 2);
++        } else if ("single_axle_offset".equals(style)) {
++            stem = "s2e";
++        } else if (style.endsWith("_bogie")) {
++            stem = "s" + (axles * 2);
++        } else {
++            return List.of();
++        }
++
++        List<ModelAttachment> out = new ArrayList<>();
++        out.add(new ModelAttachment(
++                pos,
++                bb("block/bogie/small/" + stem + "/frame"),
++                Map.of(),
++                frameTransform(axis)));
++
++        ResourceLocation wheels = bb("block/bogie/small/shared/wheels");
++        float center = (axles - 1) / 2f;
++        for (int i = 0; i < axles; i++) {
++            float z = i - center;
++            out.add(wheel(
++                    pos, axis, wheels, -0.75f, z,
++                    ContraptionProvider.WHEEL_RADIUS_SMALL));
++        }
++        return List.copyOf(out);
++    }
++
++    private static List<ModelAttachment> drivers(
++            String style, BlockPos pos, Direction.Axis axis, int axles, boolean extraLarge) {
++        String code = familyCode(style);
++        if (code == null) {
++            return List.of();
++        }
++
++        // BnB intentionally delegates the LARGE single-axle Scotch Yoke style to Create's
++        // own standard-large renderer. There is no create_bb:block/bogie/large/l2c/frame.
++        // The XL variant is a real BnB partial and is supported here.
++        if (!extraLarge && axles == 1 && "c".equals(code)) {
++            return List.of();
++        }
++
++        String root = extraLarge ? "extra_large" : "large";
++        String prefix = extraLarge ? "xl" : "l";
++        String stem = prefix + (axles * 2) + code;
++        ResourceLocation frame = bb("block/bogie/" + root + "/" + stem + "/frame");
++
++        List<ModelAttachment> out = new ArrayList<>();
++        out.add(new ModelAttachment(pos, frame, Map.of(), frameTransform(axis)));
++
++        boolean rodless = style.contains("rodless");
++        String wheelRoot = "block/bogie/" + root + "/shared/";
++        float[] positions = axlePositions(axles, extraLarge);
++        float wheelY = extraLarge ? -0.25f : -0.5f;
++        float radius = extraLarge ? 16.5f : 12.5f;
++
++        for (int i = 0; i < positions.length; i++) {
++            WheelKind kind = wheelKind(axles, i);
++            String model = switch (kind) {
++                case NORMAL -> rodless ? "wheels_single" : "wheels";
++                case SEMI_BLIND -> rodless ? "wheels_s_b_single" : "wheels_s_b";
++                case BLIND -> rodless ? "wheels_b_single" : "wheels_b";
++            };
++            out.add(wheel(pos, axis, bb(wheelRoot + model), wheelY, positions[i], radius));
++        }
++
++        return List.copyOf(out);
++    }
++
++    private static Matrix4f frameTransform(Direction.Axis axis) {
++        // BnB frames are rendered with no static translation. BlueMap3D's attachment
++        // convention needs the same -1.5 block correction already established for other
++        // renderer-authored bogey partials.
++        return ContraptionProvider.bogeyTransform(
++                axis,
++                ContraptionProvider.BOGEY_DROP + ContraptionProvider.BOGEY_DRIVE_HEIGHT,
++                0f);
++    }
++
++    private static ModelAttachment wheel(
++            BlockPos pos, Direction.Axis axis, ResourceLocation model,
++            float y, float z, float radius) {
++        Matrix4f transform = ContraptionProvider.bogeyTransform(axis, y, z);
++        ModelAttachment.Spin spin = new ModelAttachment.Spin(
++                ContraptionProvider.WHEEL_PIVOT,
++                ContraptionProvider.WHEEL_AXIS,
++                radius);
++        return new ModelAttachment(pos, model, Map.of(), transform, spin);
++    }
++
++    private static float[] axlePositions(int axles, boolean extraLarge) {
++        if (extraLarge) {
++            // BnB XL drivers are uniformly 2.25 blocks apart.
++            float[] out = new float[axles];
++            float center = (axles - 1) / 2f;
++            for (int i = 0; i < axles; i++) {
++                out[i] = (i - center) * 2.25f;
++            }
++            return out;
++        }
++
++        // Read from BnB's 1.21.1 renderer classes. Odd-count large drivers use
++        // 1.6875 spacing; even-count drivers use 1.75 spacing.
++        float spacing = (axles & 1) == 0 ? 1.75f : 1.6875f;
++        float[] out = new float[axles];
++        float center = (axles - 1) / 2f;
++        for (int i = 0; i < axles; i++) {
++            out[i] = (i - center) * spacing;
++        }
++        return out;
++    }
++
++    private static WheelKind wheelKind(int axles, int index) {
++        if (axles <= 2) {
++            return WheelKind.NORMAL;
++        }
++
++        float centerDistance = Math.abs(index - (axles - 1) / 2f);
++        if ((axles & 1) == 1 && centerDistance < 0.01f) {
++            return axles >= 5 ? WheelKind.BLIND : WheelKind.SEMI_BLIND;
++        }
++        if ((axles & 1) == 0 && centerDistance < 1f) {
++            return axles >= 6 ? WheelKind.BLIND : WheelKind.SEMI_BLIND;
++        }
++        if (axles >= 5 && centerDistance < 2f) {
++            return WheelKind.SEMI_BLIND;
++        }
++        return WheelKind.NORMAL;
++    }
++
++    private static String familyCode(String style) {
++        if (style.contains("pistonless") || style.contains("rodless")) {
++            return style.contains("extended") ? "ep" : "p";
++        }
++        if (style.contains("scotch_yoke")) {
++            return "c";
++        }
++
++        boolean walschaerts = style.contains("walschaerts");
++        if (style.contains("extra_long") || style.contains("extended_long")) {
++            return walschaerts ? "lew" : "le";
++        }
++        if (style.contains("extended_short")) {
++            return walschaerts ? "sew" : "se";
++        }
++        if (style.endsWith("_long")) {
++            return walschaerts ? "lw" : "l";
++        }
++        if (style.endsWith("_short")) {
++            return walschaerts ? "sw" : "s";
++        }
++        return null;
++    }
++
++    private static int axleCount(String style) {
++        if (style.startsWith("single_axle_")) return 1;
++        if (style.startsWith("double_axle_")) return 2;
++        if (style.startsWith("triple_axle_")) return 3;
++        if (style.startsWith("quadruple_axle_")) return 4;
++        if (style.startsWith("quintuple_axle_")) return 5;
++        if (style.startsWith("sextuple_axle_")) return 6;
++        return -1;
++    }
++
++    private static ResourceLocation bb(String path) {
++        return ResourceLocation.fromNamespaceAndPath(NAMESPACE, path);
++    }
++
++    private enum WheelKind {
++        NORMAL,
++        SEMI_BLIND,
++        BLIND
++    }
++}
+diff --git a/addon-create/src/main/java/dev/duzo/bluemap3d/create/BogeyStyles.java b/addon-create/src/main/java/dev/duzo/bluemap3d/create/BogeyStyles.java
+index 5bb8d6e..9d5180d 100644
+--- a/addon-create/src/main/java/dev/duzo/bluemap3d/create/BogeyStyles.java
++++ b/addon-create/src/main/java/dev/duzo/bluemap3d/create/BogeyStyles.java
+@@ -4,6 +4,7 @@ import dev.duzo.bluemap3d.api.ModelAttachment;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.core.Direction;
++import net.minecraft.world.level.block.state.BlockState;
+ import org.joml.Matrix4f;
+ import org.joml.Vector3f;
+ 
+@@ -389,7 +390,13 @@ final class BogeyStyles {
+      * {@link ContraptionProvider} already used for every non-Create style before this
+      * table existed, now just delegated to.
+      */
+-    static List<ModelAttachment> attachmentsFor(String styleId, BlockPos pos, Direction.Axis axis) {
++    static List<ModelAttachment> attachmentsFor(
++            String styleId, BlockPos pos, Direction.Axis axis, BlockState state) {
++        List<ModelAttachment> blocksBogies =
++                BlocksBogiesStyles.attachmentsFor(styleId, pos, axis, state);
++        if (!blocksBogies.isEmpty()) {
++            return blocksBogies;
++        }
+         MediumStyle medium = MEDIUM_STYLES.get(styleId);
+         if (medium != null) {
+             return mediumAttachments(pos, axis, medium);
+diff --git a/addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java b/addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java
+index a98a42e..6ecb9bf 100644
+--- a/addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java
++++ b/addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java
+@@ -378,6 +378,10 @@ public final class ContraptionProvider implements SceneObjectProvider {
+      * rather than every interval for as long as the contraption exists.
+      */
+     private final Set<String> unrotatable = ConcurrentHashMap.newKeySet();
++    private static final Set<String> COPYCATS_MISSING_METADATA =
++            ConcurrentHashMap.newKeySet();
++    private static final Set<String> BOGEY_V12_TRACE =
++            ConcurrentHashMap.newKeySet();
+ 
+     /**
+      * Per-carriage cached geometry, one map per level. Keyed on {@code train.id + carriage
+@@ -665,6 +669,7 @@ public final class ContraptionProvider implements SceneObjectProvider {
+         }
+ 
+         Map<BlockPos, BlockState> blocks = new HashMap<>(source.size());
++        Map<BlockPos, CompoundTag> blockEntityData = new HashMap<>();
+         List<ModelAttachment> attachments = new ArrayList<>();
+         Map<BlockPos, CompoundTag> updateTags = updateTagsOf(contraption);
+         long version = FNV_OFFSET;
+@@ -686,11 +691,35 @@ public final class ContraptionProvider implements SceneObjectProvider {
+             String style = bogeyStyleOf(updateTags.get(pos), entry.getValue());
+             version ^= mix(mix(FNV_OFFSET, pos.asLong()), style.hashCode());
+             addBogeyAttachments(pos, entry.getValue(), style, attachments);
++
++            // Copycats+ stores each part's copied BlockState under material_data in the
++            // block entity update tag. Preserve that snapshot for core's dynamic model
++            // source, and make it part of the geometry version so changing a material
++            // re-bakes the carriage even though its block state did not change.
++            CompoundTag updateTag = updateTags.get(pos);
++            CompoundTag renderData = renderDataOf(updateTag, entry.getValue());
++            if (renderData != null) {
++                blockEntityData.put(pos, renderData);
++                version ^= mix(mix(FNV_OFFSET, pos.asLong()), renderData.hashCode());
++            } else {
++                String blockId = net.minecraft.core.registries.BuiltInRegistries.BLOCK
++                        .getKey(state.getBlock()).toString();
++                if (false && blockId.startsWith("copycats:")
++                        && COPYCATS_MISSING_METADATA.size() < 32
++                        && COPYCATS_MISSING_METADATA.add(blockId)) {
++                    CompoundTag full = entry.getValue().nbt();
++                    LOGGER.info(
++                            "COPYCATS-V9 CREATE metadata missing block={} full={} update={}",
++                            blockId,
++                            full == null ? "<null>" : full.toString(),
++                            updateTag == null ? "<null>" : updateTag.toString());
++                }
++            }
+         }
+         version = mix(version, source.size());
+-        version = mix(version, GEOMETRY_REVISION);
++        version = mix(version, GEOMETRY_REVISION + 15);
+ 
+-        BlockVolume volume = BlockVolume.of(blocks, PIVOT, attachments);
++        BlockVolume volume = BlockVolume.of(blocks, PIVOT, blockEntityData, attachments);
+         return new CarriageGeometry(volume, version);
+     }
+ 
+@@ -812,6 +841,32 @@ public final class ContraptionProvider implements SceneObjectProvider {
+         return style == null ? STANDARD_BOGEY_STYLE : style;
+     }
+ 
++    /**
++     * Raw rendering metadata for Copycats+ blocks.
++     *
++     * <p>Create exposes both the StructureBlockInfo full NBT and its live update-tag
++     * snapshot. Keep both under explicit wrapper keys; CopycatsBoardSource recursively
++     * locates material_data and the V7 trace prints the actual runtime shape if neither
++     * source contains it.
++     */
++    private static CompoundTag renderDataOf(
++            CompoundTag updateTag, StructureTemplate.StructureBlockInfo info) {
++        String namespace = net.minecraft.core.registries.BuiltInRegistries.BLOCK
++                .getKey(info.state().getBlock()).getNamespace();
++        if (!"copycats".equals(namespace)) {
++            return null;
++        }
++
++        CompoundTag out = new CompoundTag();
++        if (info.nbt() != null && !info.nbt().isEmpty()) {
++            out.put("__full", info.nbt().copy());
++        }
++        if (updateTag != null && !updateTag.isEmpty()) {
++            out.put("__update", updateTag.copy());
++        }
++        return out.isEmpty() ? null : out;
++    }
++
+     /** The style named by one block entity tag, or {@code null} if it names none. */
+     private static String bogeyStyleIn(CompoundTag nbt) {
+         if (nbt == null) {
+@@ -894,11 +949,31 @@ public final class ContraptionProvider implements SceneObjectProvider {
+             return;
+         }
+         Direction.Axis axis = state.getValue(BlockStateProperties.HORIZONTAL_AXIS);
++        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
++
++        if (false && "create_bb".equals(blockId.getNamespace())) {
++            String traceKey = style + "|" + blockId;
++            if (BOGEY_V12_TRACE.add(traceKey)) {
++                List<ModelAttachment> resolved =
++                        BogeyStyles.attachmentsFor(style, pos, axis, state);
++                LOGGER.info(
++                        "BOGEY-V13 TRACE style={} block={} axis={} attachments={} models={}",
++                        style,
++                        blockId,
++                        axis,
++                        resolved.size(),
++                        resolved.stream().map(a -> a.model().toString()).toList());
++                if (!STANDARD_BOGEY_STYLE.equals(style)) {
++                    out.addAll(resolved);
++                    return;
++                }
++            }
++        }
+ 
+         if (!STANDARD_BOGEY_STYLE.equals(style)) {
+             // Somebody else's style. The block's own model still draws either way; this only
+             // ever adds to it, never replaces it.
+-            out.addAll(BogeyStyles.attachmentsFor(style, pos, axis));
++            out.addAll(BogeyStyles.attachmentsFor(style, pos, axis, state));
+             return;
+         }
+ 
+@@ -906,9 +981,8 @@ public final class ContraptionProvider implements SceneObjectProvider {
+         // other block reaching here is either an addon bogey whose style tag could not be
+         // read, or an ordinary block that happens to have a horizontal axis; both draw
+         // nothing, which is the right answer for both.
+-        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+-        boolean small = SMALL_BOGEY.equals(id);
+-        if (!small && !LARGE_BOGEY.equals(id)) {
++        boolean small = SMALL_BOGEY.equals(blockId);
++        if (!small && !LARGE_BOGEY.equals(blockId)) {
+             return;
+         }
+ 
+diff --git a/addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java b/addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java
+index d0a5384..215a7ce 100644
+--- a/addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java
++++ b/addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java
+@@ -1,5 +1,12 @@
+ package dev.duzo.bluemap3d.sable;
+ 
++import com.google.gson.Gson;
++import com.google.gson.GsonBuilder;
++import com.google.gson.JsonArray;
++import com.google.gson.JsonElement;
++import com.google.gson.JsonObject;
++import com.google.gson.JsonParser;
++import de.bluecolored.bluemap.api.BlueMapAPI;
+ import dev.duzo.bluemap3d.api.BlockVolume;
+ import dev.duzo.bluemap3d.api.BlueMap3D;
+ import dev.duzo.bluemap3d.api.SceneObject;
+@@ -7,9 +14,12 @@ import dev.duzo.bluemap3d.api.SceneObjectProvider;
+ import dev.ryanhcode.sable.api.physics.mass.MassData;
+ import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
+ import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
++import dev.ryanhcode.sable.api.sublevel.SubLevelObserver;
+ import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
+ import dev.ryanhcode.sable.companion.math.Pose3dc;
+ import dev.ryanhcode.sable.sublevel.ServerSubLevel;
++import dev.ryanhcode.sable.sublevel.SubLevel;
++import dev.ryanhcode.sable.sublevel.storage.SubLevelRemovalReason;
+ import dev.ryanhcode.sable.sublevel.plot.PlotChunkHolder;
+ import dev.ryanhcode.sable.sublevel.plot.ServerLevelPlot;
+ import dev.ryanhcode.sable.util.LevelAccelerator;
+@@ -19,13 +29,24 @@ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.chunk.LevelChunkSection;
++import net.minecraft.world.level.storage.LevelResource;
+ import net.minecraft.world.phys.Vec3;
+ import org.joml.Quaterniondc;
+ import org.joml.Quaternionf;
+ import org.joml.Vector3dc;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
+ 
++import java.io.IOException;
++import java.nio.charset.StandardCharsets;
++import java.nio.file.AtomicMoveNotSupportedException;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.nio.file.StandardCopyOption;
+ import java.util.ArrayList;
+ import java.util.Collection;
++import java.util.Collections;
++import java.util.IdentityHashMap;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
+@@ -88,40 +109,399 @@ public final class ShipProvider implements SceneObjectProvider {
+      */
+     private final Map<String, Footprint> lastSeen = new ConcurrentHashMap<>();
+ 
++    private final Map<String, SceneObject> lastObjects = new ConcurrentHashMap<>();
++    private final Set<ServerSubLevelContainer> observedContainers =
++            Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
++
++    private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/Sable");
++    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
++    private static final long SAVE_INTERVAL_NANOS = 2_000_000_000L;
++
++    /** Persisted snapshots, grouped by the save file belonging to one server world. */
++    private final Map<Path, Map<String, SavedShip>> savedByFile = new ConcurrentHashMap<>();
++    private final Set<Path> loadedFiles = ConcurrentHashMap.newKeySet();
++    private final Map<String, PendingSnapshot> pendingSnapshots = new ConcurrentHashMap<>();
++    private final Map<String, Long> publishedVersions = new ConcurrentHashMap<>();
++    private final Map<Path, Long> lastWriteNanos = new ConcurrentHashMap<>();
++    private final Object cacheLock = new Object();
++
++    public ShipProvider() {
++        BlueMap3D.addMeshPublicationListener(publication -> {
++            if (!id().equals(publication.provider())) {
++                return;
++            }
++            publishedVersions.put(publication.objectId(), publication.version());
++            PendingSnapshot pending = pendingSnapshots.get(publication.objectId());
++            if (pending != null && pending.ship().version() == publication.version()) {
++                persist(pending, true);
++            }
++        });
++    }
++
+     /** A ship's world-space footprint, in blocks. */
+     private record Footprint(int minX, int minZ, int maxX, int maxZ, int y) {
+     }
+ 
+     @Override
+     public Collection<? extends SceneObject> objects(ServerLevel level) {
++        Path cacheFile = cacheFile(level);
++        ensureLoaded(level, cacheFile);
++
++        String dimension = level.dimension().location().toString();
++        String prefix = dimension + "/";
++        restoreCachedObjects(level, cacheFile, dimension);
++
+         ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
+-        if (container == null) {
+-            // No container on this level: Sable allocates one per level, and a level it
+-            // has not initialised yet simply has no ships.
+-            return List.of();
++        if (container != null) {
++            observeContainer(level, container);
+         }
+ 
+-        String dimension = level.dimension().location().toString();
+-        Set<String> present = new HashSet<>();
++        Set<String> active = new HashSet<>();
+         List<SceneObject> out = new ArrayList<>();
+-        for (ServerSubLevel ship : container.getAllSubLevels()) {
+-            SceneObject object = toSceneObject(level, ship);
+-            if (object == null) {
+-                continue;
++
++        if (container != null) {
++            for (ServerSubLevel ship : container.getAllSubLevels()) {
++                UUID uuid = ship == null ? null : ship.getUniqueId();
++                if (uuid == null) {
++                    continue;
++                }
++
++                String objectId = uuid.toString();
++                String key = prefix + objectId;
++                active.add(key);
++
++                SceneObject object = toSceneObject(level, ship);
++                if (object != null) {
++                    lastObjects.put(key, object);
++                    out.add(object);
++
++                    SavedShip saved = SavedShip.from(object, dimension);
++                    PendingSnapshot pending = new PendingSnapshot(cacheFile, key, saved);
++                    pendingSnapshots.put(objectId, pending);
++                    Long published = publishedVersions.get(objectId);
++                    if (published != null && published == object.geometryVersion()) {
++                        persist(pending, false);
++                    }
++
++                    Footprint footprint = footprintOf(ship);
++                    if (lastSeen.put(key, footprint) == null) {
++                        refreshFootprint(level, footprint);
++                    }
++                } else {
++                    SceneObject cached = lastObjects.get(key);
++                    if (cached != null) {
++                        out.add(cached);
++                    }
++                }
+             }
+-            out.add(object);
+-            String key = dimension + "/" + object.id();
+-            present.add(key);
+-            if (lastSeen.put(key, footprintOf(ship)) == null) {
+-                // Newly assembled, or a ship this server has only just loaded. Its blocks
+-                // are not in the world any more, whatever the terrain tile still says.
+-                refreshFootprint(level, lastSeen.get(key));
++        }
++
++        // Persisted/RAM snapshots remain visible while Sable's backing plot is unloaded.
++        for (Map.Entry<String, SceneObject> entry : lastObjects.entrySet()) {
++            if (entry.getKey().startsWith(prefix) && !active.contains(entry.getKey())) {
++                out.add(entry.getValue());
+             }
+         }
+-        sweepDeparted(level, dimension, present);
++
+         return out;
+     }
+ 
++    private void observeContainer(ServerLevel level, ServerSubLevelContainer container) {
++        if (!observedContainers.add(container)) {
++            return;
++        }
++
++        String dimension = level.dimension().location().toString();
++        container.addObserver(new SubLevelObserver() {
++            @Override
++            public void onSubLevelRemoved(SubLevel subLevel, SubLevelRemovalReason reason) {
++                if (!(subLevel instanceof ServerSubLevel ship)) {
++                    return;
++                }
++                UUID uuid = ship.getUniqueId();
++                if (uuid == null || reason == SubLevelRemovalReason.UNLOADED) {
++                    return;
++                }
++
++                String objectId = uuid.toString();
++                String key = dimension + "/" + objectId;
++                lastObjects.remove(key);
++                pendingSnapshots.remove(objectId);
++                publishedVersions.remove(objectId);
++                removePersisted(cacheFile(level), key);
++
++                Footprint footprint = lastSeen.remove(key);
++                if (footprint != null) {
++                    refreshFootprint(level, footprint);
++                }
++            }
++        });
++    }
++
++    private record SavedShip(
++            String id,
++            String dimension,
++            String label,
++            long version,
++            double x,
++            double y,
++            double z,
++            float qx,
++            float qy,
++            float qz,
++            float qw) {
++
++        static SavedShip from(SceneObject object, String dimension) {
++            Vec3 pos = object.position();
++            Quaternionf rot = object.rotation();
++            return new SavedShip(
++                    object.id(), dimension, object.label(), object.geometryVersion(),
++                    pos.x, pos.y, pos.z,
++                    rot.x, rot.y, rot.z, rot.w);
++        }
++    }
++
++    private record SnapshotFile(int format, List<SavedShip> ships) {
++    }
++
++    private record PendingSnapshot(Path file, String key, SavedShip ship) {
++    }
++
++    private static Path cacheFile(ServerLevel level) {
++        Path playerData = level.getServer().getWorldPath(LevelResource.PLAYER_DATA_DIR);
++        Path worldRoot = playerData.getParent() == null ? playerData : playerData.getParent();
++        return worldRoot.resolve("bluemap3d").resolve("sable-ships.json").toAbsolutePath().normalize();
++    }
++
++    private void ensureLoaded(ServerLevel level, Path file) {
++        if (loadedFiles.add(file)) {
++            Map<String, SavedShip> saved = new ConcurrentHashMap<>();
++            savedByFile.put(file, saved);
++
++            if (Files.isRegularFile(file)) {
++                try (var reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
++                    SnapshotFile state = GSON.fromJson(reader, SnapshotFile.class);
++                    if (state != null && state.ships() != null) {
++                        for (SavedShip ship : state.ships()) {
++                            if (ship != null && ship.id() != null && ship.dimension() != null) {
++                                saved.put(ship.dimension() + "/" + ship.id(), ship);
++                            }
++                        }
++                    }
++                } catch (IOException | RuntimeException error) {
++                    LOGGER.warn("Could not read persistent Sable snapshots from {}", file, error);
++                }
++            } else {
++                // Upgrade path from V13 and earlier: the last live feed + its mesh files
++                // already contain everything needed to seed the first persistent cache.
++                bootstrapFromPreviousFeed(level, file, saved);
++            }
++        }
++    }
++
++    private void restoreCachedObjects(ServerLevel level, Path file, String dimension) {
++        Map<String, SavedShip> saved = savedByFile.get(file);
++        if (saved == null || saved.isEmpty()) {
++            return;
++        }
++
++        String prefix = dimension + "/";
++        for (Map.Entry<String, SavedShip> entry : saved.entrySet()) {
++            if (entry.getKey().startsWith(prefix)) {
++                lastObjects.putIfAbsent(entry.getKey(), cachedObject(level, entry.getValue()));
++            }
++        }
++    }
++
++    private static SceneObject cachedObject(ServerLevel level, SavedShip saved) {
++        Vec3 position = new Vec3(saved.x(), saved.y(), saved.z());
++        Quaternionf rotation =
++                new Quaternionf(saved.qx(), saved.qy(), saved.qz(), saved.qw());
++
++        return new SceneObject() {
++            @Override public String id() {
++                return saved.id();
++            }
++
++            @Override public BlockVolume geometry() {
++                return BlockVolume.EMPTY;
++            }
++
++            @Override public boolean canBakeGeometry() {
++                return false;
++            }
++
++            @Override public long geometryVersion() {
++                return saved.version();
++            }
++
++            @Override public Vec3 position() {
++                return position;
++            }
++
++            @Override public Quaternionf rotation() {
++                return rotation;
++            }
++
++            @Override public String label() {
++                return saved.label();
++            }
++
++            @Override public ResourceKey<Level> dimension() {
++                return level.dimension();
++            }
++        };
++    }
++
++    private void bootstrapFromPreviousFeed(
++            ServerLevel level, Path file, Map<String, SavedShip> saved) {
++        try {
++            var api = BlueMapAPI.getInstance();
++            if (api.isEmpty()) {
++                return;
++            }
++
++            Path feed = api.get().getWebApp().getWebRoot()
++                    .resolve("assets/bluemap3d/entities3d.json");
++            if (!Files.isRegularFile(feed)) {
++                return;
++            }
++
++            JsonObject root;
++            try (var reader = Files.newBufferedReader(feed, StandardCharsets.UTF_8)) {
++                JsonElement parsed = JsonParser.parseReader(reader);
++                if (!parsed.isJsonObject()) {
++                    return;
++                }
++                root = parsed.getAsJsonObject();
++            }
++
++            JsonArray objects = root.getAsJsonArray("objects");
++            if (objects == null) {
++                return;
++            }
++
++            for (JsonElement element : objects) {
++                if (!element.isJsonObject()) {
++                    continue;
++                }
++                JsonObject object = element.getAsJsonObject();
++                if (!object.has("provider")
++                        || !id().equals(object.get("provider").getAsString())
++                        || !object.has("mesh")
++                        || !object.has("dimension")) {
++                    continue;
++                }
++
++                String fullId = object.get("id").getAsString();
++                String objectId = fullId.startsWith(id() + "/")
++                        ? fullId.substring(id().length() + 1)
++                        : fullId;
++                long version = versionFromMeshUrl(object.get("mesh").getAsString());
++                if (version == Long.MIN_VALUE) {
++                    continue;
++                }
++
++                JsonArray pos = object.getAsJsonArray("pos");
++                JsonArray rot = object.getAsJsonArray("rot");
++                if (pos == null || pos.size() != 3 || rot == null || rot.size() != 4) {
++                    continue;
++                }
++
++                String dimension = object.get("dimension").getAsString();
++                String label = object.has("label") ? object.get("label").getAsString() : null;
++                SavedShip ship = new SavedShip(
++                        objectId,
++                        dimension,
++                        label,
++                        version,
++                        pos.get(0).getAsDouble(),
++                        pos.get(1).getAsDouble(),
++                        pos.get(2).getAsDouble(),
++                        rot.get(0).getAsFloat(),
++                        rot.get(1).getAsFloat(),
++                        rot.get(2).getAsFloat(),
++                        rot.get(3).getAsFloat());
++                saved.put(dimension + "/" + objectId, ship);
++            }
++
++            if (!saved.isEmpty()) {
++                writeCacheLocked(file, saved);
++            }
++        } catch (IOException | RuntimeException error) {
++            LOGGER.warn("Could not bootstrap Sable snapshots from the previous BlueMap3D feed", error);
++        }
++    }
++
++    private static long versionFromMeshUrl(String mesh) {
++        int marker = mesh.lastIndexOf("-v");
++        int separator = marker < 0 ? -1 : mesh.indexOf('-', marker + 2);
++        int end = mesh.endsWith(".bm3d") ? mesh.length() - 5 : mesh.length();
++        if (separator < 0 || separator + 1 >= end) {
++            return Long.MIN_VALUE;
++        }
++        try {
++            return Long.parseLong(mesh.substring(separator + 1, end));
++        } catch (NumberFormatException ignored) {
++            return Long.MIN_VALUE;
++        }
++    }
++
++    private void persist(PendingSnapshot pending, boolean force) {
++        long now = System.nanoTime();
++        synchronized (cacheLock) {
++            Map<String, SavedShip> saved =
++                    savedByFile.computeIfAbsent(pending.file(), ignored -> new ConcurrentHashMap<>());
++            SavedShip previous = saved.get(pending.key());
++            if (pending.ship().equals(previous)) {
++                return;
++            }
++
++            long last = lastWriteNanos.getOrDefault(pending.file(), 0L);
++            if (!force && now - last < SAVE_INTERVAL_NANOS) {
++                return;
++            }
++
++            saved.put(pending.key(), pending.ship());
++            writeCacheLocked(pending.file(), saved);
++            lastWriteNanos.put(pending.file(), now);
++        }
++    }
++
++    private void removePersisted(Path file, String key) {
++        synchronized (cacheLock) {
++            ensureCacheMap(file);
++            Map<String, SavedShip> saved = savedByFile.get(file);
++            if (saved != null && saved.remove(key) != null) {
++                writeCacheLocked(file, saved);
++            }
++        }
++    }
++
++    private void ensureCacheMap(Path file) {
++        savedByFile.computeIfAbsent(file, ignored -> new ConcurrentHashMap<>());
++    }
++
++    private void writeCacheLocked(Path file, Map<String, SavedShip> saved) {
++        try {
++            Files.createDirectories(file.getParent());
++            Path temp = file.resolveSibling(file.getFileName() + ".tmp");
++            try (var writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
++                GSON.toJson(new SnapshotFile(1, List.copyOf(saved.values())), writer);
++            }
++            try {
++                Files.move(
++                        temp, file,
++                        StandardCopyOption.REPLACE_EXISTING,
++                        StandardCopyOption.ATOMIC_MOVE);
++            } catch (AtomicMoveNotSupportedException ignored) {
++                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
++            }
++        } catch (IOException error) {
++            LOGGER.warn("Could not persist Sable snapshots to {}", file, error);
++        }
++    }
++
+     /** The ground the ship covers now, from the world-space bounds Sable keeps for it. */
+     private static Footprint footprintOf(ServerSubLevel ship) {
+         var box = ship.boundingBox();
+@@ -265,7 +645,19 @@ public final class ShipProvider implements SceneObjectProvider {
+                 // touched; Sable reads exactly these bounds through exactly this wrapper
+                 // when it rebuilds a ship's mass. region() copies eagerly, so what comes
+                 // back is a snapshot and is safe on the baker thread.
+-                return BlockVolume.region(new LevelAccelerator(level), min, max, pivot);
++                LevelAccelerator source = new LevelAccelerator(level) {
++                    @Override
++                    public net.minecraft.world.level.block.entity.BlockEntity getBlockEntity(
++                            BlockPos pos) {
++                        try {
++                            var chunk = getChunk(pos);
++                            return chunk == null ? null : chunk.getBlockEntity(pos);
++                        } catch (RuntimeException ignored) {
++                            return null;
++                        }
++                    }
++                };
++                return BlockVolume.region(source, min, max, pivot);
+             }
+ 
+             @Override
+@@ -356,7 +748,7 @@ public final class ShipProvider implements SceneObjectProvider {
+             }
+             sections ^= perChunk;
+         }
+-        return mix(hash, sections);
++        return mix(mix(hash, sections), 15L);
+     }
+ 
+     /** FNV-1a, sixty-four bits of it. */
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java b/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
+index e8199bf..f2a3e33 100644
+--- a/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
+@@ -4,6 +4,10 @@ import de.bluecolored.bluemap.api.BlueMapAPI;
+ import dev.duzo.bluemap3d.api.BlueMap3D;
+ import dev.duzo.bluemap3d.bake.AssetIndex;
+ import dev.duzo.bluemap3d.bake.BlockModelSource;
++import dev.duzo.bluemap3d.bake.BitsNBobsStrutSource;
++import dev.duzo.bluemap3d.bake.CopycatsSpecialSource;
++import dev.duzo.bluemap3d.bake.CopycatsBoardSource;
++import dev.duzo.bluemap3d.bake.CopycatsShapeSource;
+ import dev.duzo.bluemap3d.bake.MapColorSource;
+ import dev.duzo.bluemap3d.bake.ResourcePackSource;
+ import dev.duzo.bluemap3d.bake.ShapeSource;
+@@ -72,7 +76,17 @@ public final class BlueMap3DMod {
+             if (Config.USE_RESOURCE_PACKS.get()) {
+                 assets = AssetIndex.open(configuredSources(), blueMapRoot);
+                 ResourcePackSource packs = new ResourcePackSource(assets);
++                // These mods generate important geometry in client code. Reconstruct it
++                // from server blockstate/block-entity data before ordinary JSON lookup.
++                sources.add(new BitsNBobsStrutSource(packs));
++                sources.add(new CopycatsSpecialSource(packs));
++                // Dynamic Copycats+ boards have no JSON geometry; their material lives in
++                // block-entity NBT, so they must be resolved before the ordinary pack path.
++                sources.add(new CopycatsBoardSource(packs));
+                 sources.add(packs);
++                // Copycats+ emits many models entirely in client code. If no real JSON
++                // model exists, preserve its server VoxelShape and copied material.
++                sources.add(new CopycatsShapeSource(packs));
+                 // Between the real models and the coloured cube: a block whose model has
+                 // no geometry still has a voxel shape and a particle sprite.
+                 if (Config.SHAPE_FALLBACK.get()) {
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/api/BlockVolume.java b/core/src/main/java/dev/duzo/bluemap3d/api/BlockVolume.java
+index 796b0c4..4d12f1d 100644
+--- a/core/src/main/java/dev/duzo/bluemap3d/api/BlockVolume.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/api/BlockVolume.java
+@@ -1,8 +1,10 @@
+ package dev.duzo.bluemap3d.api;
+ 
+ import net.minecraft.core.BlockPos;
++import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.world.level.BlockGetter;
+ import net.minecraft.world.level.block.Blocks;
++import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.phys.Vec3;
+ 
+@@ -82,6 +84,17 @@ public interface BlockVolume {
+      */
+     BlockState stateAt(int x, int y, int z);
+ 
++    /**
++     * Optional block-entity snapshot at a local position.
++     *
++     * <p>Dynamic blocks such as Copycats+ carry their render material in block-entity
++     * NBT rather than in the block state. Factories copy this data before the volume is
++     * handed to the background baker, exactly like they copy block states.
++     */
++    default CompoundTag blockEntityDataAt(int x, int y, int z) {
++        return null;
++    }
++
+     /**
+      * Visits every non-air block in the volume, in any order.
+      *
+@@ -183,6 +196,7 @@ public interface BlockVolume {
+     static BlockVolume region(BlockGetter source, BlockPos min, BlockPos max, Vec3 pivot) {
+         Objects.requireNonNull(source, "source");
+         Map<BlockPos, BlockState> blocks = new HashMap<>();
++        Map<BlockPos, CompoundTag> blockEntityData = new HashMap<>();
+         BlockPos lo = new BlockPos(
+                 Math.min(min.getX(), max.getX()),
+                 Math.min(min.getY(), max.getY()),
+@@ -198,12 +212,25 @@ public interface BlockVolume {
+                 for (int z = lo.getZ(); z <= hi.getZ(); z++) {
+                     BlockState state = source.getBlockState(cursor.set(x, y, z));
+                     if (!state.isAir()) {
+-                        blocks.put(new BlockPos(x, y, z), state);
++                        BlockPos pos = new BlockPos(x, y, z);
++                        blocks.put(pos, state);
++                        BlockEntity blockEntity = source.getBlockEntity(cursor);
++                        if (blockEntity != null && blockEntity.getLevel() != null) {
++                            try {
++                                blockEntityData.put(
++                                        pos,
++                                        blockEntity.saveWithFullMetadata(
++                                                blockEntity.getLevel().registryAccess()));
++                            } catch (RuntimeException ignored) {
++                                // Rendering metadata is best-effort. A broken block entity
++                                // must not prevent the rest of a ship from being mapped.
++                            }
++                        }
+                     }
+                 }
+             }
+         }
+-        return of(blocks, pivot);
++        return of(blocks, pivot, blockEntityData, java.util.List.of());
+     }
+ 
+     /**
+@@ -216,21 +243,31 @@ public interface BlockVolume {
+      * @param pivot  rotation origin, in the same coordinates as the map's keys
+      */
+     static BlockVolume of(Map<BlockPos, BlockState> blocks, Vec3 pivot) {
+-        return of(blocks, pivot, java.util.List.of());
++        return of(blocks, pivot, Map.of(), java.util.List.of());
+     }
+ 
+     /**
+      * A sparse volume with attachments. The case this covers: a mod hands out a moving
+      * structure's blocks as a map, and some of its parts - wheels, pistons and the like -
+      * are attachments on top.
++     */
++    static BlockVolume of(Map<BlockPos, BlockState> blocks, Vec3 pivot,
++                          Collection<ModelAttachment> attachments) {
++        return of(blocks, pivot, Map.of(), attachments);
++    }
++
++    /**
++     * A sparse volume with per-block block-entity snapshots and attachments.
+      *
+-     * <p>An empty block map returns {@link #EMPTY}, which discards the attachments with
+-     * it. A volume with nothing to hang an attachment off is not a volume.
++     * <p>The metadata map is deliberately generic. Core does not depend on Copycats+,
++     * Create or any other addon; model sources can opt into data they recognise.
+      */
+     static BlockVolume of(Map<BlockPos, BlockState> blocks, Vec3 pivot,
++                          Map<BlockPos, CompoundTag> blockEntityData,
+                           Collection<ModelAttachment> attachments) {
+         Objects.requireNonNull(blocks, "blocks");
+         Objects.requireNonNull(pivot, "pivot");
++        Objects.requireNonNull(blockEntityData, "blockEntityData");
+         Collection<ModelAttachment> extras = java.util.List.copyOf(attachments);
+ 
+         Map<BlockPos, BlockState> copy = new HashMap<>(blocks.size());
+@@ -244,6 +281,13 @@ public interface BlockVolume {
+             return EMPTY;
+         }
+ 
++        Map<BlockPos, CompoundTag> dataCopy = new HashMap<>();
++        blockEntityData.forEach((pos, tag) -> {
++            if (pos != null && tag != null && !tag.isEmpty() && copy.containsKey(pos)) {
++                dataCopy.put(pos.immutable(), tag.copy());
++            }
++        });
++
+         int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
+         int maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
+         for (BlockPos pos : copy.keySet()) {
+@@ -278,6 +322,9 @@ public interface BlockVolume {
+                 // garbage is cheaper than the concurrency bug.
+                 return copy.getOrDefault(new BlockPos(x, y, z), air);
+             }
++            @Override public CompoundTag blockEntityDataAt(int x, int y, int z) {
++                return dataCopy.get(new BlockPos(x, y, z));
++            }
+             @Override public void forEachBlock(BlockConsumer consumer) {
+                 copy.forEach((pos, state) ->
+                         consumer.accept(pos.getX(), pos.getY(), pos.getZ(), state));
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java b/core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java
+index 1f00507..4f77a4a 100644
+--- a/core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java
+@@ -5,7 +5,9 @@ import org.slf4j.LoggerFactory;
+ 
+ import java.util.Collection;
+ import java.util.List;
++import java.util.Map;
+ import java.util.Objects;
++import java.util.concurrent.ConcurrentHashMap;
+ import java.util.concurrent.CopyOnWriteArrayList;
+ 
+ /**
+@@ -27,6 +29,28 @@ public final class BlueMap3D {
+     private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D");
+     private static final List<SceneObjectProvider> PROVIDERS = new CopyOnWriteArrayList<>();
+ 
++    private static final Map<String, MeshPublication> PUBLISHED_MESHES =
++            new ConcurrentHashMap<>();
++    private static final CopyOnWriteArrayList<MeshPublicationListener> MESH_LISTENERS =
++            new CopyOnWriteArrayList<>();
++
++    /** One mesh version that BlueMap3D has finished publishing to the web root. */
++    public record MeshPublication(
++            String provider, String objectId, long version, String meshUrl) {
++    }
++
++    /**
++     * Listener for published mesh versions.
++     *
++     * <p>Callbacks run on BlueMap3D's baker thread, after both .bm3d and atlas files have
++     * been written and before a superseded live mesh can be deleted. Consumers that need
++     * durable copies should copy the files synchronously from this callback.
++     */
++    @FunctionalInterface
++    public interface MeshPublicationListener {
++        void published(MeshPublication publication);
++    }
++
+     private BlueMap3D() {
+     }
+ 
+@@ -84,6 +108,57 @@ public final class BlueMap3D {
+         return !PROVIDERS.isEmpty();
+     }
+ 
++    /**
++     * Registers a mesh-publication listener and immediately replays the currently live
++     * mesh versions. This makes late-loading integrations deterministic.
++     */
++    public static void addMeshPublicationListener(MeshPublicationListener listener) {
++        Objects.requireNonNull(listener, "listener");
++        MESH_LISTENERS.addIfAbsent(listener);
++        for (MeshPublication publication : PUBLISHED_MESHES.values()) {
++            notifyMeshListener(listener, publication);
++        }
++    }
++
++    public static void removeMeshPublicationListener(MeshPublicationListener listener) {
++        MESH_LISTENERS.remove(listener);
++    }
++
++    public static Collection<MeshPublication> publishedMeshes() {
++        return List.copyOf(PUBLISHED_MESHES.values());
++    }
++
++    /** Core-internal: announces a fully written mesh version. */
++    public static void meshPublished(
++            String provider, String objectId, long version, String meshUrl) {
++        MeshPublication publication =
++                new MeshPublication(provider, objectId, version, meshUrl);
++        PUBLISHED_MESHES.put(provider + "/" + objectId, publication);
++        for (MeshPublicationListener listener : MESH_LISTENERS) {
++            notifyMeshListener(listener, publication);
++        }
++    }
++
++    /** Core-internal: the live object no longer exists. Archived consumers keep copies. */
++    public static void meshRemoved(String provider, String objectId) {
++        PUBLISHED_MESHES.remove(provider + "/" + objectId);
++    }
++
++    /** Core-internal: clear live publication state when BlueMap3D shuts down. */
++    public static void clearPublishedMeshes() {
++        PUBLISHED_MESHES.clear();
++    }
++
++    private static void notifyMeshListener(
++            MeshPublicationListener listener, MeshPublication publication) {
++        try {
++            listener.published(publication);
++        } catch (RuntimeException error) {
++            LOGGER.warn("Mesh publication listener threw for {}/{}",
++                    publication.provider(), publication.objectId(), error);
++        }
++    }
++
+     // ---------------------------------------------------------------------------------
+     // Tile refresh
+     // ---------------------------------------------------------------------------------
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java b/core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java
+index cda42a7..23ff7cc 100644
+--- a/core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java
+@@ -53,6 +53,17 @@ public interface SceneObject {
+      */
+     BlockVolume geometry();
+ 
++    /**
++     * Whether core may ask this object to rebuild its geometry.
++     *
++     * <p>Normally true. A persisted object may have a perfectly valid published mesh
++     * on disk while its live backing level is not loaded yet; such an object returns
++     * false so core can reuse that mesh without attempting to walk unavailable chunks.
++     */
++    default boolean canBakeGeometry() {
++        return true;
++    }
++
+     /**
+      * A counter that changes whenever {@link #geometry()} would produce something
+      * different.
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/AssetIndex.java b/core/src/main/java/dev/duzo/bluemap3d/bake/AssetIndex.java
+index 4314607..e7743f5 100644
+--- a/core/src/main/java/dev/duzo/bluemap3d/bake/AssetIndex.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/AssetIndex.java
+@@ -94,6 +94,22 @@ public final class AssetIndex implements Closeable {
+ 
+         List<Path> candidates = new ArrayList<>(configured);
+ 
++        // Installed NeoForge mod jars. Resource packs/configured roots were already seeded
++        // ahead of these, so admin overrides still win.
++        try {
++            var modList = net.neoforged.fml.ModList.get();
++            if (modList != null) {
++                for (var info : modList.getModFiles()) {
++                    var file = info.getFile();
++                    if (file != null && file.getFilePath() != null) {
++                        candidates.add(file.getFilePath());
++                    }
++                }
++            }
++        } catch (RuntimeException error) {
++            LOGGER.warn("Could not enumerate NeoForge mod jars: {}", error.toString());
++        }
++
+         // Resource packs first, so a pack can override anything below it.
+         if (blueMapRoot != null) {
+             candidates.addAll(listIfDirectory(blueMapRoot.resolve("resourcepacks")));
+@@ -129,7 +145,7 @@ public final class AssetIndex implements Closeable {
+         if (!roots.isEmpty()) {
+             LOGGER.info("Indexed {} asset source(s) for block models", roots.size());
+         } else {
+-            LOGGER.info("No asset sources found; textured meshing will rely on mod jars only");
++            LOGGER.info("No asset sources found; textured meshing will rely on classpath fallback only");
+         }
+         return new AssetIndex(roots, owned, AssetIndex.class.getClassLoader());
+     }
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSource.java b/core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSource.java
+new file mode 100644
+index 0000000..311fd89
+--- /dev/null
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSource.java
+@@ -0,0 +1,176 @@
++package dev.duzo.bluemap3d.bake;
++
++import net.minecraft.core.Direction;
++import net.minecraft.core.registries.BuiltInRegistries;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.ListTag;
++import net.minecraft.nbt.Tag;
++import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.properties.Property;
++import net.minecraft.world.phys.Vec3;
++
++import java.awt.image.BufferedImage;
++import java.util.ArrayList;
++import java.util.List;
++
++/**
++ * Dedicated-server reconstruction for Create: Bits 'n' Bobs girder struts.
++ *
++ * <p>The blockstate JSON only contains the endpoint attachment. The actual beam between
++ * endpoints is produced by Strut Your Stuff's client block-entity renderer from the
++ * {@code Connections} NBT list, so a server-side model parser otherwise sees only a small
++ * attachment (or a missing-texture stand-in). Reconstructing the connection as a square
++ * girder prism is sufficient for BlueMap and keeps the correct endpoints/length/orientation.
++ */
++public final class BitsNBobsStrutSource implements BlockModelSource {
++    private static final double SURFACE_OFFSET = 6.0 / 16.0;
++    private static final float HALF_WIDTH = 2.0f; // 4-pixel square girder
++
++    private final ResourcePackSource models;
++
++    public BitsNBobsStrutSource(ResourcePackSource models) {
++        this.models = models;
++    }
++
++    @Override
++    public List<ModelQuad> quadsFor(BlockState state) {
++        return List.of();
++    }
++
++    @Override
++    public List<ModelQuad> quadsFor(BlockState state, CompoundTag metadata) {
++        String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
++        if (!id.equals("bits_n_bobs:girder_strut")
++                && !id.equals("bits_n_bobs:weathered_girder_strut")
++                && !id.equals("bits_n_bobs:cable_girder_strut")) {
++            return List.of();
++        }
++
++        String beamTexture = id.equals("bits_n_bobs:weathered_girder_strut")
++                ? "bits_n_bobs:block/weathered_girder"
++                : "create:block/girder";
++
++        List<ModelQuad> out = new ArrayList<>();
++
++        // Keep the ordinary endpoint attachment model, but remap the one texture which
++        // could show as missing/pink on the server path to the corresponding girder sprite.
++        for (ModelQuad quad : models.quadsFor(state)) {
++            String texture = quad.texture();
++            if ("bits_n_bobs:block/girder_attachment".equals(texture)) {
++                texture = "create:block/girder";
++            } else if ("bits_n_bobs:block/weathered_girder_attachment".equals(texture)) {
++                texture = "bits_n_bobs:block/weathered_girder";
++            }
++            out.add(new ModelQuad(
++                    quad.cullFace(), quad.shadeFace(), quad.positions(), quad.uvs(), texture, quad.tint()));
++        }
++
++        if (metadata == null || !metadata.contains("Connections", Tag.TAG_LIST)) {
++            return out.isEmpty() ? List.of() : List.copyOf(out);
++        }
++
++        Direction facing = Direction.byName(stringProperty(state, "facing"));
++        if (facing == null) facing = Direction.UP;
++
++        Vec3 start = Vec3.atCenterOf(net.minecraft.core.BlockPos.ZERO)
++                .relative(facing, -SURFACE_OFFSET);
++
++        ListTag connections = metadata.getList("Connections", Tag.TAG_COMPOUND);
++        for (Tag entry : connections) {
++            if (!(entry instanceof CompoundTag connection)) continue;
++
++            int dx = connection.getInt("X");
++            int dy = connection.getInt("Y");
++            int dz = connection.getInt("Z");
++            if (dx == 0 && dy == 0 && dz == 0) continue;
++
++            Direction peerFacing = connection.contains("Facing", Tag.TAG_INT)
++                    ? Direction.from3DDataValue(connection.getInt("Facing"))
++                    : facing.getOpposite();
++
++            Vec3 end = new Vec3(dx + 0.5, dy + 0.5, dz + 0.5)
++                    .relative(peerFacing, -SURFACE_OFFSET);
++
++            // Every endpoint owns one half. This avoids duplicate coplanar beams while
++            // remaining stable if one endpoint is temporarily outside the captured volume.
++            Vec3 midpoint = start.add(end).scale(0.5);
++            addBeam(out, start, midpoint, beamTexture);
++        }
++
++        return out.isEmpty() ? List.of() : List.copyOf(out);
++    }
++
++    @Override
++    public BufferedImage texture(String texture) {
++        return models.texture(texture);
++    }
++
++    @Override
++    public boolean occludes(BlockState state) {
++        return false;
++    }
++
++    private static void addBeam(
++            List<ModelQuad> out, Vec3 startBlocks, Vec3 endBlocks, String texture) {
++        Vec3 span = endBlocks.subtract(startBlocks);
++        double length = span.length();
++        if (length < 1.0e-4) return;
++
++        Vec3 forward = span.scale(1.0 / length);
++        Vec3 reference = Math.abs(forward.y) < 0.95 ? new Vec3(0, 1, 0) : new Vec3(1, 0, 0);
++        Vec3 right = reference.cross(forward).normalize();
++        Vec3 up = forward.cross(right).normalize();
++
++        Vec3 start = startBlocks.scale(16.0);
++        Vec3 end = endBlocks.scale(16.0);
++        Vec3 r = right.scale(HALF_WIDTH);
++        Vec3 u = up.scale(HALF_WIDTH);
++
++        Vec3 s00 = start.subtract(r).subtract(u);
++        Vec3 s10 = start.add(r).subtract(u);
++        Vec3 s11 = start.add(r).add(u);
++        Vec3 s01 = start.subtract(r).add(u);
++        Vec3 e00 = end.subtract(r).subtract(u);
++        Vec3 e10 = end.add(r).subtract(u);
++        Vec3 e11 = end.add(r).add(u);
++        Vec3 e01 = end.subtract(r).add(u);
++
++        float[] uv = {0, 16, 16, 16, 16, 0, 0, 0};
++        add(out, s00, s10, e10, e00, texture, uv);
++        add(out, s10, s11, e11, e10, texture, uv);
++        add(out, s11, s01, e01, e11, texture, uv);
++        add(out, s01, s00, e00, e01, texture, uv);
++        add(out, s01, s11, s10, s00, texture, uv);
++        add(out, e00, e10, e11, e01, texture, uv);
++    }
++
++    private static void add(
++            List<ModelQuad> out,
++            Vec3 a, Vec3 b, Vec3 c, Vec3 d,
++            String texture,
++            float[] uv) {
++        out.add(new ModelQuad(
++                null,
++                null,
++                new float[] {
++                        (float) a.x, (float) a.y, (float) a.z,
++                        (float) b.x, (float) b.y, (float) b.z,
++                        (float) c.x, (float) c.y, (float) c.z,
++                        (float) d.x, (float) d.y, (float) d.z
++                },
++                uv.clone(),
++                texture,
++                0xFFFFFF));
++    }
++
++    private static String stringProperty(BlockState state, String name) {
++        for (Property<?> property : state.getProperties()) {
++            if (property.getName().equals(name)) return valueName(state, property);
++        }
++        return "";
++    }
++
++    private static <T extends Comparable<T>> String valueName(BlockState state, Property<T> property) {
++        return property.getName(state.getValue(property));
++    }
++}
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/BlockModelSource.java b/core/src/main/java/dev/duzo/bluemap3d/bake/BlockModelSource.java
+index 701a9da..7d0c82b 100644
+--- a/core/src/main/java/dev/duzo/bluemap3d/bake/BlockModelSource.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/BlockModelSource.java
+@@ -1,5 +1,6 @@
+ package dev.duzo.bluemap3d.bake;
+ 
++import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.world.level.block.state.BlockState;
+ 
+ import java.awt.image.BufferedImage;
+@@ -33,6 +34,16 @@ public interface BlockModelSource {
+      */
+     List<ModelQuad> quadsFor(BlockState state);
+ 
++    /**
++     * Context-aware variant for blocks whose appearance lives partly in block-entity NBT.
++     *
++     * <p>Ordinary sources ignore the metadata. Dynamic sources can override this without
++     * forcing every existing model source to become position-aware.
++     */
++    default List<ModelQuad> quadsFor(BlockState state, CompoundTag blockEntityData) {
++        return quadsFor(state);
++    }
++
+     /**
+      * The quads for a named model, in 0..16 model space.
+      *
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsBoardSource.java b/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsBoardSource.java
+new file mode 100644
+index 0000000..d860ac3
+--- /dev/null
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsBoardSource.java
+@@ -0,0 +1,209 @@
++package dev.duzo.bluemap3d.bake;
++
++import net.minecraft.core.Direction;
++import net.minecraft.core.registries.BuiltInRegistries;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.NbtUtils;
++import net.minecraft.nbt.Tag;
++import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.properties.Property;
++
++import java.awt.image.BufferedImage;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Set;
++
++/**
++ * Dynamic server-side renderer for Copycats+' copycat_board.
++ *
++ * <p>Copycats+ stores each enabled face in MaterialItemStorage:
++ * material_data.&lt;face&gt;.material. Create contraptions may wrap the original full NBT
++ * and update tag; Sable supplies the block entity's full saved NBT. This source accepts
++ * all of those without linking against Copycats+.
++ */
++public final class CopycatsBoardSource implements BlockModelSource {
++    private static final String BOARD_ID = "copycats:copycat_board";
++    private static final String WHITE = "bluemap3d:copycat_white";
++    private static final float PIXEL = 1f;
++    private static final Set<String> MATERIAL_DATA_NAMES =
++            Set.of("material_data", "MaterialData", "materials", "Materials");
++
++    private final ResourcePackSource models;
++
++    public CopycatsBoardSource(ResourcePackSource models) {
++        this.models = models;
++    }
++
++    @Override
++    public List<ModelQuad> quadsFor(BlockState state) {
++        return List.of();
++    }
++
++    @Override
++    public List<ModelQuad> quadsFor(BlockState state, CompoundTag metadata) {
++        if (!BOARD_ID.equals(BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString())
++                || metadata == null) {
++            return List.of();
++        }
++
++        CompoundTag materialData = findMaterialData(metadata, 0);
++        CompoundTag singleMaterial = findSingleMaterial(metadata, 0);
++        if (materialData == null && singleMaterial == null) {
++            return List.of();
++        }
++
++        List<ModelQuad> out = new ArrayList<>(36);
++        for (Direction boardFace : Direction.values()) {
++            String property = boardFace.getName();
++            if (!booleanProperty(state, property)) {
++                continue;
++            }
++
++            CompoundTag materialTag = null;
++            if (materialData != null && materialData.contains(property, Tag.TAG_COMPOUND)) {
++                materialTag = findSingleMaterial(materialData.getCompound(property), 0);
++            }
++            if (materialTag == null) {
++                materialTag = singleMaterial;
++            }
++            if (materialTag == null) {
++                continue;
++            }
++
++            BlockState material;
++            try {
++                material = NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(), materialTag);
++            } catch (RuntimeException ex) {
++                continue;
++            }
++            addBoard(out, boardFace, material);
++        }
++        return out.isEmpty() ? List.of() : List.copyOf(out);
++    }
++
++    @Override
++    public BufferedImage texture(String texture) {
++        return WHITE.equals(texture) ? null : models.texture(texture);
++    }
++
++    @Override
++    public boolean occludes(BlockState state) {
++        return false;
++    }
++
++    private static CompoundTag findMaterialData(CompoundTag tag, int depth) {
++        if (tag == null || depth > 6) return null;
++        for (String name : MATERIAL_DATA_NAMES) {
++            if (tag.contains(name, Tag.TAG_COMPOUND)) {
++                CompoundTag value = tag.getCompound(name);
++                if (!value.isEmpty()) return value;
++            }
++        }
++        for (String key : tag.getAllKeys()) {
++            Tag child = tag.get(key);
++            if (child instanceof CompoundTag compound) {
++                CompoundTag found = findMaterialData(compound, depth + 1);
++                if (found != null) return found;
++            }
++        }
++        return null;
++    }
++
++    /** Returns the serialized BlockState compound, not its MaterialItem parent. */
++    private static CompoundTag findSingleMaterial(CompoundTag tag, int depth) {
++        if (tag == null || depth > 6) return null;
++        for (String name : List.of("material", "Material")) {
++            if (tag.contains(name, Tag.TAG_COMPOUND)) {
++                CompoundTag value = tag.getCompound(name);
++                if (!value.isEmpty()) return value;
++            }
++        }
++        for (String key : tag.getAllKeys()) {
++            Tag child = tag.get(key);
++            if (child instanceof CompoundTag compound) {
++                CompoundTag found = findSingleMaterial(compound, depth + 1);
++                if (found != null) return found;
++            }
++        }
++        return null;
++    }
++
++    private void addBoard(List<ModelQuad> out, Direction boardFace, BlockState material) {
++        float[] from = {0f, 0f, 0f};
++        float[] to = {16f, 16f, 16f};
++        switch (boardFace) {
++            case DOWN -> to[1] = PIXEL;
++            case UP -> from[1] = 16f - PIXEL;
++            case NORTH -> to[2] = PIXEL;
++            case SOUTH -> from[2] = 16f - PIXEL;
++            case WEST -> to[0] = PIXEL;
++            case EAST -> from[0] = 16f - PIXEL;
++        }
++
++        for (Direction surface : Direction.values()) {
++            Appearance appearance = appearance(material, surface);
++            out.add(new ModelQuad(
++                    cullFaceOf(from, to, surface),
++                    surface,
++                    ResourcePackSource.faceCorners(from, to, surface),
++                    ResourcePackSource.uvCorners(
++                            ResourcePackSource.autoUv(from, to, surface), 0),
++                    appearance.texture(),
++                    appearance.tint()));
++        }
++    }
++
++    private Appearance appearance(BlockState material, Direction surface) {
++        List<ModelQuad> materialQuads = models.quadsFor(material);
++        ModelQuad first = materialQuads.isEmpty() ? null : materialQuads.getFirst();
++        ModelQuad chosen = null;
++        for (ModelQuad quad : materialQuads) {
++            if (quad.cullFace() == surface) {
++                chosen = quad;
++                break;
++            }
++            if (chosen == null && quad.shadeFace() == surface) chosen = quad;
++        }
++        if (chosen == null) chosen = first;
++        if (chosen != null && chosen.texture() != null
++                && models.texture(chosen.texture()) != null) {
++            return new Appearance(chosen.texture(), chosen.tint());
++        }
++
++        String particle = models.particleTexture(material);
++        if (particle != null && models.texture(particle) != null) {
++            return new Appearance(particle, 0xFFFFFF);
++        }
++
++        int tint = MapColorSource.mapColorOf(material);
++        return new Appearance(WHITE, tint < 0 ? 0xFFFFFF : tint);
++    }
++
++    private static Direction cullFaceOf(float[] from, float[] to, Direction face) {
++        boolean flush = switch (face) {
++            case DOWN -> from[1] <= 0f;
++            case UP -> to[1] >= 16f;
++            case NORTH -> from[2] <= 0f;
++            case SOUTH -> to[2] >= 16f;
++            case WEST -> from[0] <= 0f;
++            case EAST -> to[0] >= 16f;
++        };
++        return flush ? face : null;
++    }
++
++    private static boolean booleanProperty(BlockState state, String name) {
++        for (Property<?> property : state.getProperties()) {
++            if (property.getName().equals(name)) {
++                return "true".equals(valueName(state, property));
++            }
++        }
++        return false;
++    }
++
++    private static <T extends Comparable<T>> String valueName(
++            BlockState state, Property<T> property) {
++        return property.getName(state.getValue(property));
++    }
++
++    private record Appearance(String texture, int tint) {}
++}
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java b/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java
+new file mode 100644
+index 0000000..c8bfbf8
+--- /dev/null
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java
+@@ -0,0 +1,228 @@
++package dev.duzo.bluemap3d.bake;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Direction;
++import net.minecraft.core.registries.BuiltInRegistries;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.NbtUtils;
++import net.minecraft.nbt.Tag;
++import net.minecraft.world.level.EmptyBlockGetter;
++import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.phys.AABB;
++import net.minecraft.world.phys.shapes.VoxelShape;
++
++import java.awt.image.BufferedImage;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Set;
++
++/**
++ * Material-aware fallback for Copycats+ blocks whose client geometry is emitted in code.
++ *
++ * <p>The dedicated server still knows the current VoxelShape and the copied BlockState(s)
++ * in material_data. Combining those is much closer than BlueMap3D's map-colour cube and,
++ * importantly, keeps the copied material texture.
++ */
++public final class CopycatsShapeSource implements BlockModelSource {
++    private static final String WHITE = "bluemap3d:copycats_shape_white";
++    private static final int MAX_BOXES = 128;
++    private static final Set<String> MATERIAL_DATA_NAMES =
++            Set.of("material_data", "MaterialData", "materials", "Materials");
++
++    private final ResourcePackSource models;
++
++    public CopycatsShapeSource(ResourcePackSource models) {
++        this.models = models;
++    }
++
++    @Override
++    public List<ModelQuad> quadsFor(BlockState state) {
++        return List.of();
++    }
++
++    @Override
++    public List<ModelQuad> quadsFor(BlockState state, CompoundTag metadata) {
++        var id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
++        if (!"copycats".equals(id.getNamespace())
++                || "copycat_board".equals(id.getPath())
++                || metadata == null) {
++            return List.of();
++        }
++
++        // Search the whole snapshot. Multi-state Copycats use material_data, while
++        // single-state variants use a direct Material compound. The Create provider
++        // may also wrap full/update snapshots under __full/__update.
++        List<BlockState> materials = collectMaterials(metadata);
++        if (materials.isEmpty()) return List.of();
++
++        List<AABB> boxes = boxesOf(state);
++        if (boxes.isEmpty() || boxes.size() > MAX_BOXES) return List.of();
++
++        BlockState material = representativeMaterial(materials);
++        List<ModelQuad> out = new ArrayList<>(boxes.size() * 6);
++        for (AABB box : boxes) {
++            float[] from = {
++                    (float) box.minX * 16f,
++                    (float) box.minY * 16f,
++                    (float) box.minZ * 16f
++            };
++            float[] to = {
++                    (float) box.maxX * 16f,
++                    (float) box.maxY * 16f,
++                    (float) box.maxZ * 16f
++            };
++            if (to[0] - from[0] < 1e-4f
++                    || to[1] - from[1] < 1e-4f
++                    || to[2] - from[2] < 1e-4f) {
++                continue;
++            }
++
++            for (Direction face : Direction.values()) {
++                Appearance appearance = appearance(material, face);
++                out.add(new ModelQuad(
++                        cullFaceOf(from, to, face),
++                        face,
++                        ResourcePackSource.faceCorners(from, to, face),
++                        ResourcePackSource.uvCorners(
++                                ResourcePackSource.autoUv(from, to, face), 0),
++                        appearance.texture(),
++                        appearance.tint()));
++            }
++        }
++        return out.isEmpty() ? List.of() : List.copyOf(out);
++    }
++
++    @Override
++    public BufferedImage texture(String texture) {
++        return WHITE.equals(texture) ? null : models.texture(texture);
++    }
++
++    @Override
++    public boolean occludes(BlockState state) {
++        return false;
++    }
++
++    @Override
++    public boolean isFaithful() {
++        return false;
++    }
++
++    @Override
++    public String approximation() {
++        return "copycat voxel shape";
++    }
++
++    private Appearance appearance(BlockState material, Direction surface) {
++        List<ModelQuad> materialQuads = models.quadsFor(material);
++        ModelQuad first = materialQuads.isEmpty() ? null : materialQuads.getFirst();
++        ModelQuad chosen = null;
++        for (ModelQuad quad : materialQuads) {
++            if (quad.cullFace() == surface) {
++                chosen = quad;
++                break;
++            }
++            if (chosen == null && quad.shadeFace() == surface) chosen = quad;
++        }
++        if (chosen == null) chosen = first;
++
++        if (chosen != null
++                && chosen.texture() != null
++                && models.texture(chosen.texture()) != null) {
++            return new Appearance(chosen.texture(), chosen.tint());
++        }
++
++        String particle = models.particleTexture(material);
++        if (particle != null && models.texture(particle) != null) {
++            return new Appearance(particle, 0xFFFFFF);
++        }
++
++        int tint = MapColorSource.mapColorOf(material);
++        return new Appearance(WHITE, tint < 0 ? 0xFFFFFF : tint);
++    }
++
++    private static List<AABB> boxesOf(BlockState state) {
++        try {
++            VoxelShape shape = state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
++            if (shape.isEmpty()) {
++                shape = state.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
++            }
++            return shape.isEmpty() ? List.of() : shape.toAabbs();
++        } catch (RuntimeException ignored) {
++            return List.of();
++        }
++    }
++
++    private static List<BlockState> collectMaterials(CompoundTag materialData) {
++        List<BlockState> out = new ArrayList<>();
++        collectMaterials(materialData, out, 0);
++        return out;
++    }
++
++    private static BlockState representativeMaterial(List<BlockState> materials) {
++        for (BlockState material : materials) {
++            if (!isPlaceholder(material)) {
++                return material;
++            }
++        }
++        return materials.getFirst();
++    }
++
++    private static boolean isPlaceholder(BlockState material) {
++        String id = BuiltInRegistries.BLOCK.getKey(material.getBlock()).toString();
++        return "create:copycat_base".equals(id)
++                || "copycats:copycat_base".equals(id);
++    }
++
++    private static void collectMaterials(CompoundTag tag, List<BlockState> out, int depth) {
++        if (tag == null || depth > 8) return;
++
++        for (String key : List.of("material", "Material")) {
++            if (tag.contains(key, Tag.TAG_COMPOUND)) {
++                try {
++                    out.add(NbtUtils.readBlockState(
++                            BuiltInRegistries.BLOCK.asLookup(), tag.getCompound(key)));
++                } catch (RuntimeException ignored) {
++                }
++            }
++        }
++
++        for (String key : tag.getAllKeys()) {
++            Tag child = tag.get(key);
++            if (child instanceof CompoundTag compound) {
++                collectMaterials(compound, out, depth + 1);
++            }
++        }
++    }
++
++    private static CompoundTag findMaterialData(CompoundTag tag, int depth) {
++        if (tag == null || depth > 8) return null;
++        for (String name : MATERIAL_DATA_NAMES) {
++            if (tag.contains(name, Tag.TAG_COMPOUND)) {
++                CompoundTag value = tag.getCompound(name);
++                if (!value.isEmpty()) return value;
++            }
++        }
++        for (String key : tag.getAllKeys()) {
++            Tag child = tag.get(key);
++            if (child instanceof CompoundTag compound) {
++                CompoundTag found = findMaterialData(compound, depth + 1);
++                if (found != null) return found;
++            }
++        }
++        return null;
++    }
++
++    private static Direction cullFaceOf(float[] from, float[] to, Direction face) {
++        boolean flush = switch (face) {
++            case DOWN -> from[1] <= 0f;
++            case UP -> to[1] >= 16f;
++            case NORTH -> from[2] <= 0f;
++            case SOUTH -> to[2] >= 16f;
++            case WEST -> from[0] <= 0f;
++            case EAST -> to[0] >= 16f;
++        };
++        return flush ? face : null;
++    }
++
++    private record Appearance(String texture, int tint) {}
++}
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java b/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java
+new file mode 100644
+index 0000000..9935e8e
+--- /dev/null
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java
+@@ -0,0 +1,352 @@
++package dev.duzo.bluemap3d.bake;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Direction;
++import net.minecraft.core.registries.BuiltInRegistries;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.NbtUtils;
++import net.minecraft.nbt.Tag;
++import net.minecraft.world.level.EmptyBlockGetter;
++import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.properties.Property;
++import net.minecraft.world.phys.AABB;
++import net.minecraft.world.phys.shapes.VoxelShape;
++
++import java.awt.image.BufferedImage;
++import java.util.ArrayList;
++import java.util.List;
++
++/**
++ * Server-side models for Copycats+ blocks whose client model core is procedural.
++ *
++ * <p>Unlike {@link CopycatsShapeSource}, this source understands each part's storage key
++ * and therefore does not collapse multi-material blocks into one representative material.
++ * Faces are intentionally never neighbour-culled: these are partial blocks, and treating a
++ * face that merely touches the 0/16 block boundary as a full cull face is what made thin
++ * vertical layers/bytes disappear beside ordinary blocks.
++ */
++public final class CopycatsSpecialSource implements BlockModelSource {
++    private final ResourcePackSource models;
++
++    public CopycatsSpecialSource(ResourcePackSource models) {
++        this.models = models;
++    }
++
++    @Override
++    public List<ModelQuad> quadsFor(BlockState state) {
++        return List.of();
++    }
++
++    @Override
++    public List<ModelQuad> quadsFor(BlockState state, CompoundTag metadata) {
++        if (metadata == null) return List.of();
++
++        String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
++        return switch (id) {
++            case "copycats:copycat_byte" -> byteQuads(state, metadata);
++            case "copycats:copycat_vertical_half_layer" -> verticalHalfLayer(state, metadata);
++            case "copycats:copycat_flat_pane" -> flatPane(state, metadata);
++            case "copycats:copycat_vertical_stairs",
++                 "copycats:copycat_slope_layer" -> shapeWithSingleMaterial(state, metadata);
++            default -> List.of();
++        };
++    }
++
++    @Override
++    public BufferedImage texture(String texture) {
++        return models.texture(texture);
++    }
++
++    @Override
++    public boolean occludes(BlockState state) {
++        return false;
++    }
++
++    private List<ModelQuad> byteQuads(BlockState state, CompoundTag metadata) {
++        List<ModelQuad> out = new ArrayList<>(48);
++        addByte(out, state, metadata, "bottom_northwest", 0, 0, 0);
++        addByte(out, state, metadata, "bottom_northeast", 8, 0, 0);
++        addByte(out, state, metadata, "bottom_southwest", 0, 0, 8);
++        addByte(out, state, metadata, "bottom_southeast", 8, 0, 8);
++        addByte(out, state, metadata, "top_northwest", 0, 8, 0);
++        addByte(out, state, metadata, "top_northeast", 8, 8, 0);
++        addByte(out, state, metadata, "top_southwest", 0, 8, 8);
++        addByte(out, state, metadata, "top_southeast", 8, 8, 8);
++        return List.copyOf(out);
++    }
++
++    private void addByte(
++            List<ModelQuad> out,
++            BlockState state,
++            CompoundTag metadata,
++            String key,
++            int x,
++            int y,
++            int z) {
++        if (!booleanProperty(state, key)) return;
++        BlockState material = materialFor(metadata, key);
++        if (material == null || isPlaceholder(material)) return;
++        addCuboid(out, x, y, z, x + 8, y + 8, z + 8, material);
++    }
++
++    private List<ModelQuad> verticalHalfLayer(BlockState state, CompoundTag metadata) {
++        int positive = intProperty(state, "positive_layers");
++        int negative = intProperty(state, "negative_layers");
++        String facing = stringProperty(state, "facing");
++        int turns = switch (facing) {
++            case "east" -> 1;
++            case "south" -> 2;
++            case "west" -> 3;
++            default -> 0; // north
++        };
++
++        List<ModelQuad> out = new ArrayList<>(12);
++        if (positive > 0) {
++            BlockState material = materialFor(metadata, "positive_layers");
++            if (material != null && !isPlaceholder(material)) {
++                addCuboidRotY(out, 0, 0, 0, 8, 16, positive * 2, material, turns);
++            }
++        }
++        if (negative > 0) {
++            BlockState material = materialFor(metadata, "negative_layers");
++            if (material != null && !isPlaceholder(material)) {
++                addCuboidRotY(out, 8, 0, 0, 16, 16, negative * 2, material, turns);
++            }
++        }
++        return List.copyOf(out);
++    }
++
++    private List<ModelQuad> flatPane(BlockState state, CompoundTag metadata) {
++        BlockState material = materialFor(metadata, null);
++        if (material == null || isPlaceholder(material)) return List.of();
++
++        List<ModelQuad> out = new ArrayList<>(6);
++        switch (stringProperty(state, "axis")) {
++            case "x" -> addCuboid(out, 7, 0, 0, 9, 16, 16, material);
++            case "z" -> addCuboid(out, 0, 0, 7, 16, 16, 9, material);
++            default -> addCuboid(out, 0, 7, 0, 16, 9, 16, material);
++        }
++        return List.copyOf(out);
++    }
++
++    private List<ModelQuad> shapeWithSingleMaterial(BlockState state, CompoundTag metadata) {
++        BlockState material = materialFor(metadata, null);
++        if (material == null || isPlaceholder(material)) return List.of();
++
++        List<AABB> boxes = boxesOf(state);
++        if (boxes.isEmpty()) return List.of();
++
++        List<ModelQuad> out = new ArrayList<>(boxes.size() * 6);
++        for (AABB box : boxes) {
++            addCuboid(
++                    out,
++                    (float) box.minX * 16f,
++                    (float) box.minY * 16f,
++                    (float) box.minZ * 16f,
++                    (float) box.maxX * 16f,
++                    (float) box.maxY * 16f,
++                    (float) box.maxZ * 16f,
++                    material);
++        }
++        return List.copyOf(out);
++    }
++
++    private void addCuboid(
++            List<ModelQuad> out,
++            float x1, float y1, float z1,
++            float x2, float y2, float z2,
++            BlockState material) {
++        float[] from = {x1, y1, z1};
++        float[] to = {x2, y2, z2};
++        for (Direction face : Direction.values()) {
++            Appearance appearance = appearance(material, face);
++            out.add(new ModelQuad(
++                    null,
++                    face,
++                    ResourcePackSource.faceCorners(from, to, face),
++                    ResourcePackSource.uvCorners(ResourcePackSource.autoUv(from, to, face), 0),
++                    appearance.texture(),
++                    appearance.tint()));
++        }
++    }
++
++    private void addCuboidRotY(
++            List<ModelQuad> out,
++            float x1, float y1, float z1,
++            float x2, float y2, float z2,
++            BlockState material,
++            int turns) {
++        float[] from = {x1, y1, z1};
++        float[] to = {x2, y2, z2};
++        for (Direction face : Direction.values()) {
++            Direction rotatedFace = rotateY(face, turns);
++            Appearance appearance = appearance(material, rotatedFace);
++            float[] positions = ResourcePackSource.faceCorners(from, to, face);
++            rotateY(positions, turns);
++            out.add(new ModelQuad(
++                    null,
++                    rotatedFace,
++                    positions,
++                    ResourcePackSource.uvCorners(ResourcePackSource.autoUv(from, to, face), 0),
++                    appearance.texture(),
++                    appearance.tint()));
++        }
++    }
++
++    private static void rotateY(float[] positions, int turns) {
++        turns = Math.floorMod(turns, 4);
++        for (int i = 0; i < positions.length; i += 3) {
++            float x = positions[i] - 8f;
++            float z = positions[i + 2] - 8f;
++            float rx = x;
++            float rz = z;
++            switch (turns) {
++                case 1 -> { rx = -z; rz = x; }
++                case 2 -> { rx = -x; rz = -z; }
++                case 3 -> { rx = z; rz = -x; }
++                default -> {}
++            }
++            positions[i] = rx + 8f;
++            positions[i + 2] = rz + 8f;
++        }
++    }
++
++    private static Direction rotateY(Direction face, int turns) {
++        Direction result = face;
++        for (int i = 0; i < Math.floorMod(turns, 4); i++) {
++            if (result.getAxis().isHorizontal()) result = result.getClockWise();
++        }
++        return result;
++    }
++
++    private Appearance appearance(BlockState material, Direction surface) {
++        List<ModelQuad> quads = models.quadsFor(material);
++        ModelQuad chosen = null;
++        for (ModelQuad quad : quads) {
++            if (quad.cullFace() == surface) {
++                chosen = quad;
++                break;
++            }
++            if (chosen == null && quad.shadeFace() == surface) chosen = quad;
++        }
++        if (chosen == null && !quads.isEmpty()) chosen = quads.getFirst();
++
++        if (chosen != null && chosen.texture() != null && models.texture(chosen.texture()) != null) {
++            return new Appearance(chosen.texture(), chosen.tint());
++        }
++
++        String particle = models.particleTexture(material);
++        if (particle != null && models.texture(particle) != null) {
++            return new Appearance(particle, 0xFFFFFF);
++        }
++
++        // If a copied material itself has no server-visible texture, do not emit a fake
++        // magenta/white copycat. Let the generic source below decide how to approximate it.
++        return new Appearance("minecraft:block/stone", 0xFFFFFF);
++    }
++
++    private static BlockState materialFor(CompoundTag root, String part) {
++        CompoundTag data = findMaterialData(root, 0);
++        if (part != null && data != null && data.contains(part, Tag.TAG_COMPOUND)) {
++            CompoundTag material = findMaterialCompound(data.getCompound(part), 0);
++            BlockState parsed = parseMaterial(material);
++            if (parsed != null) return parsed;
++        }
++
++        CompoundTag direct = findMaterialCompound(root, 0);
++        BlockState parsed = parseMaterial(direct);
++        if (parsed != null && !isPlaceholder(parsed)) return parsed;
++
++        if (data != null) {
++            for (String key : data.getAllKeys()) {
++                if (!data.contains(key, Tag.TAG_COMPOUND)) continue;
++                parsed = parseMaterial(findMaterialCompound(data.getCompound(key), 0));
++                if (parsed != null && !isPlaceholder(parsed)) return parsed;
++            }
++        }
++        return parsed;
++    }
++
++    private static CompoundTag findMaterialData(CompoundTag tag, int depth) {
++        if (tag == null || depth > 8) return null;
++        if (tag.contains("material_data", Tag.TAG_COMPOUND)) {
++            CompoundTag data = tag.getCompound("material_data");
++            if (!data.isEmpty()) return data;
++        }
++        for (String key : tag.getAllKeys()) {
++            Tag child = tag.get(key);
++            if (child instanceof CompoundTag compound) {
++                CompoundTag found = findMaterialData(compound, depth + 1);
++                if (found != null) return found;
++            }
++        }
++        return null;
++    }
++
++    private static CompoundTag findMaterialCompound(CompoundTag tag, int depth) {
++        if (tag == null || depth > 8) return null;
++        for (String key : List.of("material", "Material")) {
++            if (tag.contains(key, Tag.TAG_COMPOUND)) {
++                CompoundTag value = tag.getCompound(key);
++                if (!value.isEmpty()) return value;
++            }
++        }
++        for (String key : tag.getAllKeys()) {
++            Tag child = tag.get(key);
++            if (child instanceof CompoundTag compound) {
++                CompoundTag found = findMaterialCompound(compound, depth + 1);
++                if (found != null) return found;
++            }
++        }
++        return null;
++    }
++
++    private static BlockState parseMaterial(CompoundTag material) {
++        if (material == null || material.isEmpty()) return null;
++        try {
++            return NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(), material);
++        } catch (RuntimeException ignored) {
++            return null;
++        }
++    }
++
++    private static boolean isPlaceholder(BlockState material) {
++        String id = BuiltInRegistries.BLOCK.getKey(material.getBlock()).toString();
++        return "create:copycat_base".equals(id) || "copycats:copycat_base".equals(id);
++    }
++
++    private static List<AABB> boxesOf(BlockState state) {
++        try {
++            VoxelShape shape = state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
++            if (shape.isEmpty()) shape = state.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
++            return shape.isEmpty() ? List.of() : shape.toAabbs();
++        } catch (RuntimeException ignored) {
++            return List.of();
++        }
++    }
++
++    private static boolean booleanProperty(BlockState state, String name) {
++        return "true".equals(stringProperty(state, name));
++    }
++
++    private static int intProperty(BlockState state, String name) {
++        try {
++            return Integer.parseInt(stringProperty(state, name));
++        } catch (NumberFormatException ignored) {
++            return 0;
++        }
++    }
++
++    private static String stringProperty(BlockState state, String name) {
++        for (Property<?> property : state.getProperties()) {
++            if (property.getName().equals(name)) return valueName(state, property);
++        }
++        return "";
++    }
++
++    private static <T extends Comparable<T>> String valueName(BlockState state, Property<T> property) {
++        return property.getName(state.getValue(property));
++    }
++
++    private record Appearance(String texture, int tint) {}
++}
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java b/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java
+index 65414ee..346e9cc 100644
+--- a/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java
+@@ -475,7 +475,13 @@ public final class ResourcePackSource implements BlockModelSource {
+     }
+ 
+     private static boolean isObjLoader(JsonObject model) {
+-        return model.has("loader") && "neoforge:obj".equals(model.get("loader").getAsString());
++        if (!model.has("loader")) {
++            return false;
++        }
++        String loader = model.get("loader").getAsString();
++        return "neoforge:obj".equals(loader)
++                || "forge:obj".equals(loader)
++                || "porting_lib:obj".equals(loader);
+     }
+ 
+     /**
+@@ -543,18 +549,41 @@ public final class ResourcePackSource implements BlockModelSource {
+         }
+         String objText = new String(objBytes, StandardCharsets.UTF_8);
+ 
+-        // mtllib names a file in the same directory as the obj, not a resource location
+-        // of its own.
+         String mtlText = null;
+-        String mtlName = findMtllib(objText);
+-        if (mtlName != null) {
+-            int slash = objPath.lastIndexOf('/');
+-            String mtlPath = (slash >= 0 ? objPath.substring(0, slash + 1) : "") + mtlName;
+-            byte[] mtlBytes = assets.read(mtlPath);
+-            if (mtlBytes != null) {
+-                mtlText = new String(mtlBytes, StandardCharsets.UTF_8);
+-            } else {
+-                LOGGER.debug("Obj model {} names material {} which is not available", modelRef, mtlPath);
++
++        // NeoForge's OBJ loader supports mtl_override on the wrapper JSON. Prefer it when
++        // present; it is specifically how mods share one material library across many OBJ
++        // files. If absent, fall back to the OBJ's local mtllib declaration.
++        if (stub.has("mtl_override")) {
++            ResourceLocation mtlLoc = parse(stub.get("mtl_override").getAsString());
++            if (mtlLoc != null) {
++                String mtlPath = "assets/" + mtlLoc.getNamespace() + "/" + mtlLoc.getPath();
++                byte[] mtlBytes = assets.read(mtlPath);
++                if (mtlBytes != null) {
++                    mtlText = new String(mtlBytes, StandardCharsets.UTF_8);
++                } else {
++                    LOGGER.debug(
++                            "Obj model {} overrides material with {} which is not available",
++                            modelRef,
++                            mtlPath);
++                }
++            }
++        }
++
++        if (mtlText == null) {
++            String mtlName = findMtllib(objText);
++            if (mtlName != null) {
++                int slash = objPath.lastIndexOf('/');
++                String mtlPath = (slash >= 0 ? objPath.substring(0, slash + 1) : "") + mtlName;
++                byte[] mtlBytes = assets.read(mtlPath);
++                if (mtlBytes != null) {
++                    mtlText = new String(mtlBytes, StandardCharsets.UTF_8);
++                } else {
++                    LOGGER.debug(
++                            "Obj model {} names material {} which is not available",
++                            modelRef,
++                            mtlPath);
++                }
+             }
+         }
+ 
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java b/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java
+index 14cc6cc..3ba2e04 100644
+--- a/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java
+@@ -4,6 +4,7 @@ import dev.duzo.bluemap3d.Config;
+ import dev.duzo.bluemap3d.api.BlockVolume;
+ import dev.duzo.bluemap3d.api.ModelAttachment;
+ import net.minecraft.core.Direction;
++import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.phys.Vec3;
+ import org.joml.Matrix4f;
+@@ -32,6 +33,10 @@ import java.util.List;
+ public final class VolumeMesher {
+ 
+     private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/Mesher");
++    private static final java.util.Set<String> BOGEY_V12_MODEL_TRACE =
++            java.util.concurrent.ConcurrentHashMap.newKeySet();
++    private static final java.util.Set<String> COPYCATS_TRACE =
++            java.util.concurrent.ConcurrentHashMap.newKeySet();
+ 
+     private final List<BlockModelSource> sources;
+     private final int maxBlocks;
+@@ -97,10 +102,33 @@ public final class VolumeMesher {
+         java.util.Set<String> unresolved = new java.util.TreeSet<>();
+ 
+         volume.forEachBlock((x, y, z, state) -> {
++            CompoundTag blockEntityData = volume.blockEntityDataAt(x, y, z);
++
++            String blockId = net.minecraft.core.registries.BuiltInRegistries.BLOCK
++                    .getKey(state.getBlock()).toString();
++            if (false && blockId.startsWith("copycats:")
++                    && COPYCATS_TRACE.size() < 32
++                    && COPYCATS_TRACE.add(blockId)) {
++                java.util.List<String> traceSources = new java.util.ArrayList<>();
++                for (BlockModelSource traceSource : sources) {
++                    try {
++                        traceSources.add(traceSource.getClass().getSimpleName() + "="
++                                + traceSource.quadsFor(state, blockEntityData).size());
++                    } catch (RuntimeException error) {
++                        traceSources.add(traceSource.getClass().getSimpleName() + "=ERROR:"
++                                + error.getClass().getSimpleName());
++                    }
++                }
++                String metadata = blockEntityData == null ? "<null>" : blockEntityData.toString();
++                if (metadata.length() > 2000) metadata = metadata.substring(0, 2000) + "...";
++                LOGGER.info("COPYCATS-V13 TRACE block={} state={} metadata={} sources={}",
++                        blockId, state, metadata, traceSources);
++            }
++
+             BlockModelSource source = null;
+             List<ModelQuad> quads = List.of();
+             for (BlockModelSource candidate : sources) {
+-                List<ModelQuad> got = candidate.quadsFor(state);
++                List<ModelQuad> got = candidate.quadsFor(state, blockEntityData);
+                 if (!got.isEmpty()) {
+                     source = candidate;
+                     quads = got;
+@@ -236,6 +264,16 @@ public final class VolumeMesher {
+                 break;
+             }
+         }
++        if (false && "create_bb".equals(attachment.model().getNamespace())
++                && BOGEY_V12_MODEL_TRACE.add(attachment.model().toString())) {
++            LOGGER.info(
++                    "BOGEY-V13 MODEL model={} resolved={} source={} quads={}",
++                    attachment.model(),
++                    source != null,
++                    source == null ? "<none>" : source.getClass().getSimpleName(),
++                    quads.size());
++        }
++
+         if (source == null) {
+             // Most likely an item model, which carries a sprite and no elements because the
+             // client builds its shape by extruding that sprite. Nothing to draw here.
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/publish/WebRootPublisher.java b/core/src/main/java/dev/duzo/bluemap3d/publish/WebRootPublisher.java
+index c55c2a4..eaaebf8 100644
+--- a/core/src/main/java/dev/duzo/bluemap3d/publish/WebRootPublisher.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/publish/WebRootPublisher.java
+@@ -66,9 +66,10 @@ public final class WebRootPublisher {
+ 
+         WebRootPublisher publisher = new WebRootPublisher(webRoot);
+         try {
+-            // Meshes are rebuilt on demand, and stale ones from a previous run would
+-            // otherwise accumulate forever.
+-            publisher.deleteRecursively(webRoot.resolve(BASE).resolve("meshes"));
++            // Meshes are content-addressed by object id + geometry version. Keep them
++            // across restart so persisted scene objects can be visible before their
++            // backing mod has loaded its hidden chunks again. Superseded/departed meshes
++            // are still removed by SceneObjectTracker during normal operation.
+             Files.createDirectories(webRoot.resolve(BASE).resolve("meshes"));
+             publisher.copyScript();
+         } catch (IOException e) {
+@@ -110,6 +111,16 @@ public final class WebRootPublisher {
+         return meshUrl;
+     }
+ 
++    /**
++     * Returns the deterministic URL for an already-published mesh if its file survived
++     * the previous server run, otherwise {@code null}.
++     */
++    public String existingMeshUrl(String provider, String objectId, long version) {
++        String meshUrl = BASE + "/meshes/" + sanitise(provider) + "/"
++                + stem(objectId, version) + ".bm3d";
++        return Files.isRegularFile(resolve(meshUrl)) ? meshUrl : null;
++    }
++
+     /** Removes every mesh belonging to an object that no longer exists. */
+     public void deleteMeshes(String provider, String objectId) {
+         deleteMatching(provider, sanitise(objectId) + "-");
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java b/core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java
+index 9398131..f104d6c 100644
+--- a/core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java
+@@ -131,7 +131,10 @@ public final class SceneObjectTracker {
+             if (!seen.contains(key)) {
+                 ready.remove(key);
+                 int slash = key.indexOf('/');
+-                publisher.deleteMeshes(key.substring(0, slash), key.substring(slash + 1));
++                String providerId = key.substring(0, slash);
++                String objectId = key.substring(slash + 1);
++                BlueMap3D.meshRemoved(providerId, objectId);
++                publisher.deleteMeshes(providerId, objectId);
+             }
+         }
+ 
+@@ -160,7 +163,18 @@ public final class SceneObjectTracker {
+             long version = object.geometryVersion();
+             Ready current = ready.get(key);
+ 
+-            if (current == null || current.version() != version) {
++            if (current == null) {
++                String existing = publisher.existingMeshUrl(providerId, object.id(), version);
++                if (existing != null) {
++                    current = new Ready(version, existing);
++                    ready.put(key, current);
++                    // Keep mesh-archive consumers in sync even though no bake happened.
++                    BlueMap3D.meshPublished(providerId, object.id(), version, existing);
++                }
++            }
++
++            if ((current == null || current.version() != version)
++                    && object.canBakeGeometry()) {
+                 requestBake(providerId, object, key, version);
+             }
+             if (current != null) {
+@@ -198,6 +212,9 @@ public final class SceneObjectTracker {
+                     return;
+                 }
+                 String url = publisher.writeMesh(providerId, objectId, version, mesh);
++                // The files are fully present now. Archive listeners run before a
++                // superseded version can be deleted below.
++                BlueMap3D.meshPublished(providerId, objectId, version, url);
+                 Ready previous = ready.put(key, new Ready(version, url));
+                 if (previous != null && previous.version() != version) {
+                     // The old mesh is unreferenced now that the feed points at the new
+@@ -316,6 +333,7 @@ public final class SceneObjectTracker {
+         baker.shutdownNow();
+         ready.clear();
+         baking.clear();
++        BlueMap3D.clearPublishedMeshes();
+     }
+ 
+     private record Row(String provider, String id, String label, String dimension,
+diff --git a/core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js b/core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js
+index a440bb6..ec65d16 100644
+--- a/core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js
++++ b/core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js
+@@ -44,7 +44,7 @@
+ 
+     var FEED_URL = "assets/bluemap3d/entities3d.json";
+     var LOG = "[BlueMap3D]";
+-    var BUILD = "core-10";
++    var BUILD = "core-history-15-special-models";
+ 
+     /* Verbose per-poll diagnostics. Off by default - at two polls a second it is a lot of
+      * console for a working install. Turn it on at runtime with
+@@ -91,6 +91,8 @@
+ 
+     /* id -> { mesh, meshUrl, from, to, label } */
+     var objects = Object.create(null);
++    /* Object ids temporarily hidden by a historical-replay consumer. */
++    var suppressedObjects = Object.create(null);
+     /* meshUrl -> Promise<{geometry, material}> */
+     var meshCache = Object.create(null);
+ 
+@@ -154,6 +156,9 @@
+             objects: objects,
+             root: root,
+             viewer: viewer,
++            createReplayMesh: createReplayMesh,
++            setReplayAnimation: setReplayAnimation,
++            setSuppressedObjects: setSuppressedObjects,
+             stats: function () {
+                 return {
+                     build: BUILD,
+@@ -460,6 +465,9 @@
+             }
+         }
+ 
++        mesh.userData.bluemap3dReplayNodes = resource.nodes;
++        mesh.userData.bluemap3dReplaySigns = entry.nodeSigns;
++
+         for (var j = 0; j < resource.nodes.length; j++) {
+             entry.rateAngles[j] = canCarryRate ? oldRateAngles[j] : 0;
+             /* Null even when carrying the angle over, so the next writeTransform call
+@@ -473,7 +481,16 @@
+         /* Placed by the next frame; adding it already positioned avoids a one-frame
+          * flash at the origin. */
+         writeTransform(entry, 1);
++        var meshId = null;
++        for (var liveId in objects) {
++            if (objects[liveId] === entry) {
++                meshId = liveId;
++                break;
++            }
++        }
++        mesh.visible = !meshId || !suppressedObjects[meshId];
+         root.add(mesh);
++        applyVisibility();
+     }
+ 
+     // -----------------------------------------------------------------------------
+@@ -845,7 +862,9 @@
+                 continue;
+             }
+             var allowed = dimensionMaps[entry.dimension];
+-            entry.mesh.visible = !mapId || !allowed || allowed.indexOf(mapId) >= 0;
++            entry.mesh.visible =
++                !suppressedObjects[id]
++                && (!mapId || !allowed || allowed.indexOf(mapId) >= 0);
+         }
+     }
+ 
+@@ -1106,6 +1125,113 @@
+         return result;
+     }
+ 
++    /**
++     * Creates a detached scene object from any BM3D URL.
++     *
++     * Used by Player History for archived geometry. Geometry, texture and material stay
++     * in BlueMap3D's normal caches, so historical instances share GPU resources with
++     * each other and with live objects.
++     */
++    function createReplayMesh(url, label) {
++        return loadMesh(url).then(function (resource) {
++            resource.geometry.setDrawRange(0, resource.staticIndexCount);
++
++            var mesh = new THREE.Mesh(resource.geometry, resource.material);
++            mesh.frustumCulled = true;
++            mesh.matrixAutoUpdate = true;
++            if (label) {
++                mesh.name = label;
++            }
++
++            var roll = entryRoll(resource.nodes);
++            var signs = new Array(resource.nodes.length);
++            for (var s = 0; s < resource.nodes.length; s++) {
++                signs[s] = roll ? nodeForward(resource.nodes[s]).dot(roll) : 0;
++            }
++
++            for (var i = 0; i < resource.nodes.length; i++) {
++                var node = resource.nodes[i];
++                var group = new THREE.Group();
++                group.position.copy(node.pivot);
++
++                var nodeMesh = new THREE.Mesh(
++                    resource.nodeGeometries[i], resource.material);
++                nodeMesh.position.copy(node.pivot).negate();
++                nodeMesh.frustumCulled = true;
++                nodeMesh.matrixAutoUpdate = true;
++                group.add(nodeMesh);
++                mesh.add(group);
++            }
++
++            mesh.userData.bluemap3dReplayNodes = resource.nodes;
++            mesh.userData.bluemap3dReplaySigns = signs;
++            return mesh;
++        });
++    }
++
++    /**
++     * Applies a deterministic pose to a detached/replayed BM3D mesh.
++     *
++     * Travel-driven nodes use the historical signed odometer supplied by Player History.
++     * Rate-driven nodes use absolute replay time instead of wall-clock time, so pausing,
++     * seeking and reverse playback all land on the same pose for the same timestamp.
++     */
++    function setReplayAnimation(mesh, travel, timeSeconds) {
++        if (!mesh || !mesh.userData) {
++            return;
++        }
++        var nodes = mesh.userData.bluemap3dReplayNodes;
++        var signs = mesh.userData.bluemap3dReplaySigns;
++        if (!nodes || !signs) {
++            return;
++        }
++
++        for (var i = 0; i < nodes.length && i < mesh.children.length; i++) {
++            var node = nodes[i];
++            var group = mesh.children[i];
++            var value = travel * signs[i];
++
++            if (node.kind === KIND_OSCILLATE) {
++                var offset = node.period > 0
++                    ? node.radius * Math.sin(value / node.period) : 0;
++                group.position.set(
++                    node.axis.x * offset,
++                    node.axis.y * offset,
++                    node.axis.z * offset);
++                group.quaternion.set(0, 0, 0, 1);
++            } else if (node.kind === KIND_ORBIT) {
++                var theta = node.period > 0 ? value / node.period : 0;
++                group.position.copy(node.pivot).applyAxisAngle(node.axis, theta);
++                group.quaternion.set(0, 0, 0, 1);
++            } else if (node.kind === KIND_RATE) {
++                var angle = node.rate * timeSeconds;
++                /* Keep huge epoch-based angles numerically tame while preserving phase. */
++                angle = angle % (Math.PI * 2);
++                group.position.copy(node.pivot);
++                group.quaternion.setFromAxisAngle(node.axis, angle);
++            } else {
++                group.position.copy(node.pivot);
++                group.quaternion.setFromAxisAngle(
++                    node.axis, node.radius > 0 ? value / node.radius : 0);
++            }
++        }
++    }
++
++    /**
++     * Atomically replaces the set of live scene-object ids hidden by a replay consumer.
++     * BlueMap3D itself owns visibility, so feed polls and async mesh swaps can no longer
++     * flash a present-day vehicle back on between Player History frames.
++     */
++    function setSuppressedObjects(ids) {
++        suppressedObjects = Object.create(null);
++        if (ids && ids.length) {
++            for (var i = 0; i < ids.length; i++) {
++                suppressedObjects[String(ids[i])] = true;
++            }
++        }
++        applyVisibility();
++    }
++
+     // -----------------------------------------------------------------------------
+     // Teardown
+     // -----------------------------------------------------------------------------
+diff --git a/gradle.properties b/gradle.properties
+index 93ebb15..b643e36 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -6,7 +6,7 @@
+ # own build.gradle as `ext`, because they differ per artifact.
+ 
+ # Project
+-version=1.0.0
++version=1.0.9
+ group=dev.duzo.bluemap3d
+ java_version=21
+ 

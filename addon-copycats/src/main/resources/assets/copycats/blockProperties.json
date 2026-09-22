@@ -1,0 +1,9 @@
+{
+  "copycats:copycat_byte": { "occluding": false, "culling": false, "cullingIdentical": false },
+  "copycats:copycat_vertical_half_layer": { "occluding": false, "culling": false, "cullingIdentical": false },
+  "copycats:copycat_flat_pane": { "occluding": false, "culling": false, "cullingIdentical": false },
+  "copycats:copycat_vertical_stairs": { "occluding": false, "culling": false, "cullingIdentical": false },
+  "copycats:copycat_slope_layer": { "occluding": false, "culling": false, "cullingIdentical": false },
+  "copycats:copycat_slab": { "occluding": false, "culling": false, "cullingIdentical": false },
+  "copycats:copycat_board": { "occluding": false, "culling": false, "cullingIdentical": false }
+}
