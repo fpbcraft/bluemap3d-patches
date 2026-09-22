@@ -20,7 +20,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Reads real Minecraft block models and textures out of an {@link AssetIndex}.
@@ -57,6 +59,8 @@ public final class ResourcePackSource implements BlockModelSource {
     private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/Models");
     private static final Gson GSON = new Gson();
     private static final int MAX_PARENT_DEPTH = 16;
+    private static final Set<String> DIAGONAL_TRACE = ConcurrentHashMap.newKeySet();
+    private static final int MAX_DIAGONAL_TRACE = 32;
 
     private final AssetIndex assets;
     private final Map<BlockState, List<ModelQuad>> quadCache = new HashMap<>();
@@ -102,13 +106,27 @@ public final class ResourcePackSource implements BlockModelSource {
     // ---------------------------------------------------------------------------------
 
     private List<ModelQuad> buildQuads(BlockState state) {
+        ResourceLocation actualBlock = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .getKey(state.getBlock());
         ResourceLocation block = assetBlockId(state);
-        JsonObject blockstate = json("assets/" + block.getNamespace() + "/blockstates/" + block.getPath() + ".json");
+        String blockstatePath =
+                "assets/" + block.getNamespace() + "/blockstates/" + block.getPath() + ".json";
+        boolean traceDiagonal = isDiagonalNamespace(actualBlock.getNamespace())
+                && DIAGONAL_TRACE.size() < MAX_DIAGONAL_TRACE
+                && DIAGONAL_TRACE.add(actualBlock + "|" + state);
+        JsonObject blockstate = json(blockstatePath);
         if (blockstate == null) {
+            if (traceDiagonal) {
+                LOGGER.info(
+                        "DIAGONAL-DIAG block={} asset={} state={} blockstate={} found=false",
+                        actualBlock, block, state, blockstatePath);
+            }
             return List.of();
         }
 
         List<ModelQuad> out = new ArrayList<>();
+        int regularQuads = 0;
+        int diagonalQuads = 0;
         try {
             if (blockstate.has("variants")) {
                 JsonObject variants = blockstate.getAsJsonObject("variants");
@@ -131,11 +149,26 @@ public final class ResourcePackSource implements BlockModelSource {
                 // loader duplicates a cardinal side selector and rotates it 45 degrees.
                 // Dedicated-server model parsing never runs that loader, so reproduce
                 // exactly that augmentation here for moving BlueMap3D objects.
+                regularQuads = out.size();
                 appendDiagonalMultipart(out, multipart, state);
+                diagonalQuads = out.size() - regularQuads;
+            } else {
+                regularQuads = out.size();
             }
         } catch (RuntimeException e) {
             LOGGER.debug("Could not model {}: {}", state, e.toString());
+            if (traceDiagonal) {
+                LOGGER.info(
+                        "DIAGONAL-DIAG block={} asset={} state={} blockstate={} error={}",
+                        actualBlock, block, state, blockstatePath, e.toString());
+            }
             return List.of();
+        }
+        if (traceDiagonal) {
+            LOGGER.info(
+                    "DIAGONAL-DIAG block={} asset={} state={} blockstate={} found=true regularQuads={} diagonalQuads={} totalQuads={}",
+                    actualBlock, block, state, blockstatePath,
+                    regularQuads, diagonalQuads, out.size());
         }
         return out.isEmpty() ? List.of() : List.copyOf(out);
     }
@@ -276,13 +309,17 @@ public final class ResourcePackSource implements BlockModelSource {
      * the diagonalfences/diagonalwindows namespace. Resolve the same original asset id
      * before looking up blockstates and particle textures.
      */
+    private static boolean isDiagonalNamespace(String namespace) {
+        return "diagonalfences".equals(namespace)
+                || "diagonalwalls".equals(namespace)
+                || "diagonalwindows".equals(namespace);
+    }
+
     private static ResourceLocation assetBlockId(BlockState state) {
         ResourceLocation id = net.minecraft.core.registries.BuiltInRegistries.BLOCK
                 .getKey(state.getBlock());
         String namespace = id.getNamespace();
-        if (!"diagonalfences".equals(namespace)
-                && !"diagonalwalls".equals(namespace)
-                && !"diagonalwindows".equals(namespace)) {
+        if (!isDiagonalNamespace(namespace)) {
             return id;
         }
 
