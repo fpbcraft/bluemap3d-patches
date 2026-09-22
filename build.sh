@@ -71,6 +71,25 @@ replace("gradle.properties", "version=1.0.9", "version=1.0.20")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
+
+import_needle = 'import dev.duzo.bluemap3d.bake.BitsNBobsStrutSource;'
+if import_needle not in s:
+    raise SystemExit("BlueMap3DMod procedural import insertion point not found")
+s = s.replace(
+    import_needle,
+    import_needle + '\nimport dev.duzo.bluemap3d.bake.ProceduralBlockSource;',
+    1,
+)
+
+source_needle = '                sources.add(new BitsNBobsStrutSource(packs));'
+if source_needle not in s:
+    raise SystemExit("BlueMap3DMod procedural source insertion point not found")
+s = s.replace(
+    source_needle,
+    source_needle + '\n                sources.add(new ProceduralBlockSource(packs));',
+    1,
+)
+
 needle = 'LOGGER.info("BlueMap3D loaded. Waiting for BlueMap and at least one addon.");'
 if needle not in s:
     raise SystemExit("BlueMap3D startup marker insertion point not found")
