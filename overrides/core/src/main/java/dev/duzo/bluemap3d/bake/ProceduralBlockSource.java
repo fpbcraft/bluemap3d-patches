@@ -62,9 +62,23 @@ public final class ProceduralBlockSource implements BlockModelSource {
      */
     private List<ModelQuad> fluidPipe(BlockState state) {
         List<ModelQuad> out = new ArrayList<>(models.quadsFor(state));
+        List<Direction> connected = new ArrayList<>(6);
         for (Direction direction : Direction.values()) {
-            if (!booleanProperty(state, direction.getName())) continue;
-            addModel(out, "create:block/fluid_pipe/connection/" + direction.getName(),
+            if (booleanProperty(state, direction.getName())) {
+                connected.add(direction);
+            }
+        }
+
+        // Create uses the compact connection partial for a true straight-through axis,
+        // while elbows, tees and other junctions use the more detailed rim connector.
+        // Neighbour-aware rim/drain selection is client-world dependent, but choosing the
+        // right connector family from the blockstate preserves the important silhouette.
+        boolean straight = connected.size() == 2
+                && connected.get(0).getOpposite() == connected.get(1);
+        String partial = straight ? "connection" : "rim_connector";
+
+        for (Direction direction : connected) {
+            addModel(out, "create:block/fluid_pipe/" + partial + "/" + direction.getName(),
                     0, 0, 0, 0, 0, 0);
         }
         return out.isEmpty() ? List.of() : List.copyOf(out);
