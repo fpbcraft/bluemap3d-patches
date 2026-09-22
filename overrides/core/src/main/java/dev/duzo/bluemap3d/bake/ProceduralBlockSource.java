@@ -7,11 +7,15 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Reconstructs geometry that Create/Simulated/Offroad add in client renderers instead
@@ -23,6 +27,10 @@ import java.util.Map;
  * the supported mods are installed.
  */
 public final class ProceduralBlockSource implements BlockModelSource {
+    private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/Procedural");
+    private static final Set<String> TRACED = ConcurrentHashMap.newKeySet();
+    private static final int MAX_TRACE = 32;
+
     private final ResourcePackSource models;
 
     public ProceduralBlockSource(ResourcePackSource models) {
@@ -38,10 +46,10 @@ public final class ProceduralBlockSource implements BlockModelSource {
     public List<ModelQuad> quadsFor(BlockState state, CompoundTag metadata) {
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
         return switch (id) {
-            case "create:fluid_pipe" -> fluidPipe(state);
-            case "create:mechanical_roller" -> mechanicalRoller(state);
-            case "offroad:wheel_mount" -> wheelMount(state, metadata);
-            case "offroad:rockcutting_wheel" -> rockCuttingWheel(state);
+            case "create:fluid_pipe" -> fluidPipe(id, state);
+            case "create:mechanical_roller" -> mechanicalRoller(id, state);
+            case "offroad:wheel_mount" -> wheelMount(id, state, metadata);
+            case "offroad:rockcutting_wheel" -> rockCuttingWheel(id, state);
             default -> List.of();
         };
     }
@@ -60,8 +68,9 @@ public final class ProceduralBlockSource implements BlockModelSource {
      * Create's fluid-pipe blockstate contains only the 8x8x8 core. The arms from the
      * core to each connected face are added by PipeAttachmentModel on the client.
      */
-    private List<ModelQuad> fluidPipe(BlockState state) {
-        List<ModelQuad> out = new ArrayList<>(models.quadsFor(state));
+    private List<ModelQuad> fluidPipe(String id, BlockState state) {
+        List<ModelQuad> base = models.quadsFor(state);
+        List<ModelQuad> out = new ArrayList<>(base);
         List<Direction> connected = new ArrayList<>(6);
         for (Direction direction : Direction.values()) {
             if (booleanProperty(state, direction.getName())) {
@@ -77,10 +86,20 @@ public final class ProceduralBlockSource implements BlockModelSource {
                 && connected.get(0).getOpposite() == connected.get(1);
         String partial = straight ? "connection" : "rim_connector";
 
+        List<String> partialCounts = new ArrayList<>();
+        int extra = 0;
         for (Direction direction : connected) {
-            addModel(out, "create:block/fluid_pipe/" + partial + "/" + direction.getName(),
-                    0, 0, 0, 0, 0, 0);
+            String modelId = "create:block/fluid_pipe/" + partial + "/" + direction.getName();
+            int added = addModel(out, modelId, 0, 0, 0, 0, 0, 0);
+            extra += added;
+            partialCounts.add(modelId + "=" + added);
         }
+        trace(id, state, "base=" + base.size()
+                + " connected=" + connected
+                + " partial=" + partial
+                + " extras=" + extra
+                + " models=" + partialCounts
+                + " total=" + out.size());
         return out.isEmpty() ? List.of() : List.copyOf(out);
     }
 
@@ -92,23 +111,29 @@ public final class ProceduralBlockSource implements BlockModelSource {
      * containing contraption; reproducing wheel spin independently is not necessary to
      * recover the correct silhouette.
      */
-    private List<ModelQuad> mechanicalRoller(BlockState state) {
-        List<ModelQuad> out = new ArrayList<>(models.quadsFor(state));
+    private List<ModelQuad> mechanicalRoller(String id, BlockState state) {
+        List<ModelQuad> base = models.quadsFor(state);
+        List<ModelQuad> out = new ArrayList<>(base);
         Direction facing = horizontalFacing(state);
         double y = blockstateY(facing);
 
-        addModel(out, "create:block/mechanical_roller/frame",
+        int frame = addModel(out, "create:block/mechanical_roller/frame",
                 0, y, 0, 0, -4.0, 0);
 
         // RollerRenderer lowers the whole actor by 4 model pixels and the wheel by
         // another 8, places it just beyond the facing side, then turns the wheel model
         // 90 degrees around Y. Keep the zero-spin pose but match those fixed offsets.
-        addModel(out, "create:block/mechanical_roller/wheel",
+        int wheel = addModel(out, "create:block/mechanical_roller/wheel",
                 0, y + 90.0, 0,
                 facing.getStepX() * 17.0,
                 -12.0,
                 facing.getStepZ() * 17.0);
 
+        trace(id, state, "base=" + base.size()
+                + " facing=" + facing
+                + " frameQuads=" + frame
+                + " wheelQuads=" + wheel
+                + " total=" + out.size());
         return out.isEmpty() ? List.of() : List.copyOf(out);
     }
 
@@ -117,20 +142,32 @@ public final class ProceduralBlockSource implements BlockModelSource {
      * block model only contains the mount; WheelMountRenderer draws the tire separately.
      * Use the same item/partial models at the suspension's neutral extension.
      */
-    private List<ModelQuad> wheelMount(BlockState state, CompoundTag metadata) {
-        List<ModelQuad> out = new ArrayList<>(models.quadsFor(state));
+    private List<ModelQuad> wheelMount(String id, BlockState state, CompoundTag metadata) {
+        List<ModelQuad> base = models.quadsFor(state);
+        List<ModelQuad> out = new ArrayList<>(base);
         String itemId = currentStackId(metadata);
         TireModel tire = tireModel(itemId);
         if (tire == null) {
+            trace(id, state, "base=" + base.size()
+                    + " metadata=" + metadataSummary(metadata)
+                    + " currentStack=" + itemId
+                    + " tire=<unresolved> total=" + out.size());
             return out.isEmpty() ? List.of() : List.copyOf(out);
         }
 
         Direction facing = horizontalFacing(state);
-        addModel(out, tire.model(),
+        int wheel = addModel(out, tire.model(),
                 tire.rotateX(), blockstateY(facing), tire.rotateZ(),
                 facing.getStepX() * 22.0 + tire.offsetX(),
                 -8.0 + tire.offsetY(),
                 facing.getStepZ() * 22.0 + tire.offsetZ());
+        trace(id, state, "base=" + base.size()
+                + " metadata=" + metadataSummary(metadata)
+                + " currentStack=" + itemId
+                + " facing=" + facing
+                + " model=" + tire.model()
+                + " wheelQuads=" + wheel
+                + " total=" + out.size());
         return out.isEmpty() ? List.of() : List.copyOf(out);
     }
 
@@ -139,20 +176,26 @@ public final class ProceduralBlockSource implements BlockModelSource {
      * partial. Keeping it centred is preferable to the bare machine and is also the exact
      * model used when this block is installed as an Offroad tire.
      */
-    private List<ModelQuad> rockCuttingWheel(BlockState state) {
-        List<ModelQuad> out = new ArrayList<>(models.quadsFor(state));
+    private List<ModelQuad> rockCuttingWheel(String id, BlockState state) {
+        List<ModelQuad> base = models.quadsFor(state);
+        List<ModelQuad> out = new ArrayList<>(base);
         Direction facing = directionProperty(state, "facing", Direction.NORTH);
         double y = facing.getAxis().isHorizontal() ? blockstateY(facing) : 0.0;
         double x = facing == Direction.UP ? -90.0 : facing == Direction.DOWN ? 90.0 : 90.0;
-        addModel(out, "offroad:block/rockcutting_wheel/wheel",
+        int wheel = addModel(out, "offroad:block/rockcutting_wheel/wheel",
                 x, y, 0,
                 facing.getStepX() * 10.0,
                 facing.getStepY() * 8.0,
                 facing.getStepZ() * 10.0);
+        trace(id, state, "base=" + base.size()
+                + " facing=" + facing
+                + " axisAlongFirst=" + stringProperty(state, "axis_along_first")
+                + " wheelQuads=" + wheel
+                + " total=" + out.size());
         return out.isEmpty() ? List.of() : List.copyOf(out);
     }
 
-    private void addModel(
+    private int addModel(
             List<ModelQuad> out,
             String modelId,
             double rotateX,
@@ -162,9 +205,10 @@ public final class ProceduralBlockSource implements BlockModelSource {
             double translateY,
             double translateZ) {
         ResourceLocation model = ResourceLocation.tryParse(modelId);
-        if (model == null) return;
+        if (model == null) return 0;
 
         List<ModelQuad> quads = models.quadsForModel(model, Map.of());
+        int before = out.size();
         for (ModelQuad quad : quads) {
             float[] positions = quad.positions().clone();
             transform(positions, rotateX, rotateY, rotateZ,
@@ -179,6 +223,20 @@ public final class ProceduralBlockSource implements BlockModelSource {
                     quad.texture(),
                     quad.tint()));
         }
+        return out.size() - before;
+    }
+
+    private static void trace(String id, BlockState state, String details) {
+        String key = id + "|" + state;
+        if (TRACED.size() < MAX_TRACE && TRACED.add(key)) {
+            LOGGER.info("PROCEDURAL-DIAG block={} state={} {}", id, state, details);
+        }
+    }
+
+    private static String metadataSummary(CompoundTag metadata) {
+        if (metadata == null) return "<null>";
+        String text = metadata.toString();
+        return text.length() <= 600 ? text : text.substring(0, 600) + "...";
     }
 
     private static void transform(
