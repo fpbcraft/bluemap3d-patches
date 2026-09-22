@@ -111,7 +111,7 @@ public final class ResourcePackSource implements BlockModelSource {
         ResourceLocation block = assetBlockId(state);
         String blockstatePath =
                 "assets/" + block.getNamespace() + "/blockstates/" + block.getPath() + ".json";
-        boolean traceDiagonal = isDiagonalNamespace(actualBlock.getNamespace())
+        boolean traceDiagonal = isDiagnosticTarget(actualBlock)
                 && DIAGONAL_TRACE.size() < MAX_DIAGONAL_TRACE
                 && DIAGONAL_TRACE.add(actualBlock + "|" + state);
         JsonObject blockstate = json(blockstatePath);
@@ -309,6 +309,14 @@ public final class ResourcePackSource implements BlockModelSource {
      * the diagonalfences/diagonalwindows namespace. Resolve the same original asset id
      * before looking up blockstates and particle textures.
      */
+    private static boolean isDiagnosticTarget(ResourceLocation id) {
+        String path = id.getPath();
+        return isDiagonalNamespace(id.getNamespace())
+                || path.contains("wisteria")
+                || path.contains("shale")
+                || path.contains("diorite");
+    }
+
     private static boolean isDiagonalNamespace(String namespace) {
         return "diagonalfences".equals(namespace)
                 || "diagonalwalls".equals(namespace)
