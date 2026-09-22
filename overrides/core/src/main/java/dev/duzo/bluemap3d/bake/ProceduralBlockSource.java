@@ -127,9 +127,9 @@ public final class ProceduralBlockSource implements BlockModelSource {
         Direction facing = horizontalFacing(state);
         addModel(out, tire.model(),
                 tire.rotateX(), blockstateY(facing), tire.rotateZ(),
-                facing.getStepX() * 22.0,
-                -8.0,
-                facing.getStepZ() * 22.0);
+                facing.getStepX() * 22.0 + tire.offsetX(),
+                -8.0 + tire.offsetY(),
+                facing.getStepZ() * 22.0 + tire.offsetZ());
         return out.isEmpty() ? List.of() : List.copyOf(out);
     }
 
@@ -231,25 +231,25 @@ public final class ProceduralBlockSource implements BlockModelSource {
         }
         return switch (itemId) {
             case "offroad:small_tire" ->
-                    new TireModel("offroad:item/small_tire", 90, 0);
+                    new TireModel("offroad:item/small_tire", 90, 0, 0, 0, 0);
             case "offroad:tire" ->
-                    new TireModel("offroad:item/tire", 90, 0);
+                    new TireModel("offroad:item/tire", 90, 0, 0, 0, 0);
             case "offroad:large_tire" ->
-                    new TireModel("offroad:item/large_tire", 90, 0);
+                    new TireModel("offroad:item/large_tire", 90, 0, 0, 0, 0);
             case "offroad:monstrous_tire" ->
-                    new TireModel("offroad:item/monstrous_tire", 90, 0);
+                    new TireModel("offroad:item/monstrous_tire", 90, 0, 0, 0, 0);
             case "offroad:rockcutting_wheel" ->
-                    new TireModel("offroad:block/rockcutting_wheel/wheel", 90, 0);
+                    new TireModel("offroad:block/rockcutting_wheel/wheel", 90, 0, 0, 0, 0);
             case "create:mechanical_roller" ->
-                    new TireModel("create:block/mechanical_roller/wheel", 0, 0);
+                    new TireModel("create:block/mechanical_roller/wheel", 0, 0, 0, -8, 0);
             case "create:crushing_wheel" ->
-                    new TireModel("create:item/crushing_wheel", 90, 0);
+                    new TireModel("create:item/crushing_wheel", 90, 0, 0, 0, 0);
             case "create:water_wheel" ->
-                    new TireModel("create:item/water_wheel", 90, 0);
+                    new TireModel("create:item/water_wheel", 90, 0, 0, 0, 0);
             case "create:large_water_wheel" ->
-                    new TireModel("create:item/large_water_wheel", 90, 0);
+                    new TireModel("create:item/large_water_wheel", 90, 0, 0, 0, 0);
             case "create:flywheel" ->
-                    new TireModel("create:item/flywheel", 90, 0);
+                    new TireModel("create:item/flywheel", 90, 0, 0, 0, 0);
             default -> null;
         };
     }
@@ -316,6 +316,12 @@ public final class ProceduralBlockSource implements BlockModelSource {
         return property.getName(state.getValue(property));
     }
 
-    private record TireModel(String model, double rotateX, double rotateZ) {
+    private record TireModel(
+            String model,
+            double rotateX,
+            double rotateZ,
+            double offsetX,
+            double offsetY,
+            double offsetZ) {
     }
 }
