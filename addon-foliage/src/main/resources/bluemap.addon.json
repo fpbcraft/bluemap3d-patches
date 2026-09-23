@@ -1,0 +1,5 @@
+{
+  "id": "BlueMapFoliageCompat",
+  "entrypoint": "dev.duzo.bluemapfoliage.BlueMapFoliageCompatAddon",
+  "version": "${version}"
+}
