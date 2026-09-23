@@ -21,6 +21,9 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Check animated player renderer syntax
+        run: node --check addon-player/src/main/resources/web/bluemap3d.players.js
+
       - name: Build BlueMap 5.7 compatibility artifacts
         run: ./build.sh
 
