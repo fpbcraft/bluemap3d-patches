@@ -13,7 +13,7 @@ The project intentionally targets BlueMap 5.7. Do not assume compatibility with 
 
 ## What this repository builds
 
-The build produces three installable artifacts:
+The build produces four installable artifacts:
 
 1. **Patched BlueMap3D bundle**
    - persistent Sable/Create moving objects
@@ -35,9 +35,16 @@ The build produces three installable artifacts:
    - supports road patterns/slopes, barriers, cones, bollards, barrels, guardrails, reflectors, paint buckets and colorable sign/light bases
    - uses TrafficCraft's exact paint palette and per-block default colors
    - renders TrafficCraft traffic-sign artwork from `SignTexture`
+   - explicitly imports TrafficCraft's BER-only built-in sign PNGs into BlueMap's texture gallery
    - loads custom sign PNG data from `world/data/trafficcraft_signs/*.nbt`
    - supports built-in sign textures and custom `misc` sign reverse-side backing
    - the patched BlueMap3D bundle applies the same sign artwork to moving contraptions/ships
+
+4. **BlueMap Foliage Compat addon**
+   - installed in `config/bluemap/packs/`
+   - restores fixed client-side foliage colors that BlueMap 5.7 otherwise replaces with generic biome foliage tint
+   - covers Quark blossom leaves/carpets/hedges, including Sunny Trumpet
+   - covers Dynamic Trees cherry/azalea, plus the fixed birch and spruce foliage colors
 
 The BlueMap addon compiles directly against BlueMap **5.7**.
 
@@ -68,6 +75,9 @@ addon-copycats/
 addon-trafficcraft/
   src/...                    TrafficCraft paint + dynamic sign compatibility
 
+addon-foliage/
+  src/...                    Quark / Dynamic Trees foliage-color compatibility
+
 build.sh                     Reproducible assembly/build script
 .github/workflows/build.yml  CI build
 ```
@@ -77,6 +87,7 @@ build.sh                     Reproducible assembly/build script
 - Put the generated `bluemap3d-bundle-*.jar` in the server's normal mods directory.
 - Put `bluemap-copycats-compat-*.jar` in `config/bluemap/packs/`.
 - Put `bluemap-trafficcraft-compat-*.jar` in `config/bluemap/packs/`.
+- Put `bluemap-foliage-compat-*.jar` in `config/bluemap/packs/`.
 - Restart BlueMap/the server and force-update affected static map regions when changing static terrain compatibility.
 
 ## Notes
