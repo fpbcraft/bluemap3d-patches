@@ -13,7 +13,7 @@ The project intentionally targets BlueMap 5.7. Do not assume compatibility with 
 
 ## What this repository builds
 
-The build produces two separate artifacts:
+The build produces three installable artifacts:
 
 1. **Patched BlueMap3D bundle**
    - persistent Sable/Create moving objects
@@ -34,7 +34,10 @@ The build produces two separate artifacts:
    - restores TrafficCraft's client-side painted-block tinting from block-entity NBT
    - supports road patterns/slopes, barriers, cones, bollards, barrels, guardrails, reflectors, paint buckets and colorable sign/light bases
    - uses TrafficCraft's exact paint palette and per-block default colors
-   - traffic-sign artwork stored as dynamic `SignTexture` data is a separate renderer problem and is not yet included
+   - renders TrafficCraft traffic-sign artwork from `SignTexture`
+   - loads custom sign PNG data from `world/data/trafficcraft_signs/*.nbt`
+   - supports built-in sign textures and custom `misc` sign reverse-side backing
+   - the patched BlueMap3D bundle applies the same sign artwork to moving contraptions/ships
 
 The BlueMap addon compiles directly against BlueMap **5.7**.
 
@@ -61,6 +64,9 @@ overrides/
 
 addon-copycats/
   src/...                    Native BlueMap 5.7 static-terrain addon
+
+addon-trafficcraft/
+  src/...                    TrafficCraft paint + dynamic sign compatibility
 
 build.sh                     Reproducible assembly/build script
 .github/workflows/build.yml  CI build
