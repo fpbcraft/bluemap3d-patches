@@ -16,6 +16,7 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringReader;
 import java.lang.reflect.Field;
@@ -199,7 +200,10 @@ final class TrafficCraftSignSupport {
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().endsWith(".png"))
                     .toList()) {
-                BufferedImage image = ImageIO.read(file.toFile());
+                BufferedImage image;
+                try (InputStream in = Files.newInputStream(file)) {
+                    image = ImageIO.read(in);
+                }
                 if (image == null) continue;
 
                 String relative = directory.relativize(file)
