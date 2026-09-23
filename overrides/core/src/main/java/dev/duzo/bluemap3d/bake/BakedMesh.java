@@ -52,6 +52,8 @@ public record BakedMesh(
     public static final int KIND_RATE = 3;
     /** {@link Node#kind()}: translates along {@code axis} at {@code rate}, wrapping every {@code period}. */
     public static final int KIND_LOOP = 4;
+    /** {@link Node#kind()}: scrolls UVs along {@code axis.xy} at {@code rate} cycles/second. */
+    public static final int KIND_UV_SCROLL = 5;
 
     /**
      * A part of the mesh that the browser animates, rather than one baked in place.
