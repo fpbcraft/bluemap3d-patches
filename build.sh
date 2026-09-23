@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.0.24"
+VERSION="1.0.25"
 
 rm -rf "$WORK" "$DIST"
 mkdir -p "$WORK" "$DIST"
@@ -59,27 +59,107 @@ s = s.replace(
 )
 p.write_text(s)
 
+# Create contraptions can exist inside Sable's hidden plot space (Aeronautics propellers).
+# Compile against Sable so the Create provider can project those child contraptions through
+# their owning ship's pose before publishing them to BlueMap3D.
+p = Path("addon-create/build.gradle")
+s = p.read_text()
+needle = '    compileOnly "net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1"\n'
+if needle not in s:
+    raise SystemExit("addon-create Sable dependency insertion point not found")
+s = s.replace(
+    needle,
+    needle
+        + '\n    compileOnly("dev.ryanhcode.sable:sable-neoforge-${minecraft_version}:${sable_version}") { transitive = false }\n'
+        + '    compileOnly "dev.ryanhcode.sable-companion:sable-companion-common-${minecraft_version}:${sable_companion_version}"\n',
+    1,
+)
+p.write_text(s)
+
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
     "GEOMETRY_REVISION + 15",
-    "GEOMETRY_REVISION + 29",
+    "GEOMETRY_REVISION + 30",
 )
 replace(
     "addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java",
     "mix(mix(hash, sections), 15L)",
-    "mix(mix(hash, sections), 29L)",
+    "mix(mix(hash, sections), 30L)",
 )
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
     'if (!"copycats".equals(namespace)) {',
     'if (!"copycats".equals(namespace) && !"create_connected".equals(namespace)) {',
 )
+
+p = Path("addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java")
+s = p.read_text()
+
+import_needle = 'import dev.duzo.bluemap3d.api.SceneObjectProvider;'
+if import_needle not in s:
+    raise SystemExit("ContraptionProvider Sable import insertion point not found")
+s = s.replace(
+    import_needle,
+    import_needle
+        + '\nimport dev.ryanhcode.sable.Sable;'
+        + '\nimport dev.ryanhcode.sable.sublevel.SubLevel;',
+    1,
+)
+
+trace_needle = '    private final Set<String> unrotatable = ConcurrentHashMap.newKeySet();'
+if trace_needle not in s:
+    raise SystemExit("ContraptionProvider Sable trace insertion point not found")
+s = s.replace(
+    trace_needle,
+    trace_needle
+        + '\n\n    /** Contraption classes already reported as projected out of a Sable ship. */'
+        + '\n    private final Set<String> sableProjected = ConcurrentHashMap.newKeySet();',
+    1,
+)
+
+pose_needle = '''        Vec3 position = entity.getAnchorVec().add(PIVOT);
+        Quaternionf rotation = rotationOf(entity);'''
+if pose_needle not in s:
+    raise SystemExit("ContraptionProvider pose insertion point not found")
+pose_replacement = '''        Vec3 position = entity.getAnchorVec().add(PIVOT);
+        Quaternionf rotation = rotationOf(entity);
+
+        // Aeronautics propeller bearings are ordinary Create contraption entities, but
+        // when mounted on a Sable ship their entity coordinates live in Sable's hidden
+        // plot. The ship itself is published separately in world space, so publishing
+        // this raw Create transform strands the entire rotor in the hidden plot.
+        //
+        // Compose child -> plot (Create) with plot -> world (Sable):
+        //   worldPos = shipPose.transformPosition(createAnchor)
+        //   worldRot = shipOrientation * createRotation
+        SubLevel containingSubLevel = Sable.HELPER.getContaining(entity);
+        if (containingSubLevel != null) {
+            var pose = containingSubLevel.logicalPose();
+            Vec3 localPosition = position;
+            position = pose.transformPosition(localPosition);
+
+            var parentRotation = pose.orientation();
+            rotation = new Quaternionf(
+                    (float) parentRotation.x(), (float) parentRotation.y(),
+                    (float) parentRotation.z(), (float) parentRotation.w())
+                    .mul(rotation);
+
+            String traceKey = entity.getClass().getName();
+            if (sableProjected.add(traceKey)) {
+                LOGGER.info(
+                        "SABLE-CONTRAPTION-DIAG type={} entity={} sublevel={} localPos={} worldPos={}",
+                        traceKey, entity.getUUID(), containingSubLevel.getUniqueId(),
+                        localPosition, position);
+            }
+        }'''
+s = s.replace(pose_needle, pose_replacement, 1)
+p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-29-foliage-sails-signs";',
+    'var BUILD = "core-history-30-sable-contraptions";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.0.24")
+replace("gradle.properties", "version=1.0.9", "version=1.0.25")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
@@ -115,7 +195,7 @@ if needle not in s:
     raise SystemExit("BlueMap3D startup marker insertion point not found")
 s = s.replace(
     needle,
-    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.24 active; BlueMap target is 5.7.");',
+    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.25 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
@@ -246,9 +326,9 @@ for p in sorted(dist.iterdir()):
         }
 (dist / "MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
-with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.24.zip", "w", zipfile.ZIP_DEFLATED) as z:
+with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.25.zip", "w", zipfile.ZIP_DEFLATED) as z:
     for p in sorted(dist.rglob("*")):
-        if p.is_file() and p.name != "bluemap3d-patches-1.0.24.zip":
+        if p.is_file() and p.name != "bluemap3d-patches-1.0.25.zip":
             z.write(p, p.relative_to(dist))
 PY
 
