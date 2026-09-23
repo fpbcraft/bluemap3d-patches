@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.0.25"
+VERSION="1.0.26"
 
 rm -rf "$WORK" "$DIST"
 mkdir -p "$WORK" "$DIST"
@@ -31,6 +31,18 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/TrafficCraftSignS
    core/src/main/java/dev/duzo/bluemap3d/bake/TrafficCraftSignSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/SymmetricSailSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/SymmetricSailSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ChainConveyorSource.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/ChainConveyorSource.java
+mkdir -p core/src/main/java/dev/duzo/bluemap3d/api
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/ModelAttachment.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/ModelAttachment.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/BakedMesh.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/BakedMesh.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/Bm3dWriter.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/Bm3dWriter.java
+mkdir -p addon-create/src/main/java/dev/duzo/bluemap3d/create
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/ChainConveyorProvider.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/ChainConveyorProvider.java
 
 # Native BlueMap 5.7 static-terrain addons. Keep these separate from bundleJar.
 cp -R "$ROOT/addon-copycats" ./addon-copycats
@@ -79,12 +91,12 @@ p.write_text(s)
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
     "GEOMETRY_REVISION + 15",
-    "GEOMETRY_REVISION + 30",
+    "GEOMETRY_REVISION + 31",
 )
 replace(
     "addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java",
     "mix(mix(hash, sections), 15L)",
-    "mix(mix(hash, sections), 30L)",
+    "mix(mix(hash, sections), 31L)",
 )
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
@@ -157,9 +169,9 @@ p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-30-sable-contraptions";',
+    'var BUILD = "core-history-31-chain-conveyors";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.0.25")
+replace("gradle.properties", "version=1.0.9", "version=1.0.26")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
@@ -195,7 +207,7 @@ if needle not in s:
     raise SystemExit("BlueMap3D startup marker insertion point not found")
 s = s.replace(
     needle,
-    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.25 active; BlueMap target is 5.7.");',
+    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.26 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
@@ -326,9 +338,9 @@ for p in sorted(dist.iterdir()):
         }
 (dist / "MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
-with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.25.zip", "w", zipfile.ZIP_DEFLATED) as z:
+with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.26.zip", "w", zipfile.ZIP_DEFLATED) as z:
     for p in sorted(dist.rglob("*")):
-        if p.is_file() and p.name != "bluemap3d-patches-1.0.25.zip":
+        if p.is_file() and p.name != "bluemap3d-patches-1.0.26.zip":
             z.write(p, p.relative_to(dist))
 PY
 
