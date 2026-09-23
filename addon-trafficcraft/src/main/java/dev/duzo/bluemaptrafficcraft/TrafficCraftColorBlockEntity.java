@@ -14,10 +14,17 @@ public final class TrafficCraftColorBlockEntity extends MCABlockEntity {
     @NBTName("color")
     private int color = -1;
 
+    @NBTName("SignTexture")
+    private String signTexture;
+
     public TrafficCraftColorBlockEntity() {
     }
 
     public int color() {
         return color;
+    }
+
+    public String signTexture() {
+        return signTexture;
     }
 }
