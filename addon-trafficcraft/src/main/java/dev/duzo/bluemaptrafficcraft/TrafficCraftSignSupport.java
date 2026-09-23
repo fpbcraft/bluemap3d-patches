@@ -99,7 +99,13 @@ final class TrafficCraftSignSupport {
     }
 
     static ResourcePath<Texture> backTexture(String signTexture) {
-        if (signTexture == null || BuiltIn.decode(signTexture) != null) return null;
+        if (signTexture == null) return null;
+        BuiltIn builtIn = BuiltIn.decode(signTexture);
+        if (builtIn != null) {
+            return builtIn.shape() == 11
+                    ? new ResourcePath<>("bluemap_trafficcraft", "sign_builtin_bg/" + builtIn.id())
+                    : null;
+        }
         return new ResourcePath<>("bluemap_trafficcraft", "sign/" + signTexture + "_bg");
     }
 
@@ -127,6 +133,8 @@ final class TrafficCraftSignSupport {
                 }
             }
 
+            registerBuiltInMiscBackgrounds(map, resourcePack);
+
             try (OutputStream out = map.getStorage().textures().write()) {
                 map.getTextureGallery().writeTexturesFile(out);
             } catch (IOException error) {
@@ -139,6 +147,29 @@ final class TrafficCraftSignSupport {
         }
 
         return loaded[0];
+    }
+
+    private static void registerBuiltInMiscBackgrounds(BmMap map, ResourcePack resourcePack) {
+        BufferedImage blank = readTexture(
+                resourcePack.getTexture(new ResourcePath<>("trafficcraft", "block/sign/blank")));
+        if (blank == null) return;
+
+        String prefix = "trafficcraft:block/sign/misc/misc";
+        for (ResourcePath<Texture> sourcePath : resourcePack.getTextures().keySet()) {
+            String formatted = sourcePath.getFormatted();
+            if (!formatted.startsWith(prefix)) continue;
+
+            String id = formatted.substring(prefix.length());
+            if (id.isBlank() || !id.chars().allMatch(Character::isDigit)) continue;
+
+            BufferedImage front = readTexture(resourcePack.getTexture(sourcePath));
+            if (front == null) continue;
+
+            register(
+                    map,
+                    new ResourcePath<>("bluemap_trafficcraft", "sign_builtin_bg/" + id),
+                    miscBackground(front, blank));
+        }
     }
 
     private static void register(BmMap map, ResourcePath<Texture> path, BufferedImage image) {
