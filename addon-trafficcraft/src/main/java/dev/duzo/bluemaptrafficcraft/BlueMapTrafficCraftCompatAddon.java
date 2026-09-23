@@ -16,20 +16,25 @@ public final class BlueMapTrafficCraftCompatAddon implements Runnable {
             new Key("trafficcraft", "colored_block_entity"),
             new Key("trafficcraft", "traffic_light_block_entity"),
             new Key("trafficcraft", "street_sign_block_entity"),
-            new Key("trafficcraft", "house_number_sign_block_entity")
+            new Key("trafficcraft", "house_number_sign_block_entity"),
+            new Key("trafficcraft", "traffic_sign_block_entity")
     );
 
     @Override
     public void run() {
         registerColorBlockEntities();
+        TrafficCraftSignRenderer.register();
 
         // BlueMap has loaded its resource/color configuration by the enable callback.
         // Install the TrafficCraft callbacks after that load so they win over the
         // generic/default foliage tint without replacing any original block models.
-        BlueMapAPI.onEnable(TrafficCraftColorHook::install);
+        BlueMapAPI.onEnable(api -> {
+            TrafficCraftColorHook.install(api);
+            TrafficCraftSignSupport.install(api);
+        });
 
         Logger.global.logInfo(
-                "BlueMap TrafficCraft Compat loaded: NBT paint colors for BlueMap 5.7");
+                "BlueMap TrafficCraft Compat loaded: NBT paint colors + traffic-sign artwork for BlueMap 5.7");
     }
 
     private static void registerColorBlockEntities() {
