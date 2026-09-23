@@ -2,7 +2,7 @@ plugins {
     id 'bluemap3d-common'
 }
 
-version = '1.0.26'
+version = '1.0.28'
 
 ext {
     mod_id = 'bluemap_foliage_compat'
