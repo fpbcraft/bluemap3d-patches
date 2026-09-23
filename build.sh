@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.0.22"
+VERSION="1.0.23"
 
 rm -rf "$WORK" "$DIST"
 mkdir -p "$WORK" "$DIST"
@@ -27,6 +27,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ProceduralBlockSo
    core/src/main/java/dev/duzo/bluemap3d/bake/ProceduralBlockSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/TrafficCraftTintSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/TrafficCraftTintSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/TrafficCraftSignSource.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/TrafficCraftSignSource.java
 
 # Native BlueMap 5.7 static-terrain addons. Keep these separate from bundleJar.
 cp -R "$ROOT/addon-copycats" ./addon-copycats
@@ -57,12 +59,12 @@ p.write_text(s)
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
     "GEOMETRY_REVISION + 15",
-    "GEOMETRY_REVISION + 27",
+    "GEOMETRY_REVISION + 28",
 )
 replace(
     "addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java",
     "mix(mix(hash, sections), 15L)",
-    "mix(mix(hash, sections), 27L)",
+    "mix(mix(hash, sections), 28L)",
 )
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
@@ -72,9 +74,9 @@ replace(
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-27-trafficcraft";',
+    'var BUILD = "core-history-28-trafficcraft-signs";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.0.22")
+replace("gradle.properties", "version=1.0.9", "version=1.0.23")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
@@ -86,7 +88,8 @@ s = s.replace(
     import_needle,
     import_needle
         + '\nimport dev.duzo.bluemap3d.bake.ProceduralBlockSource;'
-        + '\nimport dev.duzo.bluemap3d.bake.TrafficCraftTintSource;',
+        + '\nimport dev.duzo.bluemap3d.bake.TrafficCraftTintSource;'
+        + '\nimport dev.duzo.bluemap3d.bake.TrafficCraftSignSource;',
     1,
 )
 
@@ -97,6 +100,7 @@ s = s.replace(
     source_needle,
     source_needle
         + '\n                sources.add(new ProceduralBlockSource(packs));'
+        + '\n                sources.add(new TrafficCraftSignSource(packs));'
         + '\n                sources.add(new TrafficCraftTintSource(packs));',
     1,
 )
@@ -106,7 +110,7 @@ if needle not in s:
     raise SystemExit("BlueMap3D startup marker insertion point not found")
 s = s.replace(
     needle,
-    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.22 active; BlueMap target is 5.7.");',
+    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.23 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
@@ -227,9 +231,9 @@ for p in sorted(dist.iterdir()):
         }
 (dist / "MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
-with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.22.zip", "w", zipfile.ZIP_DEFLATED) as z:
+with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.23.zip", "w", zipfile.ZIP_DEFLATED) as z:
     for p in sorted(dist.rglob("*")):
-        if p.is_file() and p.name != "bluemap3d-patches-1.0.22.zip":
+        if p.is_file() and p.name != "bluemap3d-patches-1.0.23.zip":
             z.write(p, p.relative_to(dist))
 PY
 
