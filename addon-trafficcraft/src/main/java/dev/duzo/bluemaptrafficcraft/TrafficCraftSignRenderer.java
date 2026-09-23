@@ -68,10 +68,26 @@ public final class TrafficCraftSignRenderer implements BlockRenderer {
                 variant -> delegate.render(block, variant, tileModel.initialize(), blockColor));
 
         if (!(block.getBlockEntity() instanceof TrafficCraftColorBlockEntity entity)) {
+            String entityClass = block.getBlockEntity() == null
+                    ? "<null>"
+                    : block.getBlockEntity().getClass().getName();
+            if (TRACED.add("entity#" + entityClass)) {
+                Logger.global.logWarning(String.format(
+                        "TRAFFICCRAFT-SIGN renderer has no decoded TrafficCraft block entity; class=%s",
+                        entityClass));
+            }
             return;
         }
 
         String signTexture = entity.signTexture();
+        if (signTexture == null || signTexture.isBlank()) {
+            if (TRACED.add("empty-nbt#" + id)) {
+                Logger.global.logWarning(String.format(
+                        "TRAFFICCRAFT-SIGN block entity decoded but SignTexture is empty; block=%s",
+                        id));
+            }
+            return;
+        }
         String shape = block.getBlockState().getProperties().getOrDefault("shape", "square");
         String facing = block.getBlockState().getProperties().getOrDefault("facing", "north");
 
