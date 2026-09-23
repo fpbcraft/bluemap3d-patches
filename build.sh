@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.0.19"
+VERSION="1.0.20"
 
 rm -rf "$WORK" "$DIST"
 mkdir -p "$WORK" "$DIST"
@@ -23,6 +23,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSou
    core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ProceduralBlockSource.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/ProceduralBlockSource.java
 
 # Native BlueMap 5.7 static-terrain addon. Keep this separate from bundleJar.
 cp -R "$ROOT/addon-copycats" ./addon-copycats
@@ -48,12 +50,12 @@ p.write_text(s)
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
     "GEOMETRY_REVISION + 15",
-    "GEOMETRY_REVISION + 25",
+    "GEOMETRY_REVISION + 26",
 )
 replace(
     "addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java",
     "mix(mix(hash, sections), 15L)",
-    "mix(mix(hash, sections), 25L)",
+    "mix(mix(hash, sections), 26L)",
 )
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
@@ -63,18 +65,37 @@ replace(
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-25-connected-blocks";',
+    'var BUILD = "core-history-26-aero-models";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.0.19")
+replace("gradle.properties", "version=1.0.9", "version=1.0.20")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
+
+import_needle = 'import dev.duzo.bluemap3d.bake.BitsNBobsStrutSource;'
+if import_needle not in s:
+    raise SystemExit("BlueMap3DMod procedural import insertion point not found")
+s = s.replace(
+    import_needle,
+    import_needle + '\nimport dev.duzo.bluemap3d.bake.ProceduralBlockSource;',
+    1,
+)
+
+source_needle = '                sources.add(new BitsNBobsStrutSource(packs));'
+if source_needle not in s:
+    raise SystemExit("BlueMap3DMod procedural source insertion point not found")
+s = s.replace(
+    source_needle,
+    source_needle + '\n                sources.add(new ProceduralBlockSource(packs));',
+    1,
+)
+
 needle = 'LOGGER.info("BlueMap3D loaded. Waiting for BlueMap and at least one addon.");'
 if needle not in s:
     raise SystemExit("BlueMap3D startup marker insertion point not found")
 s = s.replace(
     needle,
-    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.19 active; BlueMap target is 5.7.");',
+    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.20 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
@@ -185,9 +206,9 @@ for p in sorted(dist.iterdir()):
         }
 (dist / "MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
-with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.19.zip", "w", zipfile.ZIP_DEFLATED) as z:
+with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.20.zip", "w", zipfile.ZIP_DEFLATED) as z:
     for p in sorted(dist.rglob("*")):
-        if p.is_file() and p.name != "bluemap3d-patches-1.0.19.zip":
+        if p.is_file() and p.name != "bluemap3d-patches-1.0.20.zip":
             z.write(p, p.relative_to(dist))
 PY
 
