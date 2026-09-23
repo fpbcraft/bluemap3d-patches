@@ -229,7 +229,7 @@ for p in sorted(dist.iterdir()):
 
 with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.22.zip", "w", zipfile.ZIP_DEFLATED) as z:
     for p in sorted(dist.rglob("*")):
-        if p.is_file() and p.name != "bluemap3d-patches-1.0.20.zip":
+        if p.is_file() and p.name != "bluemap3d-patches-1.0.22.zip":
             z.write(p, p.relative_to(dist))
 PY
 
