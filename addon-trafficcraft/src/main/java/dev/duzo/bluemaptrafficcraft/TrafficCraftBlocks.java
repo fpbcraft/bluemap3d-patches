@@ -29,7 +29,8 @@ final class TrafficCraftBlocks {
                 "traffic_bollard",
                 "traffic_barrel",
                 "road_barrier_fence",
-                "reflector")) {
+                "reflector",
+                "traffic_sign")) {
             ids.add("trafficcraft:" + path);
         }
 
