@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets;
  * <pre>
  *   offset  type          field
  *   0       char[4]       magic "BM3D"
- *   4       u32           format version (6)
+ *   4       u32           format version (7)
  *   8       u32           vertex count
  *   12      u32           index count
  *   16      u32           atlas url length in bytes
@@ -53,6 +53,10 @@ import java.nio.charset.StandardCharsets;
  *                                   present regardless for the same reason as period
  * </pre>
  *
+ * <p>v7 adds {@code KIND_UV_SCROLL} without changing the node layout: axis.x/y are
+ * the UV-space scroll direction, period stores the initial phase in cycles and rate is
+ * signed cycles per second. The browser clones the UV buffer only for this node kind.
+ *
  * <p>v6 adds {@code KIND_LOOP} without changing the node layout: its axis is the
  * translation direction, period is the wrap distance and rate is blocks per second.
  * Older files remain readable.
@@ -81,7 +85,7 @@ import java.nio.charset.StandardCharsets;
 public final class Bm3dWriter {
 
     /** Current format version. Bumped only on an incompatible layout change. */
-    public static final int VERSION = 6;
+    public static final int VERSION = 7;
 
     private static final byte[] MAGIC = {'B', 'M', '3', 'D'};
 
