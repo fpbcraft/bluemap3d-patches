@@ -189,7 +189,7 @@ public final class ChainConveyorProvider implements SceneObjectProvider {
             ResourceLocation dimId,
             BlockPos sourcePos,
             ConveyorSnapshot snapshot) {
-        List<ModelAttachment> attachments = new ArrayList<>(snapshot.connections.size());
+        List<ModelAttachment> attachments = new ArrayList<>(snapshot.connections.size() * 2);
 
         int minX = 0, minY = 0, minZ = 0;
         int maxX = 0, maxY = 0, maxZ = 0;
@@ -216,15 +216,6 @@ public final class ChainConveyorProvider implements SceneObjectProvider {
                     new Vector3f(0f, 1f, 0f),
                     axis);
 
-            Matrix4f transform = new Matrix4f()
-                    .translation(
-                            (float) modelStart.x,
-                            (float) modelStart.y,
-                            (float) modelStart.z)
-                    .rotate(rotation)
-                    // The vanilla chain model's vertical centre line is x=z=0.5.
-                    .translate(-0.5f, 0f, -0.5f);
-
             ModelAttachment.Motion motion = blocksPerSecond > 0
                     ? new ModelAttachment.Loop(
                             new Vector3f(0f, 1f, 0f),
@@ -235,12 +226,33 @@ public final class ChainConveyorProvider implements SceneObjectProvider {
             ResourceLocation model = ResourceLocation.fromNamespaceAndPath(
                     CHAIN_MODEL_PREFIX.getNamespace(),
                     "chain_conveyor/" + segments);
-            attachments.add(new ModelAttachment(
-                    BlockPos.ZERO,
-                    model,
-                    Map.of(),
-                    transform,
-                    motion));
+
+            // BlueMapCreateEntityAddon renders the connection from both endpoint block
+            // entities. Its "left" offset therefore becomes two visible parallel chain
+            // runs: one from each end, mirrored horizontally. We intentionally de-duplicate
+            // the endpoints above, so reproduce both runs explicitly here instead of only
+            // animating one side over the static fallback.
+            Vec3 side = parallelOffset(diff);
+            for (int sign : new int[] {-1, 1}) {
+                Vec3 offset = new Vec3(side.x * sign, -0.125, side.z * sign);
+                Vec3 sideStart = modelStart.add(offset);
+
+                Matrix4f transform = new Matrix4f()
+                        .translation(
+                                (float) sideStart.x,
+                                (float) sideStart.y,
+                                (float) sideStart.z)
+                        .rotate(rotation)
+                        // The vanilla chain model's vertical centre line is x=z=0.5.
+                        .translate(-0.5f, 0f, -0.5f);
+
+                attachments.add(new ModelAttachment(
+                        BlockPos.ZERO,
+                        model,
+                        Map.of(),
+                        transform,
+                        motion));
+            }
 
             minX = Math.min(minX, (int) Math.floor(Math.min(connection.start.x, connection.end.x) - 2));
             minY = Math.min(minY, (int) Math.floor(Math.min(connection.start.y, connection.end.y) - 2));
@@ -320,6 +332,19 @@ public final class ChainConveyorProvider implements SceneObjectProvider {
     private static long mix(long hash, long value) {
         hash ^= value;
         return hash * 0x100000001b3L;
+    }
+
+    private static Vec3 parallelOffset(Vec3 direction) {
+        double horizontal = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
+        if (horizontal < 1.0e-9) {
+            return Vec3.ZERO;
+        }
+
+        // Match BlueMapCreateEntityAddon's computeLeftOffset(): 0.7 blocks sideways.
+        return new Vec3(
+                -direction.z / horizontal * 0.7,
+                0,
+                direction.x / horizontal * 0.7);
     }
 
     private static int compare(BlockPos a, BlockPos b) {
