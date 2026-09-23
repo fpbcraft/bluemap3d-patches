@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.0.20"
+VERSION="1.0.22"
 
 rm -rf "$WORK" "$DIST"
 mkdir -p "$WORK" "$DIST"
@@ -25,9 +25,12 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSourc
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ProceduralBlockSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ProceduralBlockSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/TrafficCraftTintSource.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/TrafficCraftTintSource.java
 
-# Native BlueMap 5.7 static-terrain addon. Keep this separate from bundleJar.
+# Native BlueMap 5.7 static-terrain addons. Keep these separate from bundleJar.
 cp -R "$ROOT/addon-copycats" ./addon-copycats
+cp -R "$ROOT/addon-trafficcraft" ./addon-trafficcraft
 
 python3 - <<'PY'
 from pathlib import Path
@@ -44,18 +47,22 @@ s = p.read_text()
 needle = 'include("addon-create")'
 if needle not in s:
     raise SystemExit("settings.gradle addon insertion point not found")
-s = s.replace(needle, needle + '\ninclude("addon-copycats")', 1)
+s = s.replace(
+    needle,
+    needle + '\ninclude("addon-copycats")\ninclude("addon-trafficcraft")',
+    1,
+)
 p.write_text(s)
 
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
     "GEOMETRY_REVISION + 15",
-    "GEOMETRY_REVISION + 26",
+    "GEOMETRY_REVISION + 27",
 )
 replace(
     "addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java",
     "mix(mix(hash, sections), 15L)",
-    "mix(mix(hash, sections), 26L)",
+    "mix(mix(hash, sections), 27L)",
 )
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
@@ -65,9 +72,9 @@ replace(
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-26-aero-models";',
+    'var BUILD = "core-history-27-trafficcraft";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.0.20")
+replace("gradle.properties", "version=1.0.9", "version=1.0.22")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
@@ -77,7 +84,9 @@ if import_needle not in s:
     raise SystemExit("BlueMap3DMod procedural import insertion point not found")
 s = s.replace(
     import_needle,
-    import_needle + '\nimport dev.duzo.bluemap3d.bake.ProceduralBlockSource;',
+    import_needle
+        + '\nimport dev.duzo.bluemap3d.bake.ProceduralBlockSource;'
+        + '\nimport dev.duzo.bluemap3d.bake.TrafficCraftTintSource;',
     1,
 )
 
@@ -86,7 +95,9 @@ if source_needle not in s:
     raise SystemExit("BlueMap3DMod procedural source insertion point not found")
 s = s.replace(
     source_needle,
-    source_needle + '\n                sources.add(new ProceduralBlockSource(packs));',
+    source_needle
+        + '\n                sources.add(new ProceduralBlockSource(packs));'
+        + '\n                sources.add(new TrafficCraftTintSource(packs));',
     1,
 )
 
@@ -95,7 +106,7 @@ if needle not in s:
     raise SystemExit("BlueMap3D startup marker insertion point not found")
 s = s.replace(
     needle,
-    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.20 active; BlueMap target is 5.7.");',
+    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.22 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
@@ -174,7 +185,7 @@ write_dispatch(
 )
 PY
 
-./gradlew clean bundleJar :addon-copycats:build
+./gradlew clean bundleJar :addon-copycats:build :addon-trafficcraft:build
 
 cp build/libs/bluemap3d-bundle-*.jar "$DIST/"
 
@@ -186,8 +197,18 @@ if [[ -z "$ADDON_JAR" ]]; then
 fi
 cp "$ADDON_JAR" "$DIST/bluemap-copycats-compat-$VERSION.jar"
 
+TRAFFICCRAFT_ADDON_JAR="$(find addon-trafficcraft/build/libs -maxdepth 1 -type f -name '*.jar' \
+  ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -n 1)"
+if [[ -z "$TRAFFICCRAFT_ADDON_JAR" ]]; then
+  echo "addon-trafficcraft main jar not found" >&2
+  exit 1
+fi
+cp "$TRAFFICCRAFT_ADDON_JAR" "$DIST/bluemap-trafficcraft-compat-$VERSION.jar"
+
 mkdir -p "$DIST/source-addon-copycats"
 cp -R addon-copycats/* "$DIST/source-addon-copycats/"
+mkdir -p "$DIST/source-addon-trafficcraft"
+cp -R addon-trafficcraft/* "$DIST/source-addon-trafficcraft/"
 printf '%s\n' "$UPSTREAM_COMMIT" > "$DIST/UPSTREAM.txt"
 printf '%s\n' "BlueMap 5.7" > "$DIST/BLUEMAP_TARGET.txt"
 
@@ -206,7 +227,7 @@ for p in sorted(dist.iterdir()):
         }
 (dist / "MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
-with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.20.zip", "w", zipfile.ZIP_DEFLATED) as z:
+with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.22.zip", "w", zipfile.ZIP_DEFLATED) as z:
     for p in sorted(dist.rglob("*")):
         if p.is_file() and p.name != "bluemap3d-patches-1.0.20.zip":
             z.write(p, p.relative_to(dist))
