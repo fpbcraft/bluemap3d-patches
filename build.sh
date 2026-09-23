@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.0.26"
+VERSION="1.0.28"
 
 rm -rf "$WORK" "$DIST"
 mkdir -p "$WORK" "$DIST"
@@ -43,6 +43,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/Bm3dWriter.java" 
 mkdir -p addon-create/src/main/java/dev/duzo/bluemap3d/create
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/ChainConveyorProvider.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/ChainConveyorProvider.java
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/BeltProvider.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/BeltProvider.java
 
 # Native BlueMap 5.7 static-terrain addons. Keep these separate from bundleJar.
 cp -R "$ROOT/addon-copycats" ./addon-copycats
@@ -91,12 +93,12 @@ p.write_text(s)
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
     "GEOMETRY_REVISION + 15",
-    "GEOMETRY_REVISION + 31",
+    "GEOMETRY_REVISION + 32",
 )
 replace(
     "addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java",
     "mix(mix(hash, sections), 15L)",
-    "mix(mix(hash, sections), 31L)",
+    "mix(mix(hash, sections), 32L)",
 )
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
@@ -175,7 +177,9 @@ if field_needle not in s:
     raise SystemExit("CreateAddon chain provider field insertion point not found")
 s = s.replace(
     field_needle,
-    field_needle + '\n    private final ChainConveyorProvider chainConveyors = new ChainConveyorProvider(chunks);',
+    field_needle
+        + '\n    private final ChainConveyorProvider chainConveyors = new ChainConveyorProvider(chunks);'
+        + '\n    private final BeltProvider belts = new BeltProvider(chunks);',
     1,
 )
 register_needle = '        BlueMap3D.register(bearings);'
@@ -183,7 +187,9 @@ if register_needle not in s:
     raise SystemExit("CreateAddon chain provider registration point not found")
 s = s.replace(
     register_needle,
-    register_needle + '\n        BlueMap3D.register(chainConveyors);',
+    register_needle
+        + '\n        BlueMap3D.register(chainConveyors);'
+        + '\n        BlueMap3D.register(belts);',
     1,
 )
 clear_needle = '        bearings.clear();'
@@ -191,7 +197,9 @@ if clear_needle not in s:
     raise SystemExit("CreateAddon chain provider clear point not found")
 s = s.replace(
     clear_needle,
-    clear_needle + '\n        chainConveyors.clear();',
+    clear_needle
+        + '\n        chainConveyors.clear();'
+        + '\n        belts.clear();',
     1,
 )
 p.write_text(s)
@@ -221,6 +229,11 @@ loop_replacement = '''            case ModelAttachment.Rate rate -> new BakedMes
                     new float[]{0f, 0f, 0f},
                     axisFor(loop.axis(), matrix),
                     0f, loop.period() / 16f * s, loop.blocksPerSecond());
+            case ModelAttachment.UvScroll scroll -> new BakedMesh.Node(
+                    BakedMesh.KIND_UV_SCROLL, indexStart, indexCount,
+                    new float[]{0f, 0f, 0f},
+                    new float[]{scroll.axis().x(), scroll.axis().y(), 0f},
+                    0f, scroll.phase(), scroll.cyclesPerSecond());
 '''
 s = s.replace(loop_needle, loop_replacement, 1)
 p.write_text(s)
@@ -228,9 +241,9 @@ p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-31-chain-conveyors";',
+    'var BUILD = "core-history-32-belts-dual-chain";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.0.26")
+replace("gradle.properties", "version=1.0.9", "version=1.0.28")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
@@ -268,7 +281,7 @@ if needle not in s:
     raise SystemExit("BlueMap3D startup marker insertion point not found")
 s = s.replace(
     needle,
-    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.26 active; BlueMap target is 5.7.");',
+    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.28 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
@@ -279,11 +292,15 @@ s = p.read_text()
 kind_needle = '    var KIND_RATE = 3;'
 if kind_needle not in s:
     raise SystemExit("web loop kind insertion point not found")
-s = s.replace(kind_needle, kind_needle + '\n    var KIND_LOOP = 4;', 1)
+s = s.replace(
+    kind_needle,
+    kind_needle + '\n    var KIND_LOOP = 4;\n    var KIND_UV_SCROLL = 5;',
+    1,
+)
 
 s = s.replace(
     'if (version < 1 || version > 5) {',
-    'if (version < 1 || version > 6) {',
+    'if (version < 1 || version > 7) {',
     1,
 )
 
@@ -292,7 +309,17 @@ live_rate = '''                } else if (node.kind === KIND_RATE) {
 '''
 if live_rate not in s:
     raise SystemExit("web live loop insertion point not found")
-live_loop = '''                } else if (node.kind === KIND_LOOP) {
+live_loop = '''                } else if (node.kind === KIND_UV_SCROLL) {
+                    group.position.set(0, 0, 0);
+                    group.quaternion.set(0, 0, 0, 1);
+                    var uvMesh = group.children[0];
+                    if (uvMesh && uvMesh.geometry) {
+                        scrollNodeUvs(
+                            node,
+                            uvMesh.geometry,
+                            node.period + node.rate * performance.now() / 1000);
+                    }
+                } else if (node.kind === KIND_LOOP) {
                     var loopNow = performance.now();
                     var loopLast = entry.rateLastTime[i];
                     var loopDt = loopLast === null ? 0 : (loopNow - loopLast) / 1000;
@@ -317,7 +344,14 @@ replay_rate = '''            } else if (node.kind === KIND_RATE) {
                 var angle = node.rate * timeSeconds;
 '''
 if replay_rate in s:
-    replay_loop = '''            } else if (node.kind === KIND_LOOP) {
+    replay_loop = '''            } else if (node.kind === KIND_UV_SCROLL) {
+                group.position.set(0, 0, 0);
+                group.quaternion.set(0, 0, 0, 1);
+                var uvMesh = group.children[0];
+                if (uvMesh && uvMesh.geometry) {
+                    scrollNodeUvs(node, uvMesh.geometry, node.period + node.rate * timeSeconds);
+                }
+            } else if (node.kind === KIND_LOOP) {
                 var loopPhase = node.period > 0
                     ? (node.rate * timeSeconds) % node.period : 0;
                 group.position.set(
@@ -477,9 +511,9 @@ for p in sorted(dist.iterdir()):
         }
 (dist / "MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
-with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.26.zip", "w", zipfile.ZIP_DEFLATED) as z:
+with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.28.zip", "w", zipfile.ZIP_DEFLATED) as z:
     for p in sorted(dist.rglob("*")):
-        if p.is_file() and p.name != "bluemap3d-patches-1.0.26.zip":
+        if p.is_file() and p.name != "bluemap3d-patches-1.0.28.zip":
             z.write(p, p.relative_to(dist))
 PY
 
