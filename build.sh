@@ -304,6 +304,75 @@ s = s.replace(
     1,
 )
 
+uv_attr_needle = '''            nodeGeometry.setAttribute("position", position);
+            nodeGeometry.setAttribute("uv", geometry.attributes.uv);
+            nodeGeometry.setAttribute("color", geometry.attributes.color);
+'''
+if uv_attr_needle not in s:
+    raise SystemExit("web UV node attribute insertion point not found")
+uv_attr_replacement = '''            nodeGeometry.setAttribute("position", position);
+            if (node.kind === KIND_UV_SCROLL) {
+                var sourceUv = geometry.attributes.uv;
+                var uvCopy = new Float32Array(sourceUv.array);
+                nodeGeometry.setAttribute("uv", new THREE.BufferAttribute(uvCopy, 2));
+
+                var seenUv = Object.create(null);
+                var uvVertices = [];
+                var uvBase = [];
+                var minU = Infinity, maxU = -Infinity;
+                var minV = Infinity, maxV = -Infinity;
+                var uvEnd = node.indexStart + node.indexCount;
+                for (var uvIndex = node.indexStart; uvIndex < uvEnd; uvIndex++) {
+                    var vertexIndex = index.array[uvIndex];
+                    if (seenUv[vertexIndex] === true) {
+                        continue;
+                    }
+                    seenUv[vertexIndex] = true;
+                    var baseU = sourceUv.array[vertexIndex * 2];
+                    var baseV = sourceUv.array[vertexIndex * 2 + 1];
+                    uvVertices.push(vertexIndex);
+                    uvBase.push(baseU, baseV);
+                    minU = Math.min(minU, baseU);
+                    maxU = Math.max(maxU, baseU);
+                    minV = Math.min(minV, baseV);
+                    maxV = Math.max(maxV, baseV);
+                }
+                node.uvVertices = uvVertices;
+                node.uvBase = uvBase;
+                node.uvSpanU = isFinite(minU) ? maxU - minU : 0;
+                node.uvSpanV = isFinite(minV) ? maxV - minV : 0;
+            } else {
+                nodeGeometry.setAttribute("uv", geometry.attributes.uv);
+            }
+            nodeGeometry.setAttribute("color", geometry.attributes.color);
+'''
+s = s.replace(uv_attr_needle, uv_attr_replacement, 1)
+
+material_needle = '    var materialCache = Object.create(null);'
+if material_needle not in s:
+    raise SystemExit("web UV helper insertion point not found")
+uv_helper = '''    function scrollNodeUvs(node, geometry, phase) {
+        if (!node.uvVertices || !geometry.attributes.uv) {
+            return;
+        }
+
+        phase = phase - Math.floor(phase);
+        var du = node.axis.x * node.uvSpanU * phase;
+        var dv = node.axis.y * node.uvSpanV * phase;
+        var array = geometry.attributes.uv.array;
+
+        for (var i = 0; i < node.uvVertices.length; i++) {
+            var vertexIndex = node.uvVertices[i];
+            array[vertexIndex * 2] = node.uvBase[i * 2] + du;
+            array[vertexIndex * 2 + 1] = node.uvBase[i * 2 + 1] + dv;
+        }
+
+        geometry.attributes.uv.needsUpdate = true;
+    }
+
+'''
+s = s.replace(material_needle, uv_helper + material_needle, 1)
+
 live_rate = '''                } else if (node.kind === KIND_RATE) {
                     /* Driven by wall-clock time, not by "value" (the odometer) - a
 '''
