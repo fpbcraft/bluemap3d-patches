@@ -289,8 +289,13 @@ final class TrafficCraftSignSupport {
                     .invoke(modList, "trafficcraft");
             if (modFileInfo == null) return null;
 
-            Object modFile = modFileInfo.getClass().getMethod("getFile").invoke(modFileInfo);
-            Object filePath = modFile.getClass().getMethod("getFilePath").invoke(modFile);
+            Class<?> modFileInfoType =
+                    Class.forName("net.neoforged.neoforgespi.language.IModFileInfo");
+            Object modFile = modFileInfoType.getMethod("getFile").invoke(modFileInfo);
+
+            Class<?> modFileType =
+                    Class.forName("net.neoforged.neoforgespi.locating.IModFile");
+            Object filePath = modFileType.getMethod("getFilePath").invoke(modFile);
             return filePath instanceof Path path ? path : null;
         } catch (ReflectiveOperationException | RuntimeException error) {
             Logger.global.logWarning(String.format(
