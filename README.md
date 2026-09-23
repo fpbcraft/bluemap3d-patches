@@ -29,6 +29,13 @@ The build produces two separate artifacts:
    - Bits & Bobs girder struts
    - connected/diagonal fence and wall support while preserving each block's original material/model
 
+3. **BlueMap TrafficCraft Compat addon**
+   - installed in `config/bluemap/packs/`
+   - restores TrafficCraft's client-side painted-block tinting from block-entity NBT
+   - supports road patterns/slopes, barriers, cones, bollards, barrels, guardrails, reflectors, paint buckets and colorable sign/light bases
+   - uses TrafficCraft's exact paint palette and per-block default colors
+   - traffic-sign artwork stored as dynamic `SignTexture` data is a separate renderer problem and is not yet included
+
 The BlueMap addon compiles directly against BlueMap **5.7**.
 
 ## Build
@@ -63,6 +70,7 @@ build.sh                     Reproducible assembly/build script
 
 - Put the generated `bluemap3d-bundle-*.jar` in the server's normal mods directory.
 - Put `bluemap-copycats-compat-*.jar` in `config/bluemap/packs/`.
+- Put `bluemap-trafficcraft-compat-*.jar` in `config/bluemap/packs/`.
 - Restart BlueMap/the server and force-update affected static map regions when changing static terrain compatibility.
 
 ## Notes
