@@ -18,7 +18,8 @@ The build produces four installable artifacts:
 1. **Patched BlueMap3D bundle**
    - persistent Sable/Create moving objects
    - projects Create child contraptions inside Sable ships (including Aeronautics propeller bearings) from hidden plot space into the ship's world pose
-   - live Create chain-conveyor overlays driven by the real server kinetic speed; zero RPM is stationary and the animation rate follows Create's chain travel rate
+   - live Create chain-conveyor overlays driven by the real server kinetic speed; both parallel chain runs animate together, zero RPM is stationary, and the animation rate follows Create's chain travel rate
+   - live Create mechanical-belt surfaces driven by each belt's real signed kinetic speed; unpowered belts stay static and powered belts scroll in the same direction/rate as Create
    - Create train/bogey compatibility
    - Copycats+ and Create: Connected copied-material rendering on moving contraptions
    - Bits & Bobs girder struts on moving objects
@@ -95,4 +96,4 @@ build.sh                     Reproducible assembly/build script
 
 ## Notes
 
-The native addons use BlueMap 5.7 core APIs and a small amount of BlueMap 5.7 internal resource-pack state to preserve original models while adding compatibility behavior. The chain-conveyor overlay is additive: BlueMapCreateEntityAddon's static connection remains underneath as a fallback, while BlueMap3D reads the live Create block entity and animates only when the kinetic network is moving. A BlueMap upgrade should therefore be treated as an explicit compatibility migration, not an automatic version bump.
+The native addons use BlueMap 5.7 core APIs and a small amount of BlueMap 5.7 internal resource-pack state to preserve original models while adding compatibility behavior. The Create machinery overlays are additive: BlueMap's static chain/belt geometry remains underneath as a fallback, while BlueMap3D reads the live Create block entities and animates only when the kinetic network is moving. Chain conveyors use repeated loop geometry; belts use isolated per-node UV scrolling so the belt itself stays fixed while its texture moves. A BlueMap upgrade should therefore be treated as an explicit compatibility migration, not an automatic version bump.
