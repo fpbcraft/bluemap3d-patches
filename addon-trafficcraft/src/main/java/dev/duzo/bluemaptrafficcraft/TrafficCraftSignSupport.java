@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.StringReader;
 import java.lang.reflect.Field;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -133,7 +135,12 @@ final class TrafficCraftSignSupport {
                 }
             }
 
-            registerBuiltInMiscBackgrounds(map, resourcePack);
+            int builtIns = registerBuiltInSignTextures(map);
+            if (builtIns > 0) {
+                Logger.global.logInfo(String.format(
+                        "Registered %s TrafficCraft built-in sign texture(s) for map '%s'",
+                        builtIns, map.getId()));
+            }
 
             try (OutputStream out = map.getStorage().textures().write()) {
                 map.getTextureGallery().writeTexturesFile(out);
@@ -149,26 +156,105 @@ final class TrafficCraftSignSupport {
         return loaded[0];
     }
 
-    private static void registerBuiltInMiscBackgrounds(BmMap map, ResourcePack resourcePack) {
-        BufferedImage blank = readTexture(
-                resourcePack.getTexture(new ResourcePath<>("trafficcraft", "block/sign/blank")));
-        if (blank == null) return;
+    private static int registerBuiltInSignTextures(BmMap map) {
+        Path modPath = trafficCraftModPath();
+        if (modPath == null) {
+            Logger.global.logWarning(
+                    "Could not locate the TrafficCraft mod jar; built-in sign artwork will be unavailable");
+            return 0;
+        }
 
-        String prefix = "trafficcraft:block/sign/misc/misc";
-        for (ResourcePath<Texture> sourcePath : resourcePack.getTextures().keySet()) {
-            String formatted = sourcePath.getFormatted();
-            if (!formatted.startsWith(prefix)) continue;
+        if (Files.isDirectory(modPath)) {
+            return registerBuiltInSignTexturesFromRoot(map, modPath);
+        }
 
-            String id = formatted.substring(prefix.length());
-            if (id.isBlank() || !id.chars().allMatch(Character::isDigit)) continue;
+        try (FileSystem fileSystem = FileSystems.newFileSystem(modPath, (ClassLoader) null)) {
+            Path root = fileSystem.getRootDirectories().iterator().next();
+            return registerBuiltInSignTexturesFromRoot(map, root);
+        } catch (IOException | RuntimeException error) {
+            Logger.global.logError(
+                    "Could not open TrafficCraft mod jar for built-in sign textures: " + modPath,
+                    error);
+            return 0;
+        }
+    }
 
-            BufferedImage front = readTexture(resourcePack.getTexture(sourcePath));
-            if (front == null) continue;
+    private static int registerBuiltInSignTexturesFromRoot(BmMap map, Path root) {
+        Path directory = root
+                .resolve("assets")
+                .resolve("trafficcraft")
+                .resolve("textures")
+                .resolve("block")
+                .resolve("sign");
+        if (!Files.isDirectory(directory)) {
+            Logger.global.logWarning(
+                    "TrafficCraft sign texture directory is missing from " + root);
+            return 0;
+        }
 
-            register(
-                    map,
-                    new ResourcePath<>("bluemap_trafficcraft", "sign_builtin_bg/" + id),
-                    miscBackground(front, blank));
+        Map<String, BufferedImage> images = new HashMap<>();
+        int count = 0;
+        try (var files = Files.walk(directory)) {
+            for (Path file : files
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(".png"))
+                    .toList()) {
+                BufferedImage image = ImageIO.read(file.toFile());
+                if (image == null) continue;
+
+                String relative = directory.relativize(file)
+                        .toString()
+                        .replace('\\\\', '/');
+                relative = relative.substring(0, relative.length() - ".png".length());
+
+                ResourcePath<Texture> path =
+                        new ResourcePath<>("trafficcraft", "block/sign/" + relative);
+                register(map, path, image);
+                images.put(relative, image);
+                count++;
+            }
+        } catch (IOException error) {
+            Logger.global.logError(
+                    "Could not scan TrafficCraft built-in sign textures in " + directory,
+                    error);
+        }
+
+        BufferedImage blank = images.get("blank");
+        if (blank != null) {
+            String prefix = "misc/misc";
+            for (Map.Entry<String, BufferedImage> entry : images.entrySet()) {
+                String key = entry.getKey();
+                if (!key.startsWith(prefix)) continue;
+
+                String id = key.substring(prefix.length());
+                if (id.isBlank() || !id.chars().allMatch(Character::isDigit)) continue;
+
+                register(
+                        map,
+                        new ResourcePath<>("bluemap_trafficcraft", "sign_builtin_bg/" + id),
+                        miscBackground(entry.getValue(), blank));
+            }
+        }
+
+        return count;
+    }
+
+    private static Path trafficCraftModPath() {
+        try {
+            Class<?> modListClass = Class.forName("net.neoforged.fml.ModList");
+            Object modList = modListClass.getMethod("get").invoke(null);
+            Object modFileInfo = modListClass
+                    .getMethod("getModFileById", String.class)
+                    .invoke(modList, "trafficcraft");
+            if (modFileInfo == null) return null;
+
+            Object modFile = modFileInfo.getClass().getMethod("getFile").invoke(modFileInfo);
+            Object filePath = modFile.getClass().getMethod("getFilePath").invoke(modFile);
+            return filePath instanceof Path path ? path : null;
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            Logger.global.logWarning(String.format(
+                    "Could not resolve TrafficCraft mod path: %s", error));
+            return null;
         }
     }
 
