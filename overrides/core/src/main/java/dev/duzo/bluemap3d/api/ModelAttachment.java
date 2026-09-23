@@ -2,6 +2,7 @@ package dev.duzo.bluemap3d.api;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import org.joml.Vector2f;
 import org.joml.Vector3f;
 
 import java.util.Map;
@@ -74,7 +75,7 @@ public record ModelAttachment(BlockPos at, ResourceLocation model, Map<String, S
      * kind-specific parameters, because the kinds do not share a parameter shape: a spin
      * needs no period, an oscillation needs no pivot. Each kind states only what it uses.
      */
-    public sealed interface Motion permits Spin, Oscillate, Orbit, Rate, Loop {
+    public sealed interface Motion permits Spin, Oscillate, Orbit, Rate, Loop, UvScroll {
     }
 
     /**
@@ -259,6 +260,35 @@ public record ModelAttachment(BlockPos at, ResourceLocation model, Map<String, S
             if (!(period > 0)) {
                 throw new IllegalArgumentException("period must be positive, was " + period);
             }
+        }
+    }
+
+    /**
+     * A part whose texture scrolls while its geometry remains fixed.
+     *
+     * <p>The axis lives in UV space rather than model space: {@code (0, 1)} scrolls V,
+     * which is how Create animates mechanical belts. The browser keeps a private UV
+     * buffer for this node, so changing its phase never mutates the parent/static mesh.
+     *
+     * @param axis            UV-space scroll direction, normalized on construction
+     * @param cyclesPerSecond signed animation speed in texture cycles per second
+     * @param phase           initial phase in cycles, wrapped to [0, 1)
+     */
+    public record UvScroll(Vector2f axis, float cyclesPerSecond, float phase) implements Motion {
+        public UvScroll {
+            Objects.requireNonNull(axis, "axis");
+            if (axis.lengthSquared() < 1.0e-20f) {
+                throw new IllegalArgumentException("axis must be non-zero");
+            }
+            axis = new Vector2f(axis).normalize();
+            if (!Float.isFinite(cyclesPerSecond) || Math.abs(cyclesPerSecond) < 1.0e-20f) {
+                throw new IllegalArgumentException(
+                        "cyclesPerSecond must be finite and non-zero, was " + cyclesPerSecond);
+            }
+            if (!Float.isFinite(phase)) {
+                throw new IllegalArgumentException("phase must be finite, was " + phase);
+            }
+            phase = phase - (float) Math.floor(phase);
         }
     }
 
