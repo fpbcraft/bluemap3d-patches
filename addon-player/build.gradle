@@ -1,0 +1,9 @@
+plugins {
+    id 'bluemap3d-addon'
+}
+
+ext {
+    mod_id = 'bluemap3d_players'
+    mod_name = 'BlueMap3D: Animated Players'
+    mod_description = 'Shows live Minecraft players as articulated, skin-textured 3D models on BlueMap.'
+}

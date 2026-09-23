@@ -17,6 +17,7 @@ The build produces four installable artifacts:
 
 1. **Patched BlueMap3D bundle**
    - persistent Sable/Create moving objects
+   - live, skin-textured articulated player models with a Fresh Animations Player Extension-style gameplay animation profile
    - projects Create child contraptions inside Sable ships (including Aeronautics propeller bearings) from hidden plot space into the ship's world pose
    - live Create chain-conveyor overlays driven by the real server kinetic speed; zero RPM is stationary and the animation rate follows Create's chain travel rate
    - Create train/bogey compatibility
@@ -92,6 +93,16 @@ build.sh                     Reproducible assembly/build script
 - Put `bluemap-trafficcraft-compat-*.jar` in `config/bluemap/packs/`.
 - Put `bluemap-foliage-compat-*.jar` in `config/bluemap/packs/`.
 - Restart BlueMap/the server and force-update affected static map regions when changing static terrain compatibility.
+
+## Animated players
+
+The bundled `bluemap3d_players` addon publishes online player transforms and animation state at 10 Hz and renders an articulated player model directly in BlueMap's Three.js scene. It uses each player's signed Mojang skin metadata and supports wide and slim skins.
+
+The animation profile intentionally follows the gameplay-state vocabulary covered by Fresh Animations: Player Extension: idle/head movement, forward/backward movement, strafing/leaning, sprinting, crouching, crawling, climbing, swimming, treading/wading, jumping/falling/landing, riding, elytra flight, item use and arm swings. The browser interpolates movement between server samples and evaluates the pose every render frame.
+
+Fresh Animations/EMF model files are **not redistributed or embedded** in this repository. This first compatibility layer reproduces the player-extension behavior with a BlueMap-native rig, so the server does not require EMF/ETF and the map does not serve the resource pack's ARR `.jem`/`.jpm` assets. Exact EMF expression/CEM execution can be added separately if desired.
+
+The normal BlueMap player marker remains available, which gives a useful icon/name when zoomed out while the 3D model carries the close-up gameplay pose.
 
 ## Notes
 

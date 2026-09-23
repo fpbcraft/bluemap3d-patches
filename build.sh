@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.0.26"
+VERSION="1.0.27"
 
 rm -rf "$WORK" "$DIST"
 mkdir -p "$WORK" "$DIST"
@@ -48,6 +48,7 @@ cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/ChainCo
 cp -R "$ROOT/addon-copycats" ./addon-copycats
 cp -R "$ROOT/addon-trafficcraft" ./addon-trafficcraft
 cp -R "$ROOT/addon-foliage" ./addon-foliage
+cp -R "$ROOT/addon-player" ./addon-player
 
 python3 - <<'PY'
 from pathlib import Path
@@ -67,6 +68,29 @@ if needle not in s:
 s = s.replace(
     needle,
     needle + '\ninclude("addon-copycats")\ninclude("addon-trafficcraft")\ninclude("addon-foliage")',
+    1,
+)
+p.write_text(s)
+
+# The animated-player addon is part of the bundled server mod but stays independent of
+# the block-mesh provider pipeline. It publishes a tiny gameplay-state feed and its own
+# browser renderer, so player animation cannot destabilize vehicle/terrain rendering.
+p = Path("settings.gradle")
+s = p.read_text()
+needle = 'include("addon-foliage")'
+if needle not in s:
+    raise SystemExit("settings.gradle player addon insertion point not found")
+s = s.replace(needle, needle + '\ninclude("addon-player")', 1)
+p.write_text(s)
+
+p = Path("build.gradle")
+s = p.read_text()
+needle = "def addonPaths = [':addon-turtles', ':addon-sable', ':addon-create']"
+if needle not in s:
+    raise SystemExit("root bundle addon list insertion point not found")
+s = s.replace(
+    needle,
+    "def addonPaths = [':addon-turtles', ':addon-sable', ':addon-create', ':addon-player']",
     1,
 )
 p.write_text(s)
@@ -230,7 +254,7 @@ replace(
     'var BUILD = "core-history-15-special-models";',
     'var BUILD = "core-history-31-chain-conveyors";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.0.26")
+replace("gradle.properties", "version=1.0.9", "version=1.0.27")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
@@ -268,7 +292,7 @@ if needle not in s:
     raise SystemExit("BlueMap3D startup marker insertion point not found")
 s = s.replace(
     needle,
-    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.26 active; BlueMap target is 5.7.");',
+    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.27 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
@@ -425,7 +449,7 @@ write_dispatch(
 )
 PY
 
-./gradlew clean bundleJar :addon-copycats:build :addon-trafficcraft:build :addon-foliage:build
+./gradlew clean bundleJar :addon-copycats:build :addon-trafficcraft:build :addon-foliage:build :addon-player:build
 
 cp build/libs/bluemap3d-bundle-*.jar "$DIST/"
 
@@ -477,9 +501,9 @@ for p in sorted(dist.iterdir()):
         }
 (dist / "MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
-with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.26.zip", "w", zipfile.ZIP_DEFLATED) as z:
+with zipfile.ZipFile(dist / "bluemap3d-patches-1.0.27.zip", "w", zipfile.ZIP_DEFLATED) as z:
     for p in sorted(dist.rglob("*")):
-        if p.is_file() and p.name != "bluemap3d-patches-1.0.26.zip":
+        if p.is_file() and p.name != "bluemap3d-patches-1.0.27.zip":
             z.write(p, p.relative_to(dist))
 PY
 
