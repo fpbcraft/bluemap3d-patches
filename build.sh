@@ -166,6 +166,65 @@ pose_replacement = '''        Vec3 position = entity.getAnchorVec().add(PIVOT);
         }'''
 s = s.replace(pose_needle, pose_replacement, 1)
 p.write_text(s)
+
+# Register the live chain-conveyor overlay provider beside the existing bearing provider.
+p = Path("addon-create/src/main/java/dev/duzo/bluemap3d/create/CreateAddon.java")
+s = p.read_text()
+field_needle = '    private final BearingProvider bearings = new BearingProvider(chunks);'
+if field_needle not in s:
+    raise SystemExit("CreateAddon chain provider field insertion point not found")
+s = s.replace(
+    field_needle,
+    field_needle + '\n    private final ChainConveyorProvider chainConveyors = new ChainConveyorProvider(chunks);',
+    1,
+)
+register_needle = '        BlueMap3D.register(bearings);'
+if register_needle not in s:
+    raise SystemExit("CreateAddon chain provider registration point not found")
+s = s.replace(
+    register_needle,
+    register_needle + '\n        BlueMap3D.register(chainConveyors);',
+    1,
+)
+clear_needle = '        bearings.clear();'
+if clear_needle not in s:
+    raise SystemExit("CreateAddon chain provider clear point not found")
+s = s.replace(
+    clear_needle,
+    clear_needle + '\n        chainConveyors.clear();',
+    1,
+)
+p.write_text(s)
+
+# Translate ModelAttachment.Loop into the existing fixed-size BM3D node trailer.
+p = Path("core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java")
+s = p.read_text()
+loop_needle = '''            case ModelAttachment.Rate rate -> new BakedMesh.Node(
+                    BakedMesh.KIND_RATE, indexStart, indexCount,
+                    pivotFor(rate.pivot(), matrix, attachment, volumePivot),
+                    axisFor(rate.axis(), matrix),
+                    // No radius or period: a constant rate is not a length, so the
+                    // transform's scale has nothing to act on.
+                    0f, 0f, rate.radiansPerSecond());
+'''
+if loop_needle not in s:
+    raise SystemExit("VolumeMesher loop-motion insertion point not found")
+loop_replacement = '''            case ModelAttachment.Rate rate -> new BakedMesh.Node(
+                    BakedMesh.KIND_RATE, indexStart, indexCount,
+                    pivotFor(rate.pivot(), matrix, attachment, volumePivot),
+                    axisFor(rate.axis(), matrix),
+                    // No radius or period: a constant rate is not a length, so the
+                    // transform's scale has nothing to act on.
+                    0f, 0f, rate.radiansPerSecond());
+            case ModelAttachment.Loop loop -> new BakedMesh.Node(
+                    BakedMesh.KIND_LOOP, indexStart, indexCount,
+                    new float[]{0f, 0f, 0f},
+                    axisFor(loop.axis(), matrix),
+                    0f, loop.period() / 16f * s, loop.blocksPerSecond());
+'''
+s = s.replace(loop_needle, loop_replacement, 1)
+p.write_text(s)
+
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
@@ -185,7 +244,8 @@ s = s.replace(
         + '\nimport dev.duzo.bluemap3d.bake.ProceduralBlockSource;'
         + '\nimport dev.duzo.bluemap3d.bake.TrafficCraftTintSource;'
         + '\nimport dev.duzo.bluemap3d.bake.TrafficCraftSignSource;'
-        + '\nimport dev.duzo.bluemap3d.bake.SymmetricSailSource;',
+        + '\nimport dev.duzo.bluemap3d.bake.SymmetricSailSource;'
+        + '\nimport dev.duzo.bluemap3d.bake.ChainConveyorSource;',
     1,
 )
 
@@ -197,6 +257,7 @@ s = s.replace(
     source_needle
         + '\n                sources.add(new ProceduralBlockSource(packs));'
         + '\n                sources.add(new SymmetricSailSource(packs));'
+        + '\n                sources.add(new ChainConveyorSource(packs));'
         + '\n                sources.add(new TrafficCraftSignSource(packs));'
         + '\n                sources.add(new TrafficCraftTintSource(packs));',
     1,
@@ -210,6 +271,84 @@ s = s.replace(
     needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.0.26 active; BlueMap target is 5.7.");',
     1,
 )
+p.write_text(s)
+
+# Browser support for KIND_LOOP. Layout stays fixed-width; v6 only adds the new semantic.
+p = Path("core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js")
+s = p.read_text()
+kind_needle = '    var KIND_RATE = 3;'
+if kind_needle not in s:
+    raise SystemExit("web loop kind insertion point not found")
+s = s.replace(kind_needle, kind_needle + '\n    var KIND_LOOP = 4;', 1)
+
+s = s.replace(
+    'if (version < 1 || version > 5) {',
+    'if (version < 1 || version > 6) {',
+    1,
+)
+
+live_rate = '''                } else if (node.kind === KIND_RATE) {
+                    /* Driven by wall-clock time, not by "value" (the odometer) - a
+'''
+if live_rate not in s:
+    raise SystemExit("web live loop insertion point not found")
+live_loop = '''                } else if (node.kind === KIND_LOOP) {
+                    var loopNow = performance.now();
+                    var loopLast = entry.rateLastTime[i];
+                    var loopDt = loopLast === null ? 0 : (loopNow - loopLast) / 1000;
+                    if (loopDt < 0 || loopDt > MAX_RATE_DT_SECONDS) {
+                        loopDt = 0;
+                    }
+                    entry.rateLastTime[i] = loopNow;
+                    entry.rateAngles[i] += node.rate * loopDt;
+                    var loopPhase = node.period > 0
+                        ? entry.rateAngles[i] % node.period : 0;
+                    group.position.set(
+                        node.axis.x * loopPhase,
+                        node.axis.y * loopPhase,
+                        node.axis.z * loopPhase);
+                    group.quaternion.set(0, 0, 0, 1);
+                } else if (node.kind === KIND_RATE) {
+                    /* Driven by wall-clock time, not by "value" (the odometer) - a
+'''
+s = s.replace(live_rate, live_loop, 1)
+
+replay_rate = '''            } else if (node.kind === KIND_RATE) {
+                var angle = node.rate * timeSeconds;
+'''
+if replay_rate in s:
+    replay_loop = '''            } else if (node.kind === KIND_LOOP) {
+                var loopPhase = node.period > 0
+                    ? (node.rate * timeSeconds) % node.period : 0;
+                group.position.set(
+                    node.axis.x * loopPhase,
+                    node.axis.y * loopPhase,
+                    node.axis.z * loopPhase);
+                group.quaternion.set(0, 0, 0, 1);
+            } else if (node.kind === KIND_RATE) {
+                var angle = node.rate * timeSeconds;
+'''
+    s = s.replace(replay_rate, replay_loop, 1)
+
+s = s.replace(
+    'if (nodes[i].kind === KIND_RATE) {',
+    'if (nodes[i].kind === KIND_RATE || nodes[i].kind === KIND_LOOP) {',
+    1,
+)
+
+# The loop may translate by almost one full period beyond its baked pose. Inflate
+# the animated child sphere so frustum culling never drops an endpoint mid-cycle.
+sphere_needle = '''            nodeGeometry.boundingSphere = new THREE.Sphere(node.pivot.clone(), Math.sqrt(maxDistSq));
+'''
+if sphere_needle not in s:
+    raise SystemExit("web loop bounding sphere insertion point not found")
+sphere_replacement = '''            var nodeRadius = Math.sqrt(maxDistSq);
+            if (node.kind === KIND_LOOP && node.period > 0) {
+                nodeRadius += node.period;
+            }
+            nodeGeometry.boundingSphere = new THREE.Sphere(node.pivot.clone(), nodeRadius);
+'''
+s = s.replace(sphere_needle, sphere_replacement, 1)
 p.write_text(s)
 PY
 
