@@ -2,7 +2,7 @@ plugins {
     id 'bluemap3d-common'
 }
 
-version = '1.0.24'
+version = '1.0.25'
 
 ext {
     mod_id = 'bluemap_trafficcraft_compat'
