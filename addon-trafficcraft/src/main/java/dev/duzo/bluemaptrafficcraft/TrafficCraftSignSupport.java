@@ -208,7 +208,7 @@ final class TrafficCraftSignSupport {
 
                 String relative = directory.relativize(file)
                         .toString()
-                        .replace('\\\\', '/');
+                        .replace(java.io.File.separatorChar, '/');
                 relative = relative.substring(0, relative.length() - ".png".length());
 
                 ResourcePath<Texture> path =
