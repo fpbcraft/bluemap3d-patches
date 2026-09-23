@@ -157,6 +157,43 @@ final class TrafficCraftSignSupport {
         return loaded[0];
     }
 
+    private static BufferedImage loadBuiltInSignImage(String relative) {
+        Path modPath = trafficCraftModPath();
+        if (modPath == null) return null;
+
+        if (Files.isDirectory(modPath)) {
+            return readImage(modPath
+                    .resolve("assets")
+                    .resolve("trafficcraft")
+                    .resolve("textures")
+                    .resolve("block")
+                    .resolve("sign")
+                    .resolve(relative));
+        }
+
+        try (FileSystem fileSystem = FileSystems.newFileSystem(modPath, (ClassLoader) null)) {
+            Path root = fileSystem.getRootDirectories().iterator().next();
+            return readImage(root
+                    .resolve("assets")
+                    .resolve("trafficcraft")
+                    .resolve("textures")
+                    .resolve("block")
+                    .resolve("sign")
+                    .resolve(relative));
+        } catch (IOException | RuntimeException error) {
+            return null;
+        }
+    }
+
+    private static BufferedImage readImage(Path file) {
+        if (!Files.isRegularFile(file)) return null;
+        try (InputStream in = Files.newInputStream(file)) {
+            return ImageIO.read(in);
+        } catch (IOException error) {
+            return null;
+        }
+    }
+
     private static int registerBuiltInSignTextures(BmMap map) {
         Path modPath = trafficCraftModPath();
         if (modPath == null) {
@@ -278,8 +315,7 @@ final class TrafficCraftSignSupport {
             return out;
         }
 
-        BufferedImage blank = readTexture(
-                resourcePack.getTexture(new ResourcePath<>("trafficcraft", "block/sign/blank")));
+        BufferedImage blank = loadBuiltInSignImage("blank.png");
 
         try (var files = Files.list(directory)) {
             for (Path file : files
