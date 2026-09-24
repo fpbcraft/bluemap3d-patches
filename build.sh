@@ -63,6 +63,8 @@ cp -R "$ROOT/compat/builtin" addon-compat/src/main/resources/bluemap3d-compat/
 cp -R "$ROOT/compat/builtin" core/src/main/resources/bluemap3d-compat/
 cp "$ROOT/compat/schema.json" addon-compat/src/main/resources/bluemap3d-compat/schema.json
 cp "$ROOT/compat/schema.json" core/src/main/resources/bluemap3d-compat/schema.json
+cp "$ROOT/compat/local-template.json" addon-compat/src/main/resources/bluemap3d-compat/local-template.json
+cp "$ROOT/compat/local-template.json" core/src/main/resources/bluemap3d-compat/local-template.json
 
 python3 "$ROOT/scripts/patch-upstream.py"
 
