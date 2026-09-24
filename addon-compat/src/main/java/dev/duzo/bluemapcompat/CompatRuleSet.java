@@ -1,0 +1,348 @@
+package dev.duzo.bluemapcompat;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonParseException;
+import de.bluecolored.bluemap.core.logger.Logger;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
+
+/**
+ * Immutable compatibility-rule snapshot.
+ *
+ * <p>Built-in rule files are loaded first, then server-local files from
+ * config/bluemap3d/compat. Rule IDs are stable merge keys: a local rule with the same ID
+ * replaces the shipped rule. This lets a server override one behavior without copying an
+ * entire mod definition.
+ */
+final class CompatRuleSet {
+
+    static final int SCHEMA_VERSION = 1;
+    static final Path EXTERNAL_DIRECTORY = Path.of("config", "bluemap3d", "compat");
+
+    private static final String BUILTIN_ROOT = "bluemap3d-compat/builtin/";
+    private static final Gson GSON = new Gson();
+
+    private final List<Rule> rules;
+
+    private CompatRuleSet(List<Rule> rules) {
+        this.rules = List.copyOf(rules);
+    }
+
+    static CompatRuleSet load() {
+        Map<String, Rule> merged = new LinkedHashMap<>();
+        ClassLoader loader = CompatRuleSet.class.getClassLoader();
+
+        loadBuiltins(loader, merged);
+        loadExternal(merged);
+
+        List<Rule> compiled = new ArrayList<>();
+        for (Rule rule : merged.values()) {
+            if (rule == null || !rule.enabled || rule.match == null) continue;
+            try {
+                rule.compile();
+                compiled.add(rule);
+            } catch (RuntimeException error) {
+                Logger.global.logWarning(String.format(
+                        "Ignoring invalid compatibility rule '%s': %s",
+                        rule.id, error.getMessage()));
+            }
+        }
+
+        compiled.sort(Comparator
+                .comparingInt((Rule rule) -> rule.priority)
+                .reversed()
+                .thenComparing(rule -> rule.id));
+
+        return new CompatRuleSet(compiled);
+    }
+
+    TintMatch tint(String blockId, Map<String, String> properties, String scope) {
+        for (Rule rule : rules) {
+            if (rule.tint == null || !rule.appliesTo(scope)) continue;
+            if (rule.matches(blockId, properties)) {
+                return new TintMatch(rule, rule.tint);
+            }
+        }
+        return null;
+    }
+
+    ModelMatch model(String blockId, Map<String, String> properties, String scope) {
+        for (Rule rule : rules) {
+            if (rule.model == null || !rule.appliesTo(scope)) continue;
+            if (rule.matches(blockId, properties)) {
+                return new ModelMatch(rule, rule.model);
+            }
+        }
+        return null;
+    }
+
+    int size() {
+        return rules.size();
+    }
+
+    private static void loadBuiltins(ClassLoader loader, Map<String, Rule> merged) {
+        try (InputStream index = loader.getResourceAsStream(BUILTIN_ROOT + "index.txt")) {
+            if (index == null) {
+                Logger.global.logWarning("Compatibility builtin index is missing");
+                return;
+            }
+
+            String text = new String(index.readAllBytes(), StandardCharsets.UTF_8);
+            for (String line : text.split("\\R")) {
+                String name = line.trim();
+                if (name.isEmpty() || name.startsWith("#")) continue;
+                try (InputStream input = loader.getResourceAsStream(BUILTIN_ROOT + name)) {
+                    if (input == null) {
+                        Logger.global.logWarning("Compatibility builtin is missing: " + name);
+                        continue;
+                    }
+                    mergeDocument(read(input, "builtin/" + name), merged);
+                }
+            }
+        } catch (IOException error) {
+            Logger.global.logError("Failed to load built-in compatibility rules", error);
+        }
+    }
+
+    private static void loadExternal(Map<String, Rule> merged) {
+        try {
+            Files.createDirectories(EXTERNAL_DIRECTORY);
+        } catch (IOException error) {
+            Logger.global.logWarning(String.format(
+                    "Could not create compatibility config directory %s: %s",
+                    EXTERNAL_DIRECTORY, error));
+            return;
+        }
+
+        try (Stream<Path> files = Files.list(EXTERNAL_DIRECTORY)) {
+            for (Path file : files
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(".json"))
+                    .sorted()
+                    .toList()) {
+                try (InputStream input = Files.newInputStream(file)) {
+                    mergeDocument(read(input, file.toString()), merged);
+                } catch (IOException | JsonParseException error) {
+                    Logger.global.logWarning(String.format(
+                            "Could not load compatibility config %s: %s", file, error));
+                }
+            }
+        } catch (IOException error) {
+            Logger.global.logWarning(String.format(
+                    "Could not scan compatibility config directory %s: %s",
+                    EXTERNAL_DIRECTORY, error));
+        }
+    }
+
+    private static Document read(InputStream input, String source) throws IOException {
+        Document document = GSON.fromJson(
+                new InputStreamReader(input, StandardCharsets.UTF_8),
+                Document.class);
+        if (document == null) {
+            throw new JsonParseException("empty document: " + source);
+        }
+        if (document.schemaVersion != SCHEMA_VERSION) {
+            throw new JsonParseException(
+                    "unsupported schemaVersion " + document.schemaVersion + " in " + source);
+        }
+        return document;
+    }
+
+    private static void mergeDocument(Document document, Map<String, Rule> merged) {
+        if (document.rules == null) return;
+        for (Rule rule : document.rules) {
+            if (rule == null || rule.id == null || rule.id.isBlank()) {
+                Logger.global.logWarning(String.format(
+                        "Ignoring compatibility rule without an id in document '%s'",
+                        document.id));
+                continue;
+            }
+            merged.put(rule.id, rule);
+        }
+    }
+
+    record TintMatch(Rule rule, Tint tint) {
+    }
+
+    record ModelMatch(Rule rule, Model model) {
+    }
+
+    static final class Document {
+        int schemaVersion;
+        String id;
+        String description;
+        List<Rule> rules;
+    }
+
+    static final class Rule {
+        String id;
+        boolean enabled = true;
+        int priority;
+        List<String> scope = List.of("terrain", "moving");
+        Match match;
+        Tint tint;
+        Model model;
+
+        private transient List<Glob> blockPatterns = List.of();
+        private transient List<Glob> exclusions = List.of();
+        private transient Map<String, Glob> propertyPatterns = Map.of();
+
+        void compile() {
+            if (id == null || id.isBlank()) throw new IllegalArgumentException("missing id");
+            blockPatterns = Glob.compileAll(match.blocks);
+            exclusions = Glob.compileAll(match.exclude);
+
+            Map<String, Glob> compiledProperties = new LinkedHashMap<>();
+            if (match.properties != null) {
+                match.properties.forEach((key, value) ->
+                        compiledProperties.put(key, new Glob(value)));
+            }
+            propertyPatterns = Map.copyOf(compiledProperties);
+
+            if (blockPatterns.isEmpty()) {
+                throw new IllegalArgumentException("match.blocks must contain at least one pattern");
+            }
+        }
+
+        boolean appliesTo(String wantedScope) {
+            return scope == null
+                    || scope.isEmpty()
+                    || scope.contains(wantedScope);
+        }
+
+        boolean matches(String blockId, Map<String, String> properties) {
+            if (blockId == null) return false;
+
+            boolean included = blockPatterns.stream().anyMatch(pattern -> pattern.matches(blockId));
+            if (!included) return false;
+            if (exclusions.stream().anyMatch(pattern -> pattern.matches(blockId))) return false;
+
+            for (Map.Entry<String, Glob> entry : propertyPatterns.entrySet()) {
+                String value = properties == null ? null : properties.get(entry.getKey());
+                if (value == null || !entry.getValue().matches(value)) return false;
+            }
+            return true;
+        }
+    }
+
+    static final class Match {
+        List<String> blocks;
+        List<String> exclude;
+        Map<String, String> properties;
+    }
+
+    static final class Model {
+        String type;
+        String sourceBlock;
+
+        String resolveSourceBlock(String targetBlockId) {
+            if (!"alias".equals(type) || sourceBlock == null || sourceBlock.isBlank()) {
+                return null;
+            }
+            return expandTemplate(sourceBlock, targetBlockId);
+        }
+    }
+
+    static final class Tint {
+        String type;
+        String color;
+        List<String> palette;
+        ValueSources value;
+        String defaultColor = "#FFFFFF";
+        List<DefaultColor> defaultByBlock;
+    }
+
+    static final class ValueSources {
+        ValueSource terrain;
+        ValueSource moving;
+    }
+
+    static final class ValueSource {
+        String type;
+        String method;
+        String path;
+    }
+
+    static final class DefaultColor {
+        List<String> blocks;
+        String color;
+
+        private transient List<Glob> patterns;
+
+        boolean matches(String blockId) {
+            if (patterns == null) patterns = Glob.compileAll(blocks);
+            return patterns.stream().anyMatch(pattern -> pattern.matches(blockId));
+        }
+    }
+
+    static String expandTemplate(String template, String targetBlockId) {
+        if (template == null || targetBlockId == null) return template;
+
+        int colon = targetBlockId.indexOf(':');
+        String namespace = colon < 0 ? "minecraft" : targetBlockId.substring(0, colon);
+        String path = colon < 0 ? targetBlockId : targetBlockId.substring(colon + 1);
+        String[] segments = path.split("/");
+
+        String result = template
+                .replace("${id}", targetBlockId)
+                .replace("${namespace}", namespace)
+                .replace("${path}", path);
+
+        for (int i = 0; i < segments.length; i++) {
+            result = result.replace("${path" + i + "}", segments[i]);
+        }
+        return result;
+    }
+    static final class Glob {
+        private final String source;
+        private final Pattern pattern;
+
+        Glob(String source) {
+            this.source = Objects.requireNonNull(source, "glob");
+            this.pattern = Pattern.compile(toRegex(source));
+        }
+
+        boolean matches(String value) {
+            return pattern.matcher(value).matches();
+        }
+
+        static List<Glob> compileAll(List<String> patterns) {
+            if (patterns == null || patterns.isEmpty()) return List.of();
+            return patterns.stream().map(Glob::new).toList();
+        }
+
+        private static String toRegex(String glob) {
+            StringBuilder regex = new StringBuilder("^");
+            for (int i = 0; i < glob.length(); i++) {
+                char c = glob.charAt(i);
+                switch (c) {
+                    case '*' -> regex.append(".*");
+                    case '?' -> regex.append('.');
+                    case '.', '(', ')', '+', '|', '^', '$', '@', '%' ->
+                            regex.append('\\').append(c);
+                    case '\\' -> regex.append("\\\\");
+                    default -> regex.append(c);
+                }
+            }
+            return regex.append('$').toString();
+        }
+
+        @Override
+        public String toString() {
+            return source;
+        }
+    }
+}

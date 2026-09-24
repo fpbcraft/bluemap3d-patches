@@ -1,5 +1,0 @@
-{
-  "id": "BlueMapCopycatsCompat",
-  "entrypoint": "dev.duzo.bluemapcopycats.BlueMapCopycatsCompatAddon",
-  "version": "${version}"
-}

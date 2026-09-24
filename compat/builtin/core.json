@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-core",
+  "description": "Cross-mod moving-object policy.",
+  "moving": {
+    "modelNamespaces": {
+      "include": ["copycats", "create_connected"],
+      "exclude": []
+    }
+  },
+  "rules": []
+}

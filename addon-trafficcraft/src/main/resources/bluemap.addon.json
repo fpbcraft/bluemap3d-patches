@@ -1,5 +1,0 @@
-{
-  "id": "BlueMapTrafficCraftCompat",
-  "entrypoint": "dev.duzo.bluemaptrafficcraft.BlueMapTrafficCraftCompatAddon",
-  "version": "${version}"
-}
