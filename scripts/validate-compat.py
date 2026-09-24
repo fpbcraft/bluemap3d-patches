@@ -78,6 +78,12 @@ def main() -> None:
                         isinstance(item, str) and item for item in values
                     ):
                         fail(f"{path}: moving.modelNamespaces.{key} must be strings")
+            features = moving.get("features", {})
+            if not isinstance(features, dict) or not all(
+                isinstance(key, str) and key and isinstance(value, bool)
+                for key, value in features.items()
+            ):
+                fail(f"{path}: moving.features must map feature ids to booleans")
 
         rules = document.get("rules", [])
         if not isinstance(rules, list):
