@@ -62,6 +62,11 @@ public final class CompatRegistry {
         return current.movingIncludes.stream().anyMatch(pattern -> pattern.matches(namespace));
     }
 
+    public boolean featureEnabled(String feature, boolean defaultValue) {
+        if (feature == null || feature.isBlank()) return defaultValue;
+        return current().features.getOrDefault(feature, defaultValue);
+    }
+
     public TintMatch tint(String blockId, Map<String, String> properties) {
         for (Rule rule : current().rules) {
             if (rule.tint == null || !rule.appliesTo("moving")) continue;
@@ -104,9 +109,10 @@ public final class CompatRegistry {
         Map<String, Rule> rules = new LinkedHashMap<>();
         Set<String> include = new LinkedHashSet<>();
         Set<String> exclude = new LinkedHashSet<>();
+        Map<String, Boolean> features = new LinkedHashMap<>();
 
-        loadBuiltins(rules, include, exclude);
-        loadExternal(rules, include, exclude);
+        loadBuiltins(rules, include, exclude, features);
+        loadExternal(rules, include, exclude, features);
 
         List<Rule> compiled = new ArrayList<>();
         for (Rule rule : rules.values()) {
@@ -127,18 +133,20 @@ public final class CompatRegistry {
         snapshot = new Snapshot(
                 List.copyOf(compiled),
                 include.stream().map(Glob::new).toList(),
-                exclude.stream().map(Glob::new).toList());
+                exclude.stream().map(Glob::new).toList(),
+                Map.copyOf(features));
         fingerprint = fingerprint();
 
         LOGGER.info(
-                "Loaded moving compatibility: {} rule(s), {} namespace include pattern(s), {} exclude pattern(s)",
-                compiled.size(), include.size(), exclude.size());
+                "Loaded moving compatibility: {} rule(s), {} namespace include pattern(s), {} exclude pattern(s), {} feature flag(s)",
+                compiled.size(), include.size(), exclude.size(), features.size());
     }
 
     private static void loadBuiltins(
             Map<String, Rule> rules,
             Set<String> include,
-            Set<String> exclude) {
+            Set<String> exclude,
+            Map<String, Boolean> features) {
         ClassLoader loader = CompatRegistry.class.getClassLoader();
         try (InputStream index = loader.getResourceAsStream(BUILTIN_ROOT + "index.txt")) {
             if (index == null) {
@@ -156,7 +164,7 @@ public final class CompatRegistry {
                         LOGGER.warn("Compatibility builtin is missing: {}", name);
                         continue;
                     }
-                    merge(read(input), rules, include, exclude);
+                    merge(read(input), rules, include, exclude, features);
                 }
             }
         } catch (IOException | RuntimeException error) {
@@ -167,7 +175,8 @@ public final class CompatRegistry {
     private static void loadExternal(
             Map<String, Rule> rules,
             Set<String> include,
-            Set<String> exclude) {
+            Set<String> exclude,
+            Map<String, Boolean> features) {
         try {
             Files.createDirectories(EXTERNAL_DIRECTORY);
         } catch (IOException error) {
@@ -181,7 +190,7 @@ public final class CompatRegistry {
                     .sorted()
                     .toList()) {
                 try (InputStream input = Files.newInputStream(file)) {
-                    merge(read(input), rules, include, exclude);
+                    merge(read(input), rules, include, exclude, features);
                 } catch (IOException | RuntimeException error) {
                     LOGGER.warn("Could not load compatibility config {}: {}",
                             file, error.toString());
@@ -206,7 +215,8 @@ public final class CompatRegistry {
             Document document,
             Map<String, Rule> rules,
             Set<String> include,
-            Set<String> exclude) {
+            Set<String> exclude,
+            Map<String, Boolean> features) {
         if (document.rules != null) {
             for (Rule rule : document.rules) {
                 if (rule == null || rule.id == null || rule.id.isBlank()) continue;
@@ -215,10 +225,15 @@ public final class CompatRegistry {
             }
         }
 
-        if (document.moving != null && document.moving.modelNamespaces != null) {
-            NamespacePolicy policy = document.moving.modelNamespaces;
-            if (policy.include != null) include.addAll(policy.include);
-            if (policy.exclude != null) exclude.addAll(policy.exclude);
+        if (document.moving != null) {
+            if (document.moving.modelNamespaces != null) {
+                NamespacePolicy policy = document.moving.modelNamespaces;
+                if (policy.include != null) include.addAll(policy.include);
+                if (policy.exclude != null) exclude.addAll(policy.exclude);
+            }
+            if (document.moving.features != null) {
+                features.putAll(document.moving.features);
+            }
         }
     }
 
@@ -309,9 +324,10 @@ public final class CompatRegistry {
     private record Snapshot(
             List<Rule> rules,
             List<Glob> movingIncludes,
-            List<Glob> movingExcludes) {
+            List<Glob> movingExcludes,
+            Map<String, Boolean> features) {
         private static final Snapshot EMPTY =
-                new Snapshot(List.of(), List.of(), List.of());
+                new Snapshot(List.of(), List.of(), List.of(), Map.of());
     }
 
     private static final class Document {
@@ -322,6 +338,7 @@ public final class CompatRegistry {
 
     private static final class Moving {
         NamespacePolicy modelNamespaces;
+        Map<String, Boolean> features;
     }
 
     private static final class NamespacePolicy {
