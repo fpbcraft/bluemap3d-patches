@@ -63,7 +63,11 @@ s = s.replace(
     import_needle
         + '\nimport dev.duzo.bluemap3d.compat.CompatRegistry;'
         + '\nimport dev.ryanhcode.sable.Sable;'
-        + '\nimport dev.ryanhcode.sable.sublevel.SubLevel;',
+        + '\nimport dev.ryanhcode.sable.api.sublevel.SubLevelContainer;'
+        + '\nimport dev.ryanhcode.sable.sublevel.SubLevel;'
+        + '\nimport com.simibubi.create.content.contraptions.ControlledContraptionEntity;'
+        + '\nimport com.simibubi.create.content.contraptions.bearing.MechanicalBearingBlockEntity;'
+        + '\nimport net.minecraft.world.level.block.entity.BlockEntity;',
     1,
 )
 
@@ -74,7 +78,11 @@ s = s.replace(
     trace_needle,
     trace_needle
         + '\n\n    /** Contraption classes already reported as projected out of a Sable ship. */'
-        + '\n    private final Set<String> sableProjected = ConcurrentHashMap.newKeySet();',
+        + '\n    private final Set<String> sableProjected = ConcurrentHashMap.newKeySet();'
+        + '\n\n    /** Last known child contraptions for Sable ships, retained when their live entity unloads. */'
+        + '\n    private final Map<ServerLevel, Map<UUID, SableContraptionCache>> sableContraptionCaches = new ConcurrentHashMap<>();'
+        + '\n\n    /** ControlledContraptionEntity controller position, used only to invalidate disassembled cached rotors. */'
+        + '\n    private static final Field CONTROLLER_POS_FIELD = controllerPosField();',
     1,
 )
 
@@ -114,6 +122,169 @@ pose_replacement = '''        Vec3 position = entity.getAnchorVec().add(PIVOT);
             }
         }'''
 s = s.replace(pose_needle, pose_replacement, 1)
+
+objects_needle = '''        List<? extends AbstractContraptionEntity> entities = level.getEntities(
+                EntityTypeTest.forClass(AbstractContraptionEntity.class),
+                e -> !(e instanceof CarriageContraptionEntity));
+        for (AbstractContraptionEntity entity : entities) {
+            SceneObject object = toSceneObject(level, entity, maxBlocks);
+            if (object != null) {
+                out.add(object);
+            }
+        }
+
+        out.addAll(trainCarriages(level, maxBlocks));'''
+if objects_needle not in s:
+    raise SystemExit("ContraptionProvider Sable cache object-loop insertion point not found")
+s = s.replace(objects_needle, '''        List<? extends AbstractContraptionEntity> entities = level.getEntities(
+                EntityTypeTest.forClass(AbstractContraptionEntity.class),
+                e -> !(e instanceof CarriageContraptionEntity));
+        Set<UUID> liveSableContraptions = new HashSet<>();
+        for (AbstractContraptionEntity entity : entities) {
+            if (Sable.HELPER.getContaining(entity) != null) {
+                liveSableContraptions.add(entity.getUUID());
+            }
+
+            SceneObject object = toSceneObject(level, entity, maxBlocks);
+            if (object != null) {
+                out.add(object);
+            }
+        }
+
+        appendCachedSableContraptions(level, out, liveSableContraptions);
+        out.addAll(trainCarriages(level, maxBlocks));''', 1)
+
+
+# Persist Sable child contraptions after their Create entity unloads due player distance.
+cache_anchor = '''    /**
+     * Walks {@code Create.RAILWAYS.trains} rather than any entity list, so a train carries
+'''
+if cache_anchor not in s:
+    raise SystemExit("ContraptionProvider Sable cache method insertion point not found")
+cache_methods = '''    private void rememberSableContraption(
+            ServerLevel level,
+            AbstractContraptionEntity entity,
+            CarriageGeometry geometry,
+            Vec3 localPosition,
+            Quaternionf localRotation,
+            SubLevel subLevel) {
+        String objectId = level.dimension().location().getNamespace()
+                + "/" + level.dimension().location().getPath()
+                + "/" + entity.getUUID();
+
+        sableContraptionCaches
+                .computeIfAbsent(level, ignored -> new ConcurrentHashMap<>())
+                .put(entity.getUUID(), new SableContraptionCache(
+                        objectId,
+                        geometry.volume(),
+                        geometry.version(),
+                        localPosition,
+                        new Quaternionf(localRotation),
+                        subLevel.getUniqueId(),
+                        controllerPosOf(entity),
+                        level.dimension()));
+    }
+
+    private void appendCachedSableContraptions(
+            ServerLevel level,
+            List<SceneObject> out,
+            Set<UUID> liveIds) {
+        Map<UUID, SableContraptionCache> cache = sableContraptionCaches.get(level);
+        if (cache == null || cache.isEmpty()) return;
+
+        SubLevelContainer container = SubLevelContainer.getContainer(level);
+        if (container == null) return;
+
+        for (Map.Entry<UUID, SableContraptionCache> entry : new ArrayList<>(cache.entrySet())) {
+            if (liveIds.contains(entry.getKey())) continue;
+
+            SableContraptionCache cached = entry.getValue();
+            SubLevel subLevel = container.getSubLevel(cached.subLevelId());
+            if (subLevel == null || subLevel.isRemoved()) {
+                cache.remove(entry.getKey());
+                continue;
+            }
+
+            // If the owning bearing is available and reports that it is no longer running,
+            // this was a real disassembly rather than a distance-based entity unload.
+            if (cached.controllerPos() != null) {
+                BlockEntity controller = level.getBlockEntity(cached.controllerPos());
+                if (controller instanceof MechanicalBearingBlockEntity bearing
+                        && !bearing.isRunning()) {
+                    cache.remove(entry.getKey());
+                    continue;
+                }
+            }
+
+            var pose = subLevel.logicalPose();
+            Vec3 worldPosition = pose.transformPosition(cached.localPosition());
+            var parentRotation = pose.orientation();
+            Quaternionf worldRotation = new Quaternionf(
+                    (float) parentRotation.x(), (float) parentRotation.y(),
+                    (float) parentRotation.z(), (float) parentRotation.w())
+                    .mul(new Quaternionf(cached.localRotation()));
+
+            out.add(sceneObjectOf(
+                    cached.objectId(),
+                    cached.volume(),
+                    cached.version(),
+                    worldPosition,
+                    worldRotation,
+                    cached.dimension()));
+        }
+    }
+
+    private static BlockPos controllerPosOf(AbstractContraptionEntity entity) {
+        if (CONTROLLER_POS_FIELD == null || !(entity instanceof ControlledContraptionEntity)) {
+            return null;
+        }
+        try {
+            Object value = CONTROLLER_POS_FIELD.get(entity);
+            return value instanceof BlockPos pos ? pos.immutable() : null;
+        } catch (IllegalAccessException error) {
+            return null;
+        }
+    }
+
+    private static Field controllerPosField() {
+        try {
+            Field field = ControlledContraptionEntity.class.getDeclaredField("controllerPos");
+            field.setAccessible(true);
+            return field;
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            LOGGER.warn("Could not access ControlledContraptionEntity.controllerPos; "
+                    + "cached Sable child contraptions will only expire with their sublevel", error);
+            return null;
+        }
+    }
+
+    private record SableContraptionCache(
+            String objectId,
+            BlockVolume volume,
+            long version,
+            Vec3 localPosition,
+            Quaternionf localRotation,
+            UUID subLevelId,
+            BlockPos controllerPos,
+            ResourceKey<Level> dimension) {
+    }
+
+'''
+s = s.replace(cache_anchor, cache_methods + cache_anchor, 1)
+
+clear_needle = '''    public void clear() {
+        carriageCaches.clear();
+    }'''
+if clear_needle not in s:
+    raise SystemExit("ContraptionProvider clear() insertion point not found")
+s = s.replace(
+    clear_needle,
+    '''    public void clear() {
+        carriageCaches.clear();
+        sableContraptionCaches.clear();
+    }''',
+    1,
+)
 p.write_text(s)
 
 # Register the live chain-conveyor overlay provider beside the existing bearing provider.
