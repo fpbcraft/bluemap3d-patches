@@ -80,7 +80,7 @@ s = s.replace(
         + '\n\n    /** Contraption classes already reported as projected out of a Sable ship. */'
         + '\n    private final Set<String> sableProjected = ConcurrentHashMap.newKeySet();'
         + '\n\n    /** Last known child contraptions for Sable ships, retained when their live entity unloads. */'
-        + '\n    private final Map<ServerLevel, Map<UUID, SableContraptionCache>> sableContraptionCaches = new ConcurrentHashMap<>();'
+        + '\n    private final Map<ServerLevel, Map<String, SableContraptionCache>> sableContraptionCaches = new ConcurrentHashMap<>();'
         + '\n\n    /** ControlledContraptionEntity controller position, used only to invalidate disassembled cached rotors. */'
         + '\n    private static final Field CONTROLLER_POS_FIELD = controllerPosField();',
     1,
@@ -143,10 +143,11 @@ if objects_needle not in s:
 s = s.replace(objects_needle, '''        List<? extends AbstractContraptionEntity> entities = level.getEntities(
                 EntityTypeTest.forClass(AbstractContraptionEntity.class),
                 e -> !(e instanceof CarriageContraptionEntity));
-        Set<UUID> liveSableContraptions = new HashSet<>();
+        Set<String> liveSableContraptions = new HashSet<>();
         for (AbstractContraptionEntity entity : entities) {
-            if (Sable.HELPER.getContaining(entity) != null) {
-                liveSableContraptions.add(entity.getUUID());
+            SubLevel liveSubLevel = Sable.HELPER.getContaining(entity);
+            if (liveSubLevel != null) {
+                liveSableContraptions.add(sableContraptionKey(entity, liveSubLevel));
             }
 
             SceneObject object = toSceneObject(level, entity, maxBlocks);
@@ -176,30 +177,31 @@ cache_methods = '''    private void rememberSableContraption(
                 + "/" + level.dimension().location().getPath()
                 + "/" + entity.getUUID();
 
+        BlockPos controllerPos = controllerPosOf(entity);
         sableContraptionCaches
                 .computeIfAbsent(level, ignored -> new ConcurrentHashMap<>())
-                .put(entity.getUUID(), new SableContraptionCache(
+                .put(sableContraptionKey(entity, subLevel), new SableContraptionCache(
                         objectId,
                         geometry.volume(),
                         geometry.version(),
                         localPosition,
                         new Quaternionf(localRotation),
                         subLevel.getUniqueId(),
-                        controllerPosOf(entity),
+                        controllerPos,
                         level.dimension()));
     }
 
     private void appendCachedSableContraptions(
             ServerLevel level,
             List<SceneObject> out,
-            Set<UUID> liveIds) {
-        Map<UUID, SableContraptionCache> cache = sableContraptionCaches.get(level);
+            Set<String> liveIds) {
+        Map<String, SableContraptionCache> cache = sableContraptionCaches.get(level);
         if (cache == null || cache.isEmpty()) return;
 
         SubLevelContainer container = SubLevelContainer.getContainer(level);
         if (container == null) return;
 
-        for (Map.Entry<UUID, SableContraptionCache> entry : new ArrayList<>(cache.entrySet())) {
+        for (Map.Entry<String, SableContraptionCache> entry : new ArrayList<>(cache.entrySet())) {
             if (liveIds.contains(entry.getKey())) continue;
 
             SableContraptionCache cached = entry.getValue();
@@ -236,6 +238,16 @@ cache_methods = '''    private void rememberSableContraption(
                     worldRotation,
                     cached.dimension()));
         }
+    }
+
+    private static String sableContraptionKey(
+            AbstractContraptionEntity entity,
+            SubLevel subLevel) {
+        BlockPos controller = controllerPosOf(entity);
+        String child = controller == null
+                ? entity.getUUID().toString()
+                : Long.toUnsignedString(controller.asLong());
+        return subLevel.getUniqueId() + "/" + child;
     }
 
     private static BlockPos controllerPosOf(AbstractContraptionEntity entity) {
