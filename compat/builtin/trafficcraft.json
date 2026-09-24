@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-trafficcraft",
+  "description": "TrafficCraft paint colors. Wildcards intentionally cover the full road-pattern families.",
+  "rules": [
+    {
+      "id": "trafficcraft-painted-blocks",
+      "priority": 100,
+      "scope": ["terrain", "moving"],
+      "match": {
+        "blocks": [
+          "trafficcraft:asphalt_pattern_*",
+          "trafficcraft:asphalt_slope_pattern_*",
+          "trafficcraft:concrete_pattern_*",
+          "trafficcraft:concrete_slope_pattern_*",
+          "trafficcraft:concrete_barrier",
+          "trafficcraft:street_sign",
+          "trafficcraft:house_number_sign",
+          "trafficcraft:traffic_light",
+          "trafficcraft:guardrail",
+          "trafficcraft:paint_bucket",
+          "trafficcraft:traffic_cone",
+          "trafficcraft:traffic_bollard",
+          "trafficcraft:traffic_barrel",
+          "trafficcraft:road_barrier_fence",
+          "trafficcraft:reflector",
+          "trafficcraft:traffic_sign"
+        ]
+      },
+      "tint": {
+        "type": "palette",
+        "palette": [
+          "#F9FFFE", "#F9801D", "#C74EBD", "#3AB3DA",
+          "#FED83D", "#80C71F", "#F38BAA", "#474F52",
+          "#9D9D97", "#169C9C", "#8932B8", "#3C44AA",
+          "#835432", "#5E7C16", "#B02E26", "#1D1D21"
+        ],
+        "value": {
+          "terrain": { "type": "block_entity_method", "method": "color" },
+          "moving": { "type": "nbt_path", "path": "color" }
+        },
+        "defaultColor": "#FFFFFF",
+        "defaultByBlock": [
+          { "blocks": ["trafficcraft:guardrail"], "color": "#828282" },
+          { "blocks": ["trafficcraft:traffic_cone"], "color": "#D12725" },
+          { "blocks": ["trafficcraft:concrete_barrier"], "color": "#ABABAB" },
+          { "blocks": ["trafficcraft:reflector"], "color": "#F9FFFE" }
+        ]
+      }
+    }
+  ]
+}

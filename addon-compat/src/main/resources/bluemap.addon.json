@@ -1,0 +1,5 @@
+{
+  "id": "BlueMapCompat",
+  "entrypoint": "dev.duzo.bluemapcompat.BlueMapCompatAddon",
+  "version": "${version}"
+}

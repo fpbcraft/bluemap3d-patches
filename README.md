@@ -1,55 +1,144 @@
 # BlueMap3D Patches
 
-Compatibility patches and BlueMap addons used by the FPBCRAFT Minecraft 1.21.1 server.
+BlueMap 5.7 / BlueMap3D compatibility for the FPBCRAFT Minecraft 1.21.1 NeoForge server.
+
+The repository is intentionally split between **declarative compatibility rules** and
+**code adapters**:
+
+- add a JSON rule when a mod only needs matching, tinting, namespace policy, or another
+  supported generic behavior;
+- add Java only when a mod introduces a genuinely new rendering/runtime concept.
 
 ## Supported baseline
 
 - Minecraft 1.21.1
 - NeoForge
-- **BlueMap 5.7**
+- BlueMap **5.7**
 - BlueMap3D upstream commit `f9a027de06f49384b86867b5c58b3630d29b1c9f`
 
-The project intentionally targets BlueMap 5.7. Do not assume compatibility with the later BlueMap 5.23 experiments.
+Do not assume compatibility with the later BlueMap 5.23 experiments.
 
-## What this repository builds
+## Artifacts
 
-The build produces four installable artifacts:
+The build produces two installable JARs:
 
-1. **Patched BlueMap3D bundle**
+1. **`bluemap3d-bundle-*.jar`** — patched BlueMap3D bundle
    - persistent Sable/Create moving objects
-   - projects Create child contraptions inside Sable ships (including Aeronautics propeller bearings) from hidden plot space into the ship's world pose
-   - live Create chain-conveyor overlays driven by the real server kinetic speed; both parallel chain runs animate together, zero RPM is stationary, and the animation rate follows Create's chain travel rate
-   - live Create mechanical-belt surfaces driven by each belt's real signed kinetic speed; unpowered belts stay static and powered belts scroll in the same direction/rate as Create
-   - Create train/bogey compatibility
-   - Copycats+ and Create: Connected copied-material rendering on moving contraptions
-   - Bits & Bobs girder struts on moving objects
-   - diagonal fence/wall model support for moving objects
+   - Sable child-contraption world transforms
+   - live Create chain conveyors and mechanical belts
+   - trains/bogeys
+   - moving Copycats / Create Connected material support
+   - procedural and dynamic-texture adapters
+   - config-driven moving tint rules
 
-2. **BlueMap Copycats Compat addon**
-   - installed in `config/bluemap/packs/`
-   - static Copycats+ support
-   - static Create: Connected support
-   - Bits & Bobs girder struts
-   - connected/diagonal fence and wall support while preserving each block's original material/model
+2. **`bluemap-compat-*.jar`** — unified native BlueMap compatibility addon
+   - config-driven wildcard tint and model-alias rules
+   - hot-reloaded server-local compatibility rules
+   - Copycats+ / Create Connected copied-material adapter
+   - Bits & Bobs girders and connected/diagonal fence-wall adapter
+   - TrafficCraft block-entity decoding and dynamic sign textures
 
-3. **BlueMap TrafficCraft Compat addon**
-   - installed in `config/bluemap/packs/`
-   - restores TrafficCraft's client-side painted-block tinting from block-entity NBT
-   - supports road patterns/slopes, barriers, cones, bollards, barrels, guardrails, reflectors, paint buckets and colorable sign/light bases
-   - uses TrafficCraft's exact paint palette and per-block default colors
-   - renders TrafficCraft traffic-sign artwork from `SignTexture`
-   - explicitly imports TrafficCraft's BER-only built-in sign PNGs into BlueMap's texture gallery
-   - loads custom sign PNG data from `world/data/trafficcraft_signs/*.nbt`
-   - supports built-in sign textures and custom `misc` sign reverse-side backing
-   - the patched BlueMap3D bundle applies the same sign artwork to moving contraptions/ships
+The former Copycats, foliage and TrafficCraft compatibility artifacts are consolidated into
+`bluemap-compat`. Specialized Java still exists where needed, but it is organized as an
+adapter inside the single addon rather than published as another JAR.
 
-4. **BlueMap Foliage Compat addon**
-   - installed in `config/bluemap/packs/`
-   - restores fixed client-side foliage colors that BlueMap 5.7 otherwise replaces with generic biome foliage tint
-   - covers Quark blossom leaves/carpets/hedges, including Sunny Trumpet
-   - covers Dynamic Trees cherry/azalea, plus the fixed birch and spruce foliage colors
+## Config-driven compatibility
 
-The BlueMap addon compiles directly against BlueMap **5.7**.
+Built-in rules live in `compat/builtin/`. Server-local additions and overrides go in:
+
+```text
+config/bluemap3d/compat/*.json
+```
+
+External files hot-reload approximately every five seconds. Existing static map tiles
+still need to be rerendered after a visual rule changes.
+
+Rules support:
+
+- wildcard block matching (`*`, `?`);
+- multiple include patterns and exclusions;
+- blockstate property matching;
+- priorities;
+- stable rule IDs, allowing a local rule to replace a built-in rule;
+- separate `terrain` and `moving` scopes;
+- no tint / fixed RGB / NBT-or-adapter-backed palette tint;
+- wildcard moving-model namespace include/exclude policy.
+
+Example:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "my-mod",
+  "moving": {
+    "modelNamespaces": {
+      "include": ["my_mod", "my_mod_*"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "id": "my-mod-autumn-leaves",
+      "priority": 100,
+      "scope": ["terrain", "moving"],
+      "match": {
+        "blocks": ["my_mod:*_autumn_leaves"]
+      },
+      "tint": {
+        "type": "none"
+      }
+    }
+  ]
+}
+```
+
+See [compat/README.md](compat/README.md) and [compat/schema.json](compat/schema.json).
+
+### Built-in migrations
+
+The first config migration deliberately covers real existing compatibility code:
+
+- Quark blossom foliage uses three wildcard families instead of individual IDs.
+- Dynamic Trees fixed/untinted foliage rules are declarative.
+- TrafficCraft's 1,292 generated asphalt/concrete pattern IDs are represented by four
+  wildcard patterns, with palette data in JSON rather than Java.
+- `copycats` and `create_connected` moving-model namespace exceptions are config,
+  not literals in the Create provider.
+
+TrafficCraft signs remain a small adapter because BlueMap 5.7 cannot express dynamic
+server-side sign PNG loading as data. Copycats remains specialized because its renderer
+decodes per-part copied materials and custom geometry.
+
+## Repository layout
+
+```text
+compat/
+  schema.json
+  README.md
+  builtin/
+    core.json
+    foliage.json
+    trafficcraft.json
+
+addon-compat/
+  src/main/java/...           generic BlueMap rule engine + small adapters
+  src/main/resources/...      BlueMap addon metadata
+
+overrides/
+  core/...                    maintained BlueMap3D source overrides
+  addon-create/...            live Create machinery providers
+
+patches/
+  0015-base.patch             pinned upstream base patch set
+
+scripts/
+  patch-upstream.py           deterministic upstream source modifications
+  generate-static-resources.py
+  package-dist.py
+
+build.sh                      orchestration only
+.github/workflows/build.yml   CI
+```
 
 ## Build
 
@@ -61,39 +150,50 @@ Requires Java 21, Git, Bash and Python 3.
 
 Artifacts are written to `dist/`.
 
-The build clones the pinned BlueMap3D upstream commit, applies `patches/0015-base.patch`, overlays the maintained Java sources from `overrides/`, adds the native BlueMap compatibility addon, and then builds both artifacts.
-
-## Layout
-
-```text
-patches/
-  0015-base.patch            Base BlueMap3D patch set
-
-overrides/
-  core/...                   Maintained BlueMap3D source overrides
-  addon-create/...           Live Create provider overrides (chain conveyors)
-
-addon-copycats/
-  src/...                    Native BlueMap 5.7 static-terrain addon
-
-addon-trafficcraft/
-  src/...                    TrafficCraft paint + dynamic sign compatibility
-
-addon-foliage/
-  src/...                    Quark / Dynamic Trees foliage-color compatibility
-
-build.sh                     Reproducible assembly/build script
-.github/workflows/build.yml  CI build
-```
+The build always clones the pinned upstream BlueMap3D commit, applies the base patch,
+copies maintained overrides and shared compatibility rules, runs the deterministic patch
+script, builds, and packages the result.
 
 ## Installation
 
-- Put the generated `bluemap3d-bundle-*.jar` in the server's normal mods directory.
-- Put `bluemap-copycats-compat-*.jar` in `config/bluemap/packs/`.
-- Put `bluemap-trafficcraft-compat-*.jar` in `config/bluemap/packs/`.
-- Put `bluemap-foliage-compat-*.jar` in `config/bluemap/packs/`.
-- Restart BlueMap/the server and force-update affected static map regions when changing static terrain compatibility.
+Install the bundle as a normal mod:
 
-## Notes
+```text
+mods/
+  bluemap3d-bundle-*.jar
+```
 
-The native addons use BlueMap 5.7 core APIs and a small amount of BlueMap 5.7 internal resource-pack state to preserve original models while adding compatibility behavior. The Create machinery overlays are additive: BlueMap's static chain/belt geometry remains underneath as a fallback, while BlueMap3D reads the live Create block entities and animates only when the kinetic network is moving. Chain conveyors use repeated loop geometry; belts use isolated per-node UV scrolling so the belt itself stays fixed while its texture moves. A BlueMap upgrade should therefore be treated as an explicit compatibility migration, not an automatic version bump.
+Install the unified native BlueMap addon in:
+
+```text
+config/bluemap/packs/
+  bluemap-compat-*.jar
+```
+
+Restart BlueMap/the server after changing addon JARs. External JSON compatibility rules
+do not require a JAR rebuild or server restart, but static terrain needs a rerender to
+reflect visual changes.
+
+## Design rule
+
+Prefer this order when adding support for another mod:
+
+1. **Wildcard config rule** — if an existing generic concept is enough.
+2. **Reusable generic capability** — if the concept is broadly useful across mods.
+3. **Small adapter** — only for mod-specific runtime data or rendering semantics.
+
+The goal is to avoid an addon-per-mod architecture.
+
+
+## Migrating from 1.0.28
+
+Remove the old native addon JARs before installing 1.1.0:
+
+```text
+config/bluemap/packs/bluemap-copycats-compat-1.0.28.jar
+config/bluemap/packs/bluemap-trafficcraft-compat-1.0.28.jar
+config/bluemap/packs/bluemap-foliage-compat-1.0.28.jar
+```
+
+Replace them with the single `bluemap-compat-1.1.0.jar`. Keeping the old addons installed
+would register duplicate renderer/block-entity hooks.
