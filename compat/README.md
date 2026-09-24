@@ -81,3 +81,26 @@ geometry should use a reusable renderer capability instead of a fragile alias.
 Alias templates can use `${id}`, `${namespace}`, `${path}`, and path-segment tokens
 such as `${path0}` / `${path1}`. Aliases resolve against the original resource-pack
 mapping, so alias chains cannot accidentally form cycles.
+
+
+## Moving feature flags
+
+Runtime features that are useful but not universally desirable can be enabled or disabled
+without rebuilding:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "my-runtime-options",
+  "moving": {
+    "features": {
+      "create.chainConveyorAnimation": false,
+      "create.mechanicalBeltAnimation": false
+    }
+  },
+  "rules": []
+}
+```
+
+The built-in defaults keep both Create conveyor-chain and mechanical-belt animations off.
+Their ordinary static BlueMap geometry remains visible.
