@@ -105,6 +105,10 @@ pose_replacement = '''        Vec3 position = entity.getAnchorVec().add(PIVOT);
         if (containingSubLevel != null) {
             var pose = containingSubLevel.logicalPose();
             Vec3 localPosition = position;
+            Quaternionf localRotation = new Quaternionf(rotation);
+            rememberSableContraption(
+                    level, entity, geometry, localPosition, localRotation, containingSubLevel);
+
             position = pose.transformPosition(localPosition);
 
             var parentRotation = pose.orientation();
