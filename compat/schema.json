@@ -141,6 +141,12 @@
               }
             }
           }
+        },
+        "features": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          }
         }
       }
     }

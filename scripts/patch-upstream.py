@@ -63,7 +63,22 @@ s = s.replace(
     import_needle
         + '\nimport dev.duzo.bluemap3d.compat.CompatRegistry;'
         + '\nimport dev.ryanhcode.sable.Sable;'
-        + '\nimport dev.ryanhcode.sable.sublevel.SubLevel;',
+        + '\nimport dev.ryanhcode.sable.api.sublevel.SubLevelContainer;'
+        + '\nimport dev.ryanhcode.sable.sublevel.SubLevel;'
+        + '\nimport com.simibubi.create.content.contraptions.ControlledContraptionEntity;'
+        + '\nimport com.simibubi.create.content.contraptions.bearing.MechanicalBearingBlockEntity;'
+        + '\nimport net.minecraft.world.level.block.entity.BlockEntity;'
+        + '\nimport net.minecraft.nbt.ListTag;'
+        + '\nimport net.minecraft.nbt.NbtAccounter;'
+        + '\nimport net.minecraft.nbt.NbtIo;'
+        + '\nimport net.minecraft.nbt.Tag;'
+        + '\nimport java.io.IOException;'
+        + '\nimport java.io.InputStream;'
+        + '\nimport java.io.OutputStream;'
+        + '\nimport java.nio.file.Files;'
+        + '\nimport java.nio.file.Path;'
+        + '\nimport java.nio.file.StandardCopyOption;'
+        + '\nimport java.nio.file.StandardOpenOption;',
     1,
 )
 
@@ -74,7 +89,14 @@ s = s.replace(
     trace_needle,
     trace_needle
         + '\n\n    /** Contraption classes already reported as projected out of a Sable ship. */'
-        + '\n    private final Set<String> sableProjected = ConcurrentHashMap.newKeySet();',
+        + '\n    private final Set<String> sableProjected = ConcurrentHashMap.newKeySet();'
+        + '\n\n    /** Last known child contraptions for Sable ships, retained when their live entity unloads. */'
+        + '\n    private final Map<ServerLevel, Map<String, SableContraptionCache>> sableContraptionCaches = new ConcurrentHashMap<>();'
+        + '\n\n    /** ControlledContraptionEntity controller position, used only to invalidate disassembled cached rotors. */'
+        + '\n    private static final Field CONTROLLER_POS_FIELD = controllerPosField();'
+        + '\n\n    /** Persistent last-known Sable child snapshots, separate from user-editable compatibility config. */'
+        + '\n    private static final Path SABLE_CACHE_FILE = Path.of("config", "bluemap3d", "cache", "sable-child-contraptions.nbt");'
+        + '\n    private final Set<ResourceKey<Level>> sablePersistentLoaded = ConcurrentHashMap.newKeySet();',
     1,
 )
 
@@ -97,6 +119,10 @@ pose_replacement = '''        Vec3 position = entity.getAnchorVec().add(PIVOT);
         if (containingSubLevel != null) {
             var pose = containingSubLevel.logicalPose();
             Vec3 localPosition = position;
+            Quaternionf localRotation = new Quaternionf(rotation);
+            rememberSableContraption(
+                    level, entity, geometry, localPosition, localRotation, containingSubLevel);
+
             position = pose.transformPosition(localPosition);
 
             var parentRotation = pose.orientation();
@@ -114,6 +140,349 @@ pose_replacement = '''        Vec3 position = entity.getAnchorVec().add(PIVOT);
             }
         }'''
 s = s.replace(pose_needle, pose_replacement, 1)
+
+objects_needle = '''        List<? extends AbstractContraptionEntity> entities = level.getEntities(
+                EntityTypeTest.forClass(AbstractContraptionEntity.class),
+                e -> !(e instanceof CarriageContraptionEntity));
+        for (AbstractContraptionEntity entity : entities) {
+            SceneObject object = toSceneObject(level, entity, maxBlocks);
+            if (object != null) {
+                out.add(object);
+            }
+        }
+
+        out.addAll(trainCarriages(level, maxBlocks));'''
+if objects_needle not in s:
+    raise SystemExit("ContraptionProvider Sable cache object-loop insertion point not found")
+s = s.replace(objects_needle, '''        loadPersistentSableContraptions(level, maxBlocks);
+
+        List<? extends AbstractContraptionEntity> entities = level.getEntities(
+                EntityTypeTest.forClass(AbstractContraptionEntity.class),
+                e -> !(e instanceof CarriageContraptionEntity));
+        Set<String> liveSableContraptions = new HashSet<>();
+        for (AbstractContraptionEntity entity : entities) {
+            SubLevel liveSubLevel = Sable.HELPER.getContaining(entity);
+            if (liveSubLevel != null) {
+                liveSableContraptions.add(sableContraptionKey(entity, liveSubLevel));
+            }
+
+            SceneObject object = toSceneObject(level, entity, maxBlocks);
+            if (object != null) {
+                out.add(object);
+            }
+        }
+
+        appendCachedSableContraptions(level, out, liveSableContraptions);
+        out.addAll(trainCarriages(level, maxBlocks));''', 1)
+
+
+# Persist Sable child contraptions after their Create entity unloads due player distance.
+cache_anchor = '''    /**
+     * Walks {@code Create.RAILWAYS.trains} rather than any entity list, so a train carries
+'''
+if cache_anchor not in s:
+    raise SystemExit("ContraptionProvider Sable cache method insertion point not found")
+cache_methods = '''    private void rememberSableContraption(
+            ServerLevel level,
+            AbstractContraptionEntity entity,
+            CarriageGeometry geometry,
+            Vec3 localPosition,
+            Quaternionf localRotation,
+            SubLevel subLevel) {
+        String objectId = level.dimension().location().getNamespace()
+                + "/" + level.dimension().location().getPath()
+                + "/" + entity.getUUID();
+
+        BlockPos controllerPos = controllerPosOf(entity);
+        String cacheKey = sableContraptionKey(entity, subLevel);
+        SableContraptionCache next = new SableContraptionCache(
+                objectId,
+                geometry.volume(),
+                geometry.version(),
+                localPosition,
+                new Quaternionf(localRotation),
+                subLevel.getUniqueId(),
+                controllerPos,
+                level.dimension(),
+                entity.getContraption().writeNBT(level.registryAccess(), false));
+
+        SableContraptionCache previous = sableContraptionCaches
+                .computeIfAbsent(level, ignored -> new ConcurrentHashMap<>())
+                .put(cacheKey, next);
+
+        if (previous == null || previous.version() != next.version()) {
+            savePersistentSableCaches();
+        }
+    }
+
+    private void loadPersistentSableContraptions(ServerLevel level, int maxBlocks) {
+        if (!sablePersistentLoaded.add(level.dimension())) return;
+        if (!Files.isRegularFile(SABLE_CACHE_FILE)) return;
+
+        try (InputStream input = Files.newInputStream(SABLE_CACHE_FILE)) {
+            CompoundTag root = NbtIo.readCompressed(input, NbtAccounter.unlimitedHeap());
+            ListTag entries = root.getList("Entries", Tag.TAG_COMPOUND);
+            String dimensionId = level.dimension().location().toString();
+            Map<String, SableContraptionCache> levelCache = sableContraptionCaches
+                    .computeIfAbsent(level, ignored -> new ConcurrentHashMap<>());
+
+            int restored = 0;
+            for (int i = 0; i < entries.size(); i++) {
+                CompoundTag entry = entries.getCompound(i);
+                if (!dimensionId.equals(entry.getString("Dimension"))) continue;
+                if (!entry.hasUUID("SubLevel")
+                        || !entry.contains("Contraption", Tag.TAG_COMPOUND)) {
+                    continue;
+                }
+
+                String key = entry.getString("Key");
+                if (key.isBlank() || levelCache.containsKey(key)) continue;
+
+                CompoundTag contraptionNbt = entry.getCompound("Contraption").copy();
+                Contraption contraption = Contraption.fromNBT(level, contraptionNbt, false);
+                CarriageGeometry geometry = buildGeometry(
+                        contraption, maxBlocks, "persisted Sable child " + key);
+                if (geometry == null) continue;
+
+                BlockPos controllerPos = entry.contains("ControllerPos", Tag.TAG_LONG)
+                        ? BlockPos.of(entry.getLong("ControllerPos"))
+                        : null;
+                Vec3 localPosition = new Vec3(
+                        entry.getDouble("PosX"),
+                        entry.getDouble("PosY"),
+                        entry.getDouble("PosZ"));
+                Quaternionf localRotation = new Quaternionf(
+                        entry.getFloat("RotX"),
+                        entry.getFloat("RotY"),
+                        entry.getFloat("RotZ"),
+                        entry.getFloat("RotW"));
+
+                levelCache.put(key, new SableContraptionCache(
+                        entry.getString("ObjectId"),
+                        geometry.volume(),
+                        geometry.version(),
+                        localPosition,
+                        localRotation,
+                        entry.getUUID("SubLevel"),
+                        controllerPos,
+                        level.dimension(),
+                        contraptionNbt));
+                restored++;
+            }
+
+            if (restored > 0) {
+                LOGGER.info(
+                        "Restored {} persisted Sable child contraption(s) for {}",
+                        restored, dimensionId);
+            }
+        } catch (IOException | RuntimeException error) {
+            LOGGER.warn(
+                    "Could not restore persisted Sable child contraptions from {}",
+                    SABLE_CACHE_FILE, error);
+        }
+    }
+
+    private void savePersistentSableCaches() {
+        try {
+            Files.createDirectories(SABLE_CACHE_FILE.getParent());
+
+            ListTag entries = new ListTag();
+            Set<String> replacedDimensions = new HashSet<>();
+            for (ServerLevel cachedLevel : sableContraptionCaches.keySet()) {
+                replacedDimensions.add(cachedLevel.dimension().location().toString());
+            }
+
+            // Preserve dimensions that this process has not materialized into memory yet.
+            // Once a dimension has a live cache map, the in-memory state is authoritative
+            // so removals/disassemblies are allowed to delete its persisted entries.
+            if (Files.isRegularFile(SABLE_CACHE_FILE)) {
+                try (InputStream input = Files.newInputStream(SABLE_CACHE_FILE)) {
+                    CompoundTag previousRoot =
+                            NbtIo.readCompressed(input, NbtAccounter.unlimitedHeap());
+                    ListTag previousEntries =
+                            previousRoot.getList("Entries", Tag.TAG_COMPOUND);
+                    for (int i = 0; i < previousEntries.size(); i++) {
+                        CompoundTag previous = previousEntries.getCompound(i);
+                        if (!replacedDimensions.contains(previous.getString("Dimension"))) {
+                            entries.add(previous.copy());
+                        }
+                    }
+                } catch (IOException | RuntimeException error) {
+                    LOGGER.warn(
+                            "Could not preserve untouched dimensions from Sable child cache",
+                            error);
+                }
+            }
+
+            for (Map.Entry<ServerLevel, Map<String, SableContraptionCache>> levelEntry
+                    : sableContraptionCaches.entrySet()) {
+                for (Map.Entry<String, SableContraptionCache> cacheEntry
+                        : levelEntry.getValue().entrySet()) {
+                    SableContraptionCache cached = cacheEntry.getValue();
+                    if (cached.contraptionNbt() == null
+                            || cached.contraptionNbt().isEmpty()) {
+                        continue;
+                    }
+
+                    CompoundTag entry = new CompoundTag();
+                    entry.putString("Dimension", cached.dimension().location().toString());
+                    entry.putString("Key", cacheEntry.getKey());
+                    entry.putString("ObjectId", cached.objectId());
+                    entry.putUUID("SubLevel", cached.subLevelId());
+                    if (cached.controllerPos() != null) {
+                        entry.putLong("ControllerPos", cached.controllerPos().asLong());
+                    }
+                    entry.putDouble("PosX", cached.localPosition().x);
+                    entry.putDouble("PosY", cached.localPosition().y);
+                    entry.putDouble("PosZ", cached.localPosition().z);
+                    entry.putFloat("RotX", cached.localRotation().x);
+                    entry.putFloat("RotY", cached.localRotation().y);
+                    entry.putFloat("RotZ", cached.localRotation().z);
+                    entry.putFloat("RotW", cached.localRotation().w);
+                    entry.put("Contraption", cached.contraptionNbt().copy());
+                    entries.add(entry);
+                }
+            }
+
+            CompoundTag root = new CompoundTag();
+            root.putInt("Version", 1);
+            root.put("Entries", entries);
+
+            Path temporary = SABLE_CACHE_FILE.resolveSibling(
+                    SABLE_CACHE_FILE.getFileName() + ".tmp");
+            try (OutputStream output = Files.newOutputStream(
+                    temporary,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE)) {
+                NbtIo.writeCompressed(root, output);
+            }
+            Files.move(
+                    temporary,
+                    SABLE_CACHE_FILE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException | RuntimeException error) {
+            LOGGER.warn(
+                    "Could not persist Sable child contraption cache to {}",
+                    SABLE_CACHE_FILE, error);
+        }
+    }
+
+    private void appendCachedSableContraptions(
+            ServerLevel level,
+            List<SceneObject> out,
+            Set<String> liveIds) {
+        Map<String, SableContraptionCache> cache = sableContraptionCaches.get(level);
+        if (cache == null || cache.isEmpty()) return;
+
+        SubLevelContainer container = SubLevelContainer.getContainer(level);
+        if (container == null) return;
+
+        for (Map.Entry<String, SableContraptionCache> entry : new ArrayList<>(cache.entrySet())) {
+            if (liveIds.contains(entry.getKey())) continue;
+
+            SableContraptionCache cached = entry.getValue();
+            SubLevel subLevel = container.getSubLevel(cached.subLevelId());
+            if (subLevel == null || subLevel.isRemoved()) {
+                cache.remove(entry.getKey());
+                savePersistentSableCaches();
+                continue;
+            }
+
+            // If the owning bearing is available and reports that it is no longer running,
+            // this was a real disassembly rather than a distance-based entity unload.
+            if (cached.controllerPos() != null) {
+                BlockEntity controller = level.getBlockEntity(cached.controllerPos());
+                if (controller instanceof MechanicalBearingBlockEntity bearing
+                        && !bearing.isRunning()) {
+                    cache.remove(entry.getKey());
+                    savePersistentSableCaches();
+                    continue;
+                }
+            }
+
+            var pose = subLevel.logicalPose();
+            Vec3 worldPosition = pose.transformPosition(cached.localPosition());
+            var parentRotation = pose.orientation();
+            Quaternionf worldRotation = new Quaternionf(
+                    (float) parentRotation.x(), (float) parentRotation.y(),
+                    (float) parentRotation.z(), (float) parentRotation.w())
+                    .mul(new Quaternionf(cached.localRotation()));
+
+            out.add(sceneObjectOf(
+                    cached.objectId(),
+                    cached.volume(),
+                    cached.version(),
+                    worldPosition,
+                    worldRotation,
+                    cached.dimension()));
+        }
+    }
+
+    private static String sableContraptionKey(
+            AbstractContraptionEntity entity,
+            SubLevel subLevel) {
+        BlockPos controller = controllerPosOf(entity);
+        String child = controller == null
+                ? entity.getUUID().toString()
+                : Long.toUnsignedString(controller.asLong());
+        return subLevel.getUniqueId() + "/" + child;
+    }
+
+    private static BlockPos controllerPosOf(AbstractContraptionEntity entity) {
+        if (CONTROLLER_POS_FIELD == null || !(entity instanceof ControlledContraptionEntity)) {
+            return null;
+        }
+        try {
+            Object value = CONTROLLER_POS_FIELD.get(entity);
+            return value instanceof BlockPos pos ? pos.immutable() : null;
+        } catch (IllegalAccessException error) {
+            return null;
+        }
+    }
+
+    private static Field controllerPosField() {
+        try {
+            Field field = ControlledContraptionEntity.class.getDeclaredField("controllerPos");
+            field.setAccessible(true);
+            return field;
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            LOGGER.warn("Could not access ControlledContraptionEntity.controllerPos; "
+                    + "cached Sable child contraptions will only expire with their sublevel", error);
+            return null;
+        }
+    }
+
+    private record SableContraptionCache(
+            String objectId,
+            BlockVolume volume,
+            long version,
+            Vec3 localPosition,
+            Quaternionf localRotation,
+            UUID subLevelId,
+            BlockPos controllerPos,
+            ResourceKey<Level> dimension,
+            CompoundTag contraptionNbt) {
+    }
+
+'''
+s = s.replace(cache_anchor, cache_methods + cache_anchor, 1)
+
+clear_needle = '''    public void clear() {
+        carriageCaches.clear();
+    }'''
+if clear_needle not in s:
+    raise SystemExit("ContraptionProvider clear() insertion point not found")
+s = s.replace(
+    clear_needle,
+    '''    public void clear() {
+        savePersistentSableCaches();
+        carriageCaches.clear();
+        sableContraptionCaches.clear();
+        sablePersistentLoaded.clear();
+    }''',
+    1,
+)
 p.write_text(s)
 
 # Register the live chain-conveyor overlay provider beside the existing bearing provider.
@@ -190,7 +559,7 @@ replace(
     'var BUILD = "core-history-15-special-models";',
     'var BUILD = "core-history-33-config-compat";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.0")
+replace("gradle.properties", "version=1.0.9", "version=1.1.1")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
@@ -205,7 +574,8 @@ s = s.replace(
         + '\nimport dev.duzo.bluemap3d.bake.ConfiguredRuleSource;'
         + '\nimport dev.duzo.bluemap3d.bake.TrafficCraftSignSource;'
         + '\nimport dev.duzo.bluemap3d.bake.SymmetricSailSource;'
-        + '\nimport dev.duzo.bluemap3d.bake.ChainConveyorSource;',
+        + '\nimport dev.duzo.bluemap3d.bake.ChainConveyorSource;'
+        + '\nimport dev.duzo.bluemap3d.compat.CompatRegistry;',
     1,
 )
 
@@ -228,7 +598,8 @@ if needle not in s:
     raise SystemExit("BlueMap3D startup marker insertion point not found")
 s = s.replace(
     needle,
-    needle + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.0 active; BlueMap target is 5.7.");',
+    'CompatRegistry.get();\n\n        ' + needle
+        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.1 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)

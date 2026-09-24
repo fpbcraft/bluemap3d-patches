@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.1.0"
+VERSION="1.1.1"
 
 python3 "$ROOT/scripts/validate-compat.py"
 
@@ -63,6 +63,8 @@ cp -R "$ROOT/compat/builtin" addon-compat/src/main/resources/bluemap3d-compat/
 cp -R "$ROOT/compat/builtin" core/src/main/resources/bluemap3d-compat/
 cp "$ROOT/compat/schema.json" addon-compat/src/main/resources/bluemap3d-compat/schema.json
 cp "$ROOT/compat/schema.json" core/src/main/resources/bluemap3d-compat/schema.json
+cp "$ROOT/compat/local-template.json" addon-compat/src/main/resources/bluemap3d-compat/local-template.json
+cp "$ROOT/compat/local-template.json" core/src/main/resources/bluemap3d-compat/local-template.json
 
 python3 "$ROOT/scripts/patch-upstream.py"
 

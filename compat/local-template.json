@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "local",
+  "description": "Your local BlueMap compatibility additions and overrides. A rule id matching a built-in rule replaces that built-in rule.",
+  "moving": {
+    "modelNamespaces": {
+      "include": [],
+      "exclude": []
+    },
+    "features": {}
+  },
+  "rules": [
+    {
+      "id": "example-custom-leaves",
+      "enabled": false,
+      "priority": 100,
+      "scope": ["terrain", "moving"],
+      "match": {
+        "blocks": ["examplemod:*_leaves"]
+      },
+      "tint": {
+        "type": "none"
+      }
+    }
+  ]
+}

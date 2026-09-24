@@ -1,6 +1,7 @@
 package dev.duzo.bluemap3d.compat;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,11 +32,17 @@ import java.util.stream.Stream;
 public final class CompatRegistry {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/CompatRegistry");
-    private static final Gson GSON = new Gson();
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int SCHEMA_VERSION = 1;
     private static final String BUILTIN_ROOT = "bluemap3d-compat/builtin/";
     private static final Path EXTERNAL_DIRECTORY =
             Path.of("config", "bluemap3d", "compat");
+    private static final Path GENERATED_REFERENCE =
+            EXTERNAL_DIRECTORY.resolve("supported-defaults.generated.json");
+    private static final Path LOCAL_CONFIG =
+            EXTERNAL_DIRECTORY.resolve("local.json");
+    private static final String LOCAL_TEMPLATE =
+            "bluemap3d-compat/local-template.json";
     private static final long RELOAD_INTERVAL_NANOS = 5_000_000_000L;
 
     private static final CompatRegistry INSTANCE = new CompatRegistry();
@@ -60,6 +67,11 @@ public final class CompatRegistry {
             return false;
         }
         return current.movingIncludes.stream().anyMatch(pattern -> pattern.matches(namespace));
+    }
+
+    public boolean featureEnabled(String feature, boolean defaultValue) {
+        if (feature == null || feature.isBlank()) return defaultValue;
+        return current().features.getOrDefault(feature, defaultValue);
     }
 
     public TintMatch tint(String blockId, Map<String, String> properties) {
@@ -104,9 +116,11 @@ public final class CompatRegistry {
         Map<String, Rule> rules = new LinkedHashMap<>();
         Set<String> include = new LinkedHashSet<>();
         Set<String> exclude = new LinkedHashSet<>();
+        Map<String, Boolean> features = new LinkedHashMap<>();
 
-        loadBuiltins(rules, include, exclude);
-        loadExternal(rules, include, exclude);
+        loadBuiltins(rules, include, exclude, features);
+        materializeConfigFiles(rules, include, exclude, features);
+        loadExternal(rules, include, exclude, features);
 
         List<Rule> compiled = new ArrayList<>();
         for (Rule rule : rules.values()) {
@@ -127,18 +141,20 @@ public final class CompatRegistry {
         snapshot = new Snapshot(
                 List.copyOf(compiled),
                 include.stream().map(Glob::new).toList(),
-                exclude.stream().map(Glob::new).toList());
+                exclude.stream().map(Glob::new).toList(),
+                Map.copyOf(features));
         fingerprint = fingerprint();
 
         LOGGER.info(
-                "Loaded moving compatibility: {} rule(s), {} namespace include pattern(s), {} exclude pattern(s)",
-                compiled.size(), include.size(), exclude.size());
+                "Loaded moving compatibility: {} rule(s), {} namespace include pattern(s), {} exclude pattern(s), {} feature flag(s)",
+                compiled.size(), include.size(), exclude.size(), features.size());
     }
 
     private static void loadBuiltins(
             Map<String, Rule> rules,
             Set<String> include,
-            Set<String> exclude) {
+            Set<String> exclude,
+            Map<String, Boolean> features) {
         ClassLoader loader = CompatRegistry.class.getClassLoader();
         try (InputStream index = loader.getResourceAsStream(BUILTIN_ROOT + "index.txt")) {
             if (index == null) {
@@ -156,7 +172,7 @@ public final class CompatRegistry {
                         LOGGER.warn("Compatibility builtin is missing: {}", name);
                         continue;
                     }
-                    merge(read(input), rules, include, exclude);
+                    merge(read(input), rules, include, exclude, features);
                 }
             }
         } catch (IOException | RuntimeException error) {
@@ -167,7 +183,8 @@ public final class CompatRegistry {
     private static void loadExternal(
             Map<String, Rule> rules,
             Set<String> include,
-            Set<String> exclude) {
+            Set<String> exclude,
+            Map<String, Boolean> features) {
         try {
             Files.createDirectories(EXTERNAL_DIRECTORY);
         } catch (IOException error) {
@@ -177,11 +194,11 @@ public final class CompatRegistry {
         try (Stream<Path> files = Files.list(EXTERNAL_DIRECTORY)) {
             for (Path file : files
                     .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".json"))
+                    .filter(CompatRegistry::isExternalConfig)
                     .sorted()
                     .toList()) {
                 try (InputStream input = Files.newInputStream(file)) {
-                    merge(read(input), rules, include, exclude);
+                    merge(read(input), rules, include, exclude, features);
                 } catch (IOException | RuntimeException error) {
                     LOGGER.warn("Could not load compatibility config {}: {}",
                             file, error.toString());
@@ -206,7 +223,8 @@ public final class CompatRegistry {
             Document document,
             Map<String, Rule> rules,
             Set<String> include,
-            Set<String> exclude) {
+            Set<String> exclude,
+            Map<String, Boolean> features) {
         if (document.rules != null) {
             for (Rule rule : document.rules) {
                 if (rule == null || rule.id == null || rule.id.isBlank()) continue;
@@ -215,11 +233,70 @@ public final class CompatRegistry {
             }
         }
 
-        if (document.moving != null && document.moving.modelNamespaces != null) {
-            NamespacePolicy policy = document.moving.modelNamespaces;
-            if (policy.include != null) include.addAll(policy.include);
-            if (policy.exclude != null) exclude.addAll(policy.exclude);
+        if (document.moving != null) {
+            if (document.moving.modelNamespaces != null) {
+                NamespacePolicy policy = document.moving.modelNamespaces;
+                if (policy.include != null) include.addAll(policy.include);
+                if (policy.exclude != null) exclude.addAll(policy.exclude);
+            }
+            if (document.moving.features != null) {
+                features.putAll(document.moving.features);
+            }
         }
+    }
+
+    private static void materializeConfigFiles(
+            Map<String, Rule> rules,
+            Set<String> include,
+            Set<String> exclude,
+            Map<String, Boolean> features) {
+        try {
+            Files.createDirectories(EXTERNAL_DIRECTORY);
+
+            Document reference = new Document();
+            reference.schemaVersion = SCHEMA_VERSION;
+            reference.id = "supported-defaults-generated";
+            reference.description =
+                    "Generated reference for the compatibility rules bundled with this build. "
+                    + "Do not edit this file; put changes in local.json or another .json file.";
+            reference.rules = new ArrayList<>(rules.values());
+
+            Moving moving = new Moving();
+            NamespacePolicy policy = new NamespacePolicy();
+            policy.include = new ArrayList<>(include);
+            policy.exclude = new ArrayList<>(exclude);
+            moving.modelNamespaces = policy;
+            moving.features = new LinkedHashMap<>(features);
+            reference.moving = moving;
+
+            Files.writeString(
+                    GENERATED_REFERENCE,
+                    GSON.toJson(reference) + System.lineSeparator(),
+                    StandardCharsets.UTF_8);
+
+            if (!Files.exists(LOCAL_CONFIG)) {
+                try (InputStream input = CompatRegistry.class.getClassLoader()
+                        .getResourceAsStream(LOCAL_TEMPLATE)) {
+                    if (input == null) {
+                        LOGGER.warn("Compatibility local template is missing from the bundle");
+                    } else {
+                        Files.write(
+                                LOCAL_CONFIG,
+                                input.readAllBytes(),
+                                java.nio.file.StandardOpenOption.CREATE_NEW);
+                    }
+                }
+            }
+        } catch (java.nio.file.FileAlreadyExistsException ignored) {
+            // Another compatibility component won the startup race creating local.json.
+        } catch (IOException | RuntimeException error) {
+            LOGGER.warn("Could not materialize compatibility config files: {}", error.toString());
+        }
+    }
+
+    private static boolean isExternalConfig(Path path) {
+        String name = path.getFileName().toString();
+        return name.endsWith(".json") && !name.endsWith(".generated.json");
     }
 
     private static String fingerprint() {
@@ -229,7 +306,7 @@ public final class CompatRegistry {
         try (Stream<Path> files = Files.list(EXTERNAL_DIRECTORY)) {
             for (Path file : files
                     .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".json"))
+                    .filter(CompatRegistry::isExternalConfig)
                     .sorted()
                     .toList()) {
                 value.append(file.getFileName())
@@ -309,19 +386,23 @@ public final class CompatRegistry {
     private record Snapshot(
             List<Rule> rules,
             List<Glob> movingIncludes,
-            List<Glob> movingExcludes) {
+            List<Glob> movingExcludes,
+            Map<String, Boolean> features) {
         private static final Snapshot EMPTY =
-                new Snapshot(List.of(), List.of(), List.of());
+                new Snapshot(List.of(), List.of(), List.of(), Map.of());
     }
 
     private static final class Document {
         int schemaVersion;
+        String id;
+        String description;
         List<Rule> rules;
         Moving moving;
     }
 
     private static final class Moving {
         NamespacePolicy modelNamespaces;
+        Map<String, Boolean> features;
     }
 
     private static final class NamespacePolicy {

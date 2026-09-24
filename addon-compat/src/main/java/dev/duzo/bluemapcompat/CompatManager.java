@@ -91,7 +91,10 @@ final class CompatManager {
         try (var files = Files.list(directory)) {
             for (Path file : files
                     .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".json"))
+                    .filter(path -> {
+                        String name = path.getFileName().toString();
+                        return name.endsWith(".json") && !name.endsWith(".generated.json");
+                    })
                     .sorted()
                     .toList()) {
                 value.append(file.getFileName())
