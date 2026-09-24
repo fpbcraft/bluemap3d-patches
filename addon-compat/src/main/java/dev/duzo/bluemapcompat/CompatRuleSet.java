@@ -31,6 +31,8 @@ final class CompatRuleSet {
 
     static final int SCHEMA_VERSION = 1;
     static final Path EXTERNAL_DIRECTORY = Path.of("config", "bluemap3d", "compat");
+    private static final Path LOCAL_CONFIG = EXTERNAL_DIRECTORY.resolve("local.json");
+    private static final String LOCAL_TEMPLATE = "bluemap3d-compat/local-template.json";
 
     private static final String BUILTIN_ROOT = "bluemap3d-compat/builtin/";
     private static final Gson GSON = new Gson();
@@ -120,6 +122,7 @@ final class CompatRuleSet {
     private static void loadExternal(Map<String, Rule> merged) {
         try {
             Files.createDirectories(EXTERNAL_DIRECTORY);
+            ensureLocalConfig();
         } catch (IOException error) {
             Logger.global.logWarning(String.format(
                     "Could not create compatibility config directory %s: %s",
@@ -130,7 +133,7 @@ final class CompatRuleSet {
         try (Stream<Path> files = Files.list(EXTERNAL_DIRECTORY)) {
             for (Path file : files
                     .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".json"))
+                    .filter(CompatRuleSet::isExternalConfig)
                     .sorted()
                     .toList()) {
                 try (InputStream input = Files.newInputStream(file)) {
@@ -145,6 +148,31 @@ final class CompatRuleSet {
                     "Could not scan compatibility config directory %s: %s",
                     EXTERNAL_DIRECTORY, error));
         }
+    }
+
+    private static void ensureLocalConfig() throws IOException {
+        if (Files.exists(LOCAL_CONFIG)) return;
+
+        try (InputStream input = CompatRuleSet.class.getClassLoader()
+                .getResourceAsStream(LOCAL_TEMPLATE)) {
+            if (input == null) {
+                Logger.global.logWarning("Compatibility local template is missing from the addon");
+                return;
+            }
+            try {
+                Files.write(
+                        LOCAL_CONFIG,
+                        input.readAllBytes(),
+                        java.nio.file.StandardOpenOption.CREATE_NEW);
+            } catch (java.nio.file.FileAlreadyExistsException ignored) {
+                // BlueMap3D core may have created the same file during startup.
+            }
+        }
+    }
+
+    private static boolean isExternalConfig(Path path) {
+        String name = path.getFileName().toString();
+        return name.endsWith(".json") && !name.endsWith(".generated.json");
     }
 
     private static Document read(InputStream input, String source) throws IOException {

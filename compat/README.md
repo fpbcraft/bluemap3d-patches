@@ -4,7 +4,17 @@ Built-in compatibility lives in `compat/builtin/`. Server-local rules go in:
 
 `config/bluemap3d/compat/*.json`
 
-The rule engine hot-reloads external files. Static BlueMap tiles still need to be rerendered after a visual rule changes.
+The rule engine hot-reloads active external files. Static BlueMap tiles still need to be rerendered after a visual rule changes.
+
+At startup the installed bundle materializes two files:
+
+- `supported-defaults.generated.json`: regenerated from bundled defaults and intentionally
+  ignored by the loader. Use it as the authoritative reference for supported built-ins.
+- `local.json`: created once, loaded normally, and safe to edit. Put new rules, feature
+  overrides, namespace patterns, and built-in rule replacements here.
+
+This split keeps defaults visible without letting an old copied default file override newer
+built-ins after an upgrade.
 
 ## Matching
 
@@ -81,3 +91,26 @@ geometry should use a reusable renderer capability instead of a fragile alias.
 Alias templates can use `${id}`, `${namespace}`, `${path}`, and path-segment tokens
 such as `${path0}` / `${path1}`. Aliases resolve against the original resource-pack
 mapping, so alias chains cannot accidentally form cycles.
+
+
+## Moving feature flags
+
+Runtime features that are useful but not universally desirable can be enabled or disabled
+without rebuilding:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "my-runtime-options",
+  "moving": {
+    "features": {
+      "create.chainConveyorAnimation": false,
+      "create.mechanicalBeltAnimation": false
+    }
+  },
+  "rules": []
+}
+```
+
+The built-in defaults keep both Create conveyor-chain and mechanical-belt animations off.
+Their ordinary static BlueMap geometry remains visible.

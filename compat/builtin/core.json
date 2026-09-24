@@ -4,8 +4,15 @@
   "description": "Cross-mod moving-object policy.",
   "moving": {
     "modelNamespaces": {
-      "include": ["copycats", "create_connected"],
+      "include": [
+        "copycats",
+        "create_connected"
+      ],
       "exclude": []
+    },
+    "features": {
+      "create.chainConveyorAnimation": false,
+      "create.mechanicalBeltAnimation": false
     }
   },
   "rules": []

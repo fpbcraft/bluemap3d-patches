@@ -6,6 +6,7 @@ import dev.duzo.bluemap3d.api.BlockVolume;
 import dev.duzo.bluemap3d.api.ModelAttachment;
 import dev.duzo.bluemap3d.api.SceneObject;
 import dev.duzo.bluemap3d.api.SceneObjectProvider;
+import dev.duzo.bluemap3d.compat.CompatRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -71,6 +72,10 @@ public final class ChainConveyorProvider implements SceneObjectProvider {
 
     @Override
     public Collection<? extends SceneObject> objects(ServerLevel level) {
+        if (!CompatRegistry.get().featureEnabled("create.chainConveyorAnimation", false)) {
+            return List.of();
+        }
+
         Map<BlockPos, ConveyorPose> levelCache = cache.computeIfAbsent(
                 level,
                 ignored -> new LinkedHashMap<>(32, 0.75f, true) {

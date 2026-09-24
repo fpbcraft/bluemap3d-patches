@@ -24,8 +24,8 @@ The build produces two installable JARs:
 
 1. **`bluemap3d-bundle-*.jar`** — patched BlueMap3D bundle
    - persistent Sable/Create moving objects
-   - Sable child-contraption world transforms
-   - live Create chain conveyors and mechanical belts
+   - persistent Sable child contraptions (including Aeronautics propeller/sail assemblies), retained across distance unloads and server restarts
+   - optional Create chain-conveyor and mechanical-belt animations (disabled by default)
    - trains/bogeys
    - moving Copycats / Create Connected material support
    - procedural and dynamic-texture adapters
@@ -50,8 +50,14 @@ Built-in rules live in `compat/builtin/`. Server-local additions and overrides g
 config/bluemap3d/compat/*.json
 ```
 
-External files hot-reload approximately every five seconds. Existing static map tiles
-still need to be rerendered after a visual rule changes.
+On startup the bundle now creates:
+
+- `supported-defaults.generated.json` — regenerated reference showing the exact built-in
+  rules and feature flags shipped by the installed build; the loader intentionally ignores it.
+- `local.json` — created once and intended for your own additions/overrides.
+
+External active JSON files hot-reload approximately every five seconds. Existing static map
+tiles still need to be rerendered after a visual rule changes.
 
 Rules support:
 
@@ -62,7 +68,8 @@ Rules support:
 - stable rule IDs, allowing a local rule to replace a built-in rule;
 - separate `terrain` and `moving` scopes;
 - no tint / fixed RGB / NBT-or-adapter-backed palette tint;
-- wildcard moving-model namespace include/exclude policy.
+- wildcard moving-model namespace include/exclude policy;
+- moving runtime feature flags.
 
 Example:
 
@@ -174,6 +181,12 @@ Restart BlueMap/the server after changing addon JARs. External JSON compatibilit
 do not require a JAR rebuild or server restart, but static terrain needs a rerender to
 reflect visual changes.
 
+BlueMap3D stores last-known Sable child-contraption snapshots in
+`config/bluemap3d/cache/sable-child-contraptions.nbt`. This is generated runtime cache
+data, not user configuration. It allows Aeronautics/Create child contraptions to remain
+visible after their live entity unloads and after a normal server restart without
+force-loading the Sable plot.
+
 ## Design rule
 
 Prefer this order when adding support for another mod:
@@ -187,7 +200,7 @@ The goal is to avoid an addon-per-mod architecture.
 
 ## Migrating from 1.0.28
 
-Remove the old native addon JARs before installing 1.1.0:
+Remove the old native addon JARs before installing 1.1.1:
 
 ```text
 config/bluemap/packs/bluemap-copycats-compat-1.0.28.jar
@@ -195,5 +208,20 @@ config/bluemap/packs/bluemap-trafficcraft-compat-1.0.28.jar
 config/bluemap/packs/bluemap-foliage-compat-1.0.28.jar
 ```
 
-Replace them with the single `bluemap-compat-1.1.0.jar`. Keeping the old addons installed
+Replace them with the single `bluemap-compat-1.1.1.jar`. Keeping the old addons installed
 would register duplicate renderer/block-entity hooks.
+
+
+## External BlueMap asset pack
+
+The existing `fpbcraft-bluemap-1.21.1-aeronautics-deep-seas-weathering.zip` is still
+needed for now.
+
+The compatibility addon replaces rendering/tint/decoder behavior, but it does not currently
+extract arbitrary nested third-party assets into BlueMap's resource-pack index. BlueMap 5.7
+scans top-level JARs in `mods/`; the FPBCRAFT pack also exposes Aeronautics' nested
+`aeronautics`, `simulated` and `offroad` assets, plus Deep Seas and Immersive Weathering
+assets in a form BlueMap can consume.
+
+Do not remove that pack yet. A future compatibility capability can replace it by explicitly
+indexing/extracting nested mod resources.
