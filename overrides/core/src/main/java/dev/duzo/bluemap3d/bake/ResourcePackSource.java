@@ -73,6 +73,15 @@ public final class ResourcePackSource implements BlockModelSource {
         return quadCache.computeIfAbsent(state, this::buildQuads);
     }
 
+    /**
+     * Builds the ordinary resource-pack model while replacing client tint-index colors
+     * with a known RGB value. This is intentionally uncached because the tint may come
+     * from per-block block-entity NBT (TrafficCraft paint).
+     */
+    List<ModelQuad> quadsForWithTint(BlockState state, int tint) {
+        return buildQuads(state, tint & 0xFFFFFF);
+    }
+
     @Override
     public BufferedImage texture(String texture) {
         return textureCache.computeIfAbsent(texture, id -> {
@@ -102,6 +111,10 @@ public final class ResourcePackSource implements BlockModelSource {
     // ---------------------------------------------------------------------------------
 
     private List<ModelQuad> buildQuads(BlockState state) {
+        return buildQuads(state, null);
+    }
+
+    private List<ModelQuad> buildQuads(BlockState state, Integer tintOverride) {
         ResourceLocation block = assetBlockId(state);
         JsonObject blockstate = json("assets/" + block.getNamespace() + "/blockstates/" + block.getPath() + ".json");
         if (blockstate == null) {
@@ -114,14 +127,14 @@ public final class ResourcePackSource implements BlockModelSource {
                 JsonObject variants = blockstate.getAsJsonObject("variants");
                 JsonElement chosen = selectVariant(variants, state);
                 if (chosen != null) {
-                    appendVariant(out, firstOf(chosen), state);
+                    appendVariant(out, firstOf(chosen), state, tintOverride);
                 }
             } else if (blockstate.has("multipart")) {
                 JsonArray multipart = blockstate.getAsJsonArray("multipart");
                 for (JsonElement partEl : multipart) {
                     JsonObject part = partEl.getAsJsonObject();
                     if (!part.has("when") || matches(part.getAsJsonObject("when"), state)) {
-                        appendVariant(out, firstOf(part.get("apply")), state);
+                        appendVariant(out, firstOf(part.get("apply")), state, tintOverride);
                     }
                 }
 
@@ -131,7 +144,7 @@ public final class ResourcePackSource implements BlockModelSource {
                 // loader duplicates a cardinal side selector and rotates it 45 degrees.
                 // Dedicated-server model parsing never runs that loader, so reproduce
                 // exactly that augmentation here for moving BlueMap3D objects.
-                appendDiagonalMultipart(out, multipart, state);
+                appendDiagonalMultipart(out, multipart, state, tintOverride);
             }
         } catch (RuntimeException e) {
             LOGGER.debug("Could not model {}: {}", state, e.toString());
@@ -300,7 +313,8 @@ public final class ResourcePackSource implements BlockModelSource {
     private void appendDiagonalMultipart(
             List<ModelQuad> out,
             JsonArray multipart,
-            BlockState state) {
+            BlockState state,
+            Integer tintOverride) {
         Map<String, String> properties = propertiesOf(state);
 
         for (JsonElement partEl : multipart) {
@@ -326,7 +340,7 @@ public final class ResourcePackSource implements BlockModelSource {
             // geometry -45 degrees around the block centre. Without the stretch, diagonal
             // fences/windows stop short of the block corner.
             List<ModelQuad> segment = new ArrayList<>();
-            appendVariant(segment, firstOf(part.get("apply")), state);
+            appendVariant(segment, firstOf(part.get("apply")), state, tintOverride);
             for (ModelQuad quad : segment) {
                 out.add(diagonalize(quad, cardinal));
             }
@@ -493,16 +507,32 @@ public final class ResourcePackSource implements BlockModelSource {
     }
 
     private void appendVariant(List<ModelQuad> out, JsonObject variant, BlockState state) {
-        appendVariant(out, variant, state, 0);
+        appendVariant(out, variant, state, 0, null);
+    }
+
+    private void appendVariant(
+            List<ModelQuad> out, JsonObject variant, BlockState state, Integer tintOverride) {
+        appendVariant(out, variant, state, 0, tintOverride);
     }
 
     private void appendVariant(List<ModelQuad> out, JsonObject variant, BlockState state, int extraY) {
+        appendVariant(out, variant, state, extraY, null);
+    }
+
+    private void appendVariant(
+            List<ModelQuad> out,
+            JsonObject variant,
+            BlockState state,
+            int extraY,
+            Integer tintOverride) {
         if (variant == null || !variant.has("model")) {
             return;
         }
         int rotX = variant.has("x") ? variant.get("x").getAsInt() : 0;
         int rotY = (variant.has("y") ? variant.get("y").getAsInt() : 0) + extraY;
-        appendModel(out, variant.get("model").getAsString(), rotX, rotY, Map.of(), state);
+        appendModel(
+                out, variant.get("model").getAsString(), rotX, rotY,
+                Map.of(), state, tintOverride);
     }
 
     /**
@@ -513,6 +543,12 @@ public final class ResourcePackSource implements BlockModelSource {
      */
     private void appendModel(List<ModelQuad> out, String modelRef, int rotX, int rotY,
                              Map<String, String> overrides, BlockState state) {
+        appendModel(out, modelRef, rotX, rotY, overrides, state, null);
+    }
+
+    private void appendModel(List<ModelQuad> out, String modelRef, int rotX, int rotY,
+                             Map<String, String> overrides, BlockState state,
+                             Integer tintOverride) {
         JsonObject objStub = findObjStub(modelRef);
         if (objStub != null) {
             List<ModelQuad> obj = new ArrayList<>();
@@ -608,12 +644,17 @@ public final class ResourcePackSource implements BlockModelSource {
                 // stands in. Untinted faces are left alone.
                 int tint = 0xFFFFFF;
                 // state is null for attachments, which name a model directly and so have no
-                // block to take a colour from.
+                // block to take a colour from. A compatibility source may provide the exact
+                // client-side tint (for example TrafficCraft paint from block-entity NBT).
                 if (state != null && faceDef.has("tintindex")
                         && faceDef.get("tintindex").getAsInt() >= 0) {
-                    int approximate = MapColorSource.mapColorOf(state);
-                    if (approximate >= 0) {
-                        tint = approximate;
+                    if (tintOverride != null) {
+                        tint = tintOverride;
+                    } else {
+                        int approximate = MapColorSource.mapColorOf(state);
+                        if (approximate >= 0) {
+                            tint = approximate;
+                        }
                     }
                 }
 
