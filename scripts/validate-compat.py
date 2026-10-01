@@ -108,11 +108,18 @@ def main() -> None:
             match = rule.get("match")
             if not isinstance(match, dict):
                 fail(f"{where}: match object is required")
-            blocks = match.get("blocks")
-            if not isinstance(blocks, list) or not blocks or not all(
+            blocks = match.get("blocks", [])
+            models = match.get("models", [])
+            if not isinstance(blocks, list) or not all(
                 isinstance(item, str) and item for item in blocks
             ):
-                fail(f"{where}: match.blocks must contain patterns")
+                fail(f"{where}: match.blocks must contain strings")
+            if not isinstance(models, list) or not all(
+                isinstance(item, str) and item for item in models
+            ):
+                fail(f"{where}: match.models must contain strings")
+            if not blocks and not models:
+                fail(f"{where}: match must contain block or model patterns")
 
             for key in ("exclude",):
                 values = match.get(key, [])
@@ -180,19 +187,31 @@ def main() -> None:
                     fail(f"{where}: wildcard captures are 1-based")
                 if capture_refs:
                     highest_capture = max(capture_refs)
-                    for block_pattern in blocks:
-                        available = block_pattern.count("*")
+                    capture_patterns = (
+                        models
+                        if model_type == "resource_alias" and models
+                        else blocks
+                    )
+                    if not capture_patterns:
+                        fail(
+                            f"{where}: model type {model_type!r} has no "
+                            "compatible match patterns"
+                        )
+                    for pattern in capture_patterns:
+                        available = pattern.count("*")
                         if available < highest_capture:
                             fail(
                                 f"{where}: model template references "
-                                f"${{{highest_capture}}} but block pattern "
-                                f"{block_pattern!r} has only "
+                                f"${{{highest_capture}}} but pattern "
+                                f"{pattern!r} has only "
                                 f"{available} '*' capture(s)"
                             )
 
             tint = rule.get("tint")
             if tint is None:
                 continue
+            if not blocks:
+                fail(f"{where}: tint rules require match.blocks")
             if not isinstance(tint, dict):
                 fail(f"{where}: tint must be an object")
 
