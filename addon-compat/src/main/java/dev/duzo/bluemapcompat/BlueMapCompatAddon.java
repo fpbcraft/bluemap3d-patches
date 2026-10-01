@@ -4,6 +4,7 @@ import de.bluecolored.bluemap.api.BlueMapAPI;
 import de.bluecolored.bluemap.core.logger.Logger;
 import dev.duzo.bluemapcopycats.BlueMapCopycatsCompatAddon;
 import dev.duzo.bluemaptrafficcraft.TrafficCraftAdapter;
+import dev.duzo.bluemapdynamictrees.DynamicTreesTerrainAdapter;
 
 /**
  * Single native BlueMap compatibility entrypoint.
@@ -19,6 +20,7 @@ public final class BlueMapCompatAddon implements Runnable {
         // Specialized adapters share this one native BlueMap addon artifact.
         new BlueMapCopycatsCompatAddon().run();
         TrafficCraftAdapter.register();
+        DynamicTreesTerrainAdapter.register();
         CompatManager.start();
 
         BlueMapAPI.onEnable(api -> {
@@ -28,6 +30,6 @@ public final class BlueMapCompatAddon implements Runnable {
         });
 
         Logger.global.logInfo(
-                "BlueMap Compat loaded: config-driven rules + TrafficCraft dynamic-texture adapter");
+                "BlueMap Compat loaded: config-driven rules + TrafficCraft + native Dynamic Trees terrain");
     }
 }
