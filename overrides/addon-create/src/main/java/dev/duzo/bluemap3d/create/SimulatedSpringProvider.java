@@ -160,8 +160,8 @@ public final class SimulatedSpringProvider implements SceneObjectProvider {
             ServerLevel level,
             Map<SpringKey, SpringSnapshot> levelCache,
             SpringApi access) throws ReflectiveOperationException {
-        ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
-        if (container == null) return;
+        SubLevelContainer rawContainer = SubLevelContainer.getContainer(level);
+        if (!(rawContainer instanceof ServerSubLevelContainer container)) return;
 
         for (ServerSubLevel subLevel : container.getAllSubLevels()) {
             if (subLevel == null || subLevel.isRemoved()) continue;
