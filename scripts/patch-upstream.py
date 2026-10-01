@@ -796,7 +796,8 @@ s = s.replace(
     field_needle,
     field_needle
         + '\n    private final ChainConveyorProvider chainConveyors = new ChainConveyorProvider(chunks);'
-        + '\n    private final BeltProvider belts = new BeltProvider(chunks);',
+        + '\n    private final BeltProvider belts = new BeltProvider(chunks);'
+        + '\n    private final SimulatedRopeProvider simulatedRopes = new SimulatedRopeProvider();',
     1,
 )
 register_needle = '        BlueMap3D.register(bearings);'
@@ -806,7 +807,8 @@ s = s.replace(
     register_needle,
     register_needle
         + '\n        BlueMap3D.register(chainConveyors);'
-        + '\n        BlueMap3D.register(belts);',
+        + '\n        BlueMap3D.register(belts);'
+        + '\n        BlueMap3D.register(simulatedRopes);',
     1,
 )
 clear_needle = '        bearings.clear();'
@@ -816,7 +818,8 @@ s = s.replace(
     clear_needle,
     clear_needle
         + '\n        chainConveyors.clear();'
-        + '\n        belts.clear();',
+        + '\n        belts.clear();'
+        + '\n        simulatedRopes.clear();',
     1,
 )
 p.write_text(s)
@@ -858,9 +861,9 @@ p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-33-config-compat";',
+    'var BUILD = "core-history-34-simulated-ropes";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.1")
+replace("gradle.properties", "version=1.0.9", "version=1.1.2")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
@@ -900,7 +903,7 @@ if needle not in s:
 s = s.replace(
     needle,
     'CompatRegistry.get();\n\n        ' + needle
-        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.1 active; BlueMap target is 5.7.");',
+        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.2 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
