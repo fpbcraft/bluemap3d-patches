@@ -84,8 +84,9 @@ final class CompatRuleSet {
     ModelMatch model(String blockId, Map<String, String> properties, String scope) {
         for (Rule rule : rules) {
             if (rule.model == null || !rule.appliesTo(scope)) continue;
-            if (rule.matches(blockId, properties)) {
-                return new ModelMatch(rule, rule.model);
+            List<String> captures = rule.captures(blockId, properties);
+            if (captures != null) {
+                return new ModelMatch(rule, rule.model, captures);
             }
         }
         return null;
@@ -205,7 +206,10 @@ final class CompatRuleSet {
     record TintMatch(Rule rule, Tint tint) {
     }
 
-    record ModelMatch(Rule rule, Model model) {
+    record ModelMatch(Rule rule, Model model, List<String> captures) {
+        String resolveSourceBlock(String targetBlockId) {
+            return model.resolveSourceBlock(targetBlockId, captures);
+        }
     }
 
     static final class Document {
@@ -252,17 +256,25 @@ final class CompatRuleSet {
         }
 
         boolean matches(String blockId, Map<String, String> properties) {
-            if (blockId == null) return false;
+            return captures(blockId, properties) != null;
+        }
 
-            boolean included = blockPatterns.stream().anyMatch(pattern -> pattern.matches(blockId));
-            if (!included) return false;
-            if (exclusions.stream().anyMatch(pattern -> pattern.matches(blockId))) return false;
+        List<String> captures(String blockId, Map<String, String> properties) {
+            if (blockId == null) return null;
+
+            List<String> captures = null;
+            for (Glob pattern : blockPatterns) {
+                captures = pattern.captures(blockId);
+                if (captures != null) break;
+            }
+            if (captures == null) return null;
+            if (exclusions.stream().anyMatch(pattern -> pattern.matches(blockId))) return null;
 
             for (Map.Entry<String, Glob> entry : propertyPatterns.entrySet()) {
                 String value = properties == null ? null : properties.get(entry.getKey());
-                if (value == null || !entry.getValue().matches(value)) return false;
+                if (value == null || !entry.getValue().matches(value)) return null;
             }
-            return true;
+            return captures;
         }
     }
 
@@ -277,10 +289,14 @@ final class CompatRuleSet {
         String sourceBlock;
 
         String resolveSourceBlock(String targetBlockId) {
+            return resolveSourceBlock(targetBlockId, List.of());
+        }
+
+        String resolveSourceBlock(String targetBlockId, List<String> captures) {
             if (!"alias".equals(type) || sourceBlock == null || sourceBlock.isBlank()) {
                 return null;
             }
-            return expandTemplate(sourceBlock, targetBlockId);
+            return expandTemplate(sourceBlock, targetBlockId, captures);
         }
     }
 
@@ -317,6 +333,13 @@ final class CompatRuleSet {
     }
 
     static String expandTemplate(String template, String targetBlockId) {
+        return expandTemplate(template, targetBlockId, List.of());
+    }
+
+    static String expandTemplate(
+            String template,
+            String targetBlockId,
+            List<String> captures) {
         if (template == null || targetBlockId == null) return template;
 
         int colon = targetBlockId.indexOf(':');
@@ -332,8 +355,14 @@ final class CompatRuleSet {
         for (int i = 0; i < segments.length; i++) {
             result = result.replace("${path" + i + "}", segments[i]);
         }
+        if (captures != null) {
+            for (int i = 0; i < captures.size(); i++) {
+                result = result.replace("${" + (i + 1) + "}", captures.get(i));
+            }
+        }
         return result;
     }
+
     static final class Glob {
         private final String source;
         private final Pattern pattern;
@@ -347,6 +376,18 @@ final class CompatRuleSet {
             return pattern.matcher(value).matches();
         }
 
+        List<String> captures(String value) {
+            var matcher = pattern.matcher(value);
+            if (!matcher.matches()) return null;
+            if (matcher.groupCount() == 0) return List.of();
+
+            List<String> captures = new ArrayList<>(matcher.groupCount());
+            for (int i = 1; i <= matcher.groupCount(); i++) {
+                captures.add(matcher.group(i));
+            }
+            return List.copyOf(captures);
+        }
+
         static List<Glob> compileAll(List<String> patterns) {
             if (patterns == null || patterns.isEmpty()) return List.of();
             return patterns.stream().map(Glob::new).toList();
@@ -354,18 +395,28 @@ final class CompatRuleSet {
 
         private static String toRegex(String glob) {
             StringBuilder regex = new StringBuilder("^");
+            StringBuilder literal = new StringBuilder();
+
             for (int i = 0; i < glob.length(); i++) {
                 char c = glob.charAt(i);
-                switch (c) {
-                    case '*' -> regex.append(".*");
-                    case '?' -> regex.append('.');
-                    case '.', '(', ')', '+', '|', '^', '$', '@', '%' ->
-                            regex.append('\\').append(c);
-                    case '\\' -> regex.append("\\\\");
-                    default -> regex.append(c);
+                if (c == '*' || c == '?') {
+                    appendQuoted(regex, literal);
+                    regex.append(c == '*' ? "(.*)" : ".");
+                } else {
+                    literal.append(c);
                 }
             }
-            return regex.append('$').toString();
+
+            appendQuoted(regex, literal);
+            return regex.append('
+}
+).toString();
+        }
+
+        private static void appendQuoted(StringBuilder regex, StringBuilder literal) {
+            if (literal.isEmpty()) return;
+            regex.append(Pattern.quote(literal.toString()));
+            literal.setLength(0);
         }
 
         @Override
