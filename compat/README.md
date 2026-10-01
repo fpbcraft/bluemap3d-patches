@@ -123,6 +123,51 @@ By default the target model is inferred as `<matched namespace>:block/<matched p
 Set `targetModel` when a blockstate points somewhere else. `sourceModel` and
 `targetModel` support the same template and wildcard-capture syntax as `sourceBlock`.
 
+### Direct model-resource overrides
+
+Some compatibility packs contain models that are not addressable through a block id:
+sapling submodels, smart-model fragments, or helper models referenced by another model.
+Match those with `match.models`.
+
+`resource_alias` may copy another already-loaded model resource:
+
+```json
+{
+  "id": "example-model-alias",
+  "scope": ["terrain"],
+  "match": { "models": ["dtexample:block/*_branch"] },
+  "model": {
+    "type": "resource_alias",
+    "sourceModel": "example:block/${1}_log"
+  }
+}
+```
+
+For an exact resource-pack replacement, `inline` installs a normal model JSON directly at
+the matched model id:
+
+```json
+{
+  "id": "example-inline-model",
+  "scope": ["terrain"],
+  "match": { "models": ["dtexample:block/special_branch"] },
+  "model": {
+    "type": "inline",
+    "definition": {
+      "parent": "minecraft:block/cube_column",
+      "textures": {
+        "end": "example:block/special_log_top",
+        "side": "example:block/special_log"
+      }
+    }
+  }
+}
+```
+
+Direct model-resource rules are terrain-only. They are applied after BlueMap loads its
+resource pack, and inline models go through the same parent-resolution/optimization steps
+as ordinary BlueMap models.
+
 
 ## Moving feature flags
 
