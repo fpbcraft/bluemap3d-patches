@@ -113,17 +113,22 @@ public final class DynamicTreesTerrainDispatch {
             int branches = 0;
             int roots = 0;
 
-            for (Map.Entry<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
-                    entry : new ArrayList<>(paths.entrySet())) {
-                String id = entry.getKey();
-                var original = states.get(entry.getValue());
+            for (String id : new ArrayList<>(paths.keySet())) {
+                // Do not trust blockStatePaths here: a legacy/fallback compat rule may
+                // already have redirected this block id to a primitive log blockstate.
+                // The resource pack's original Dynamic Trees blockstate still exists
+                // under its own resource id, so inspect and restore that path directly.
+                ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>
+                        originalPath = new ResourcePath<>(id);
+                var original = states.get(originalPath);
                 if (original == null) continue;
 
                 Info info = inspect(resourcePack, id, original);
                 if (info == null) continue;
 
                 INFO.put(id, info);
-                states.put(entry.getValue(), dispatch);
+                states.put(originalPath, dispatch);
+                paths.put(id, originalPath);
                 if (info.kind() == Kind.BRANCH) branches++;
                 else roots++;
             }
