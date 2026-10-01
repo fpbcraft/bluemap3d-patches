@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BlueMap3D compatibility rules",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "rules"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "match"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "priority": {
+            "type": "integer",
+            "default": 0
+          },
+          "scope": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "terrain",
+                "moving"
+              ]
+            },
+            "default": [
+              "terrain",
+              "moving"
+            ]
+          },
+          "match": {
+            "type": "object",
+            "properties": {
+              "blocks": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Model-resource globs used by terrain resource_alias rules, e.g. dtnatures_spirit:block/*_branch."
+              },
+              "exclude": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "properties": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "tint": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "enum": [
+                  "none",
+                  "fixed",
+                  "palette"
+                ]
+              },
+              "color": {
+                "type": "string"
+              },
+              "palette": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "defaultColor": {
+                "type": "string"
+              },
+              "defaultByBlock": {
+                "type": "array"
+              },
+              "value": {
+                "type": "object"
+              }
+            }
+          },
+          "model": {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "alias",
+                  "resource_alias"
+                ]
+              },
+              "sourceBlock": {
+                "type": "string",
+                "minLength": 1,
+                "description": "For type=alias, the source block-id template."
+              },
+              "sourceModel": {
+                "type": "string",
+                "minLength": 1,
+                "description": "For type=resource_alias, the source BlueMap model resource template, e.g. natures_spirit:block/${1}_log."
+              },
+              "targetModel": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional target model resource template for resource_alias. Defaults to <matched namespace>:block/<matched path>."
+              }
+            }
+          }
+        }
+      }
+    },
+    "moving": {
+      "type": "object",
+      "properties": {
+        "modelNamespaces": {
+          "type": "object",
+          "properties": {
+            "include": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "exclude": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "features": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-foliage",
+  "description": "Client-side foliage color rules that BlueMap 5.7 cannot infer from models.",
+  "rules": [
+    {
+      "id": "quark-blossom-no-biome-tint",
+      "priority": 100,
+      "scope": ["terrain", "moving"],
+      "match": {
+        "blocks": [
+          "quark:*_blossom_leaves",
+          "quark:*_blossom_leaf_carpet",
+          "quark:*_blossom_hedge"
+        ]
+      },
+      "tint": { "type": "none" }
+    },
+    {
+      "id": "dynamic-trees-cherry-azalea-no-biome-tint",
+      "priority": 100,
+      "scope": ["terrain", "moving"],
+      "match": {
+        "blocks": [
+          "dynamictrees:cherry_leaves",
+          "dynamictrees:azalea_leaves",
+          "dynamictrees:flowering_azalea_leaves"
+        ]
+      },
+      "tint": { "type": "none" }
+    },
+    {
+      "id": "dynamic-trees-birch-color",
+      "priority": 100,
+      "scope": ["terrain", "moving"],
+      "match": { "blocks": ["dynamictrees:birch_leaves"] },
+      "tint": { "type": "fixed", "color": "#80A755" }
+    },
+    {
+      "id": "dynamic-trees-spruce-color",
+      "priority": 100,
+      "scope": ["terrain", "moving"],
+      "match": { "blocks": ["dynamictrees:spruce_leaves"] },
+      "tint": { "type": "fixed", "color": "#619961" }
+    }
+  ]
+}

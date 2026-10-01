@@ -1,35 +1,160 @@
 # BlueMap3D Patches
 
-Compatibility patches and BlueMap addons used by the FPBCRAFT Minecraft 1.21.1 server.
+BlueMap 5.7 / BlueMap3D compatibility for the FPBCRAFT Minecraft 1.21.1 NeoForge server.
+
+The repository is intentionally split between **declarative compatibility rules** and
+**code adapters**:
+
+- add a JSON rule when a mod only needs matching, tinting, namespace policy, or another
+  supported generic behavior;
+- add Java only when a mod introduces a genuinely new rendering/runtime concept.
 
 ## Supported baseline
 
 - Minecraft 1.21.1
 - NeoForge
-- **BlueMap 5.7**
+- BlueMap **5.7**
 - BlueMap3D upstream commit `f9a027de06f49384b86867b5c58b3630d29b1c9f`
 
-The project intentionally targets BlueMap 5.7. Do not assume compatibility with the later BlueMap 5.23 experiments.
+Do not assume compatibility with the later BlueMap 5.23 experiments.
 
-## What this repository builds
+## Artifacts
 
-The build produces two separate artifacts:
+The build produces two installable JARs:
 
-1. **Patched BlueMap3D bundle**
+1. **`bluemap3d-bundle-*.jar`** — patched BlueMap3D bundle
    - persistent Sable/Create moving objects
-   - Create train/bogey compatibility
-   - Copycats+ and Create: Connected copied-material rendering on moving contraptions
-   - Bits & Bobs girder struts on moving objects
-   - diagonal fence/wall model support for moving objects
+   - persistent Sable child contraptions (including Aeronautics propeller/sail assemblies), retained across distance unloads and server restarts
+   - optional Create chain-conveyor and mechanical-belt animations (disabled by default)
+   - live Create: Simulated physics ropes, using the server strand points and streamed segment transforms
+   - live Create: Simulated springs, mirroring the renderer's Bézier curve across world/Sable endpoints
+   - trains/bogeys
+   - moving Copycats / Create Connected material support
+   - procedural and dynamic-texture adapters
+   - config-driven moving tint rules
 
-2. **BlueMap Copycats Compat addon**
-   - installed in `config/bluemap/packs/`
-   - static Copycats+ support
-   - static Create: Connected support
-   - Bits & Bobs girder struts
-   - connected/diagonal fence and wall support while preserving each block's original material/model
+2. **`bluemap-compat-*.jar`** — unified native BlueMap compatibility addon
+   - config-driven wildcard tint and model-alias rules
+   - hot-reloaded server-local compatibility rules
+   - Copycats+ / Create Connected copied-material adapter
+   - Bits & Bobs girders and connected/diagonal fence-wall adapter
+   - TrafficCraft block-entity decoding and dynamic sign textures
 
-The BlueMap addon compiles directly against BlueMap **5.7**.
+The former Copycats, foliage and TrafficCraft compatibility artifacts are consolidated into
+`bluemap-compat`. Specialized Java still exists where needed, but it is organized as an
+adapter inside the single addon rather than published as another JAR.
+
+## Config-driven compatibility
+
+Built-in rules live in `compat/builtin/`. Server-local additions and overrides go in:
+
+```text
+config/bluemap3d/compat/*.json
+```
+
+On startup the bundle now creates:
+
+- `supported-defaults.generated.json` — regenerated reference showing the exact built-in
+  rules and feature flags shipped by the installed build; the loader intentionally ignores it.
+- `local.json` — created once and intended for your own additions/overrides.
+
+External active JSON files hot-reload approximately every five seconds. Existing static map
+tiles still need to be rerendered after a visual rule changes.
+
+Rules support:
+
+- wildcard block matching (`*`, `?`);
+- multiple include patterns and exclusions;
+- blockstate property matching;
+- priorities;
+- stable rule IDs, allowing a local rule to replace a built-in rule;
+- separate `terrain` and `moving` scopes;
+- no tint / fixed RGB / NBT-or-adapter-backed palette tint;
+- wildcard moving-model namespace include/exclude policy;
+- moving runtime feature flags, including `simulated.ropeRendering` and `simulated.springRendering` (enabled by default).
+
+Example:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "my-mod",
+  "moving": {
+    "modelNamespaces": {
+      "include": ["my_mod", "my_mod_*"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "id": "my-mod-autumn-leaves",
+      "priority": 100,
+      "scope": ["terrain", "moving"],
+      "match": {
+        "blocks": ["my_mod:*_autumn_leaves"]
+      },
+      "tint": {
+        "type": "none"
+      }
+    }
+  ]
+}
+```
+
+See [compat/README.md](compat/README.md) and [compat/schema.json](compat/schema.json).
+
+### Built-in migrations
+
+The first config migration deliberately covers real existing compatibility code:
+
+- Quark blossom foliage uses three wildcard families instead of individual IDs.
+- Dynamic Trees fixed/untinted foliage rules are declarative.
+- TrafficCraft's 1,292 generated asphalt/concrete pattern IDs are represented by four
+  wildcard patterns, with palette data in JSON rather than Java.
+- `copycats` and `create_connected` moving-model namespace exceptions are config,
+  not literals in the Create provider.
+
+Create: Simulated ropes use a small optional runtime adapter backed by the reusable
+`DynamicModelSegment` scene-object capability. Each physics edge keeps one stable mesh
+while BlueMap3D streams midpoint, orientation and scale. Rope/spring stretching therefore
+does not re-bake geometry, and a small overlap prevents cracks between adjacent segments.
+The Simulated-specific adapters are reflection-based, so Simulated is not a
+hard dependency of the bundle.
+
+TrafficCraft signs remain a small adapter because BlueMap 5.7 cannot express dynamic
+server-side sign PNG loading as data. Copycats remains specialized because its renderer
+decodes per-part copied materials and custom geometry.
+
+## Repository layout
+
+```text
+compat/
+  schema.json
+  README.md
+  builtin/
+    core.json
+    foliage.json
+    trafficcraft.json
+
+addon-compat/
+  src/main/java/...           generic BlueMap rule engine + small adapters
+  src/main/resources/...      BlueMap addon metadata
+
+overrides/
+  core/...                    maintained BlueMap3D source overrides
+  addon-create/...            live Create machinery providers
+
+patches/
+  0015-base.patch             pinned upstream base patch set
+
+scripts/
+  patch-upstream.py           deterministic upstream source modifications
+  generate-static-resources.py
+  package-dist.py
+
+build.sh                      orchestration only
+.github/workflows/build.yml   CI
+```
 
 ## Build
 
@@ -41,30 +166,74 @@ Requires Java 21, Git, Bash and Python 3.
 
 Artifacts are written to `dist/`.
 
-The build clones the pinned BlueMap3D upstream commit, applies `patches/0015-base.patch`, overlays the maintained Java sources from `overrides/`, adds the native BlueMap compatibility addon, and then builds both artifacts.
-
-## Layout
-
-```text
-patches/
-  0015-base.patch            Base BlueMap3D patch set
-
-overrides/
-  core/...                   Maintained BlueMap3D source overrides
-
-addon-copycats/
-  src/...                    Native BlueMap 5.7 static-terrain addon
-
-build.sh                     Reproducible assembly/build script
-.github/workflows/build.yml  CI build
-```
+The build always clones the pinned upstream BlueMap3D commit, applies the base patch,
+copies maintained overrides and shared compatibility rules, runs the deterministic patch
+script, builds, and packages the result.
 
 ## Installation
 
-- Put the generated `bluemap3d-bundle-*.jar` in the server's normal mods directory.
-- Put `bluemap-copycats-compat-*.jar` in `config/bluemap/packs/`.
-- Restart BlueMap/the server and force-update affected static map regions when changing static terrain compatibility.
+Install the bundle as a normal mod:
 
-## Notes
+```text
+mods/
+  bluemap3d-bundle-*.jar
+```
 
-The native addon uses BlueMap 5.7 core APIs and a small amount of BlueMap 5.7 internal resource-pack state to preserve original fence/wall models while adding Diagonal Blocks behavior. A BlueMap upgrade should therefore be treated as an explicit compatibility migration, not an automatic version bump.
+Install the unified native BlueMap addon in:
+
+```text
+config/bluemap/packs/
+  bluemap-compat-*.jar
+```
+
+Restart BlueMap/the server after changing addon JARs. External JSON compatibility rules
+do not require a JAR rebuild or server restart, but static terrain needs a rerender to
+reflect visual changes.
+
+BlueMap3D stores last-known Sable child-contraption snapshots in
+`config/bluemap3d/cache/sable-child-contraptions.nbt`. This is generated runtime cache
+data, not user configuration. It allows Aeronautics/Create child contraptions to remain
+visible after their live entity unloads and after a normal server restart without
+force-loading the Sable plot.
+
+## Design rule
+
+Prefer this order when adding support for another mod:
+
+1. **Wildcard config rule** — if an existing generic concept is enough.
+2. **Reusable generic capability** — if the concept is broadly useful across mods.
+3. **Small adapter** — only for mod-specific runtime data or rendering semantics.
+
+The goal is to avoid an addon-per-mod architecture.
+
+
+## Migrating from 1.0.28
+
+Remove the old native addon JARs before installing 1.1.3:
+
+```text
+config/bluemap/packs/bluemap-copycats-compat-1.0.28.jar
+config/bluemap/packs/bluemap-trafficcraft-compat-1.0.28.jar
+config/bluemap/packs/bluemap-foliage-compat-1.0.28.jar
+```
+
+Replace them with the single `bluemap-compat-1.1.3.jar`. Keeping the old addons installed
+would register duplicate renderer/block-entity hooks.
+
+
+## External BlueMap asset pack
+
+The existing `fpbcraft-bluemap-1.21.1-aeronautics-deep-seas-weathering.zip` is still
+needed for now.
+
+The Simulated rope adapter uses `simulated:block/rope/rope`, so this pack currently also
+supplies the rope model/texture to BlueMap's asset index.
+
+The compatibility addon replaces rendering/tint/decoder behavior, but it does not currently
+extract arbitrary nested third-party assets into BlueMap's resource-pack index. BlueMap 5.7
+scans top-level JARs in `mods/`; the FPBCRAFT pack also exposes Aeronautics' nested
+`aeronautics`, `simulated` and `offroad` assets, plus Deep Seas and Immersive Weathering
+assets in a form BlueMap can consume.
+
+Do not remove that pack yet. A future compatibility capability can replace it by explicitly
+indexing/extracting nested mod resources.

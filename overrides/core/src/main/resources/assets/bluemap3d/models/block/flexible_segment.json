@@ -1,0 +1,20 @@
+{
+  "textures": {
+    "1": "simulated:block/spring/spring",
+    "particle": "#1"
+  },
+  "elements": [
+    {
+      "from": [4, 0, 4],
+      "to": [12, 16, 12],
+      "faces": {
+        "north": {"uv": [4, 0, 12, 16], "texture": "#1"},
+        "east": {"uv": [4, 0, 12, 16], "texture": "#1"},
+        "south": {"uv": [4, 0, 12, 16], "texture": "#1"},
+        "west": {"uv": [4, 0, 12, 16], "texture": "#1"},
+        "up": {"uv": [4, 4, 12, 12], "texture": "#1"},
+        "down": {"uv": [4, 4, 12, 12], "texture": "#1"}
+      }
+    }
+  ]
+}

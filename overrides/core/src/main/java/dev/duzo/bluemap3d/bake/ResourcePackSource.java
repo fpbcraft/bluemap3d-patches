@@ -73,6 +73,15 @@ public final class ResourcePackSource implements BlockModelSource {
         return quadCache.computeIfAbsent(state, this::buildQuads);
     }
 
+    /**
+     * Builds the ordinary resource-pack model while replacing client tint-index colors
+     * with a known RGB value. This is intentionally uncached because the tint may come
+     * from per-block block-entity NBT (TrafficCraft paint).
+     */
+    List<ModelQuad> quadsForWithTint(BlockState state, int tint) {
+        return buildQuads(state, tint & 0xFFFFFF);
+    }
+
     @Override
     public BufferedImage texture(String texture) {
         return textureCache.computeIfAbsent(texture, id -> {
@@ -102,7 +111,11 @@ public final class ResourcePackSource implements BlockModelSource {
     // ---------------------------------------------------------------------------------
 
     private List<ModelQuad> buildQuads(BlockState state) {
-        ResourceLocation block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        return buildQuads(state, null);
+    }
+
+    private List<ModelQuad> buildQuads(BlockState state, Integer tintOverride) {
+        ResourceLocation block = assetBlockId(state);
         JsonObject blockstate = json("assets/" + block.getNamespace() + "/blockstates/" + block.getPath() + ".json");
         if (blockstate == null) {
             return List.of();
@@ -114,14 +127,14 @@ public final class ResourcePackSource implements BlockModelSource {
                 JsonObject variants = blockstate.getAsJsonObject("variants");
                 JsonElement chosen = selectVariant(variants, state);
                 if (chosen != null) {
-                    appendVariant(out, firstOf(chosen), state);
+                    appendVariant(out, firstOf(chosen), state, tintOverride);
                 }
             } else if (blockstate.has("multipart")) {
                 JsonArray multipart = blockstate.getAsJsonArray("multipart");
                 for (JsonElement partEl : multipart) {
                     JsonObject part = partEl.getAsJsonObject();
                     if (!part.has("when") || matches(part.getAsJsonObject("when"), state)) {
-                        appendVariant(out, firstOf(part.get("apply")), state);
+                        appendVariant(out, firstOf(part.get("apply")), state, tintOverride);
                     }
                 }
 
@@ -131,7 +144,7 @@ public final class ResourcePackSource implements BlockModelSource {
                 // loader duplicates a cardinal side selector and rotates it 45 degrees.
                 // Dedicated-server model parsing never runs that loader, so reproduce
                 // exactly that augmentation here for moving BlueMap3D objects.
-                appendDiagonalMultipart(out, multipart, state);
+                appendDiagonalMultipart(out, multipart, state, tintOverride);
             }
         } catch (RuntimeException e) {
             LOGGER.debug("Could not model {}: {}", state, e.toString());
@@ -152,7 +165,7 @@ public final class ResourcePackSource implements BlockModelSource {
      * blockstate that sends different variants at different models gets the right one.
      */
     String particleTexture(BlockState state) {
-        ResourceLocation block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        ResourceLocation block = assetBlockId(state);
         JsonObject blockstate = json("assets/" + block.getNamespace() + "/blockstates/" + block.getPath() + ".json");
         if (blockstate == null) {
             return null;
@@ -269,10 +282,39 @@ public final class ResourcePackSource implements BlockModelSource {
         return false;
     }
 
+    /**
+     * Diagonal Blocks registers generated blocks under ids such as
+     * {@code diagonalfences:natures_spirit/wisteria_fence}. The client deliberately
+     * reuses the original block's model; there is no per-generated-block resource under
+     * the diagonalfences/diagonalwindows namespace. Resolve the same original asset id
+     * before looking up blockstates and particle textures.
+     */
+    private static ResourceLocation assetBlockId(BlockState state) {
+        ResourceLocation id = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .getKey(state.getBlock());
+        String namespace = id.getNamespace();
+        if (!"diagonalfences".equals(namespace)
+                && !"diagonalwalls".equals(namespace)
+                && !"diagonalwindows".equals(namespace)) {
+            return id;
+        }
+
+        String path = id.getPath();
+        int slash = path.indexOf('/');
+        if (slash <= 0 || slash == path.length() - 1) {
+            return id;
+        }
+
+        ResourceLocation original = ResourceLocation.tryParse(
+                path.substring(0, slash) + ":" + path.substring(slash + 1));
+        return original == null ? id : original;
+    }
+
     private void appendDiagonalMultipart(
             List<ModelQuad> out,
             JsonArray multipart,
-            BlockState state) {
+            BlockState state,
+            Integer tintOverride) {
         Map<String, String> properties = propertiesOf(state);
 
         for (JsonElement partEl : multipart) {
@@ -282,20 +324,57 @@ public final class ResourcePackSource implements BlockModelSource {
             String cardinal = cardinalPositiveCondition(part.getAsJsonObject("when"));
             if (cardinal == null) continue;
 
+            // Matches Diagonal Blocks 21.1.1 EightWayDirection#rotateClockWise:
+            // N -> NE -> E -> SE -> S -> SW -> W -> NW.
             String diagonal = switch (cardinal) {
-                case "north" -> "north_west";
-                case "east" -> "north_east";
-                case "south" -> "south_east";
-                case "west" -> "south_west";
+                case "north" -> "north_east";
+                case "east" -> "south_east";
+                case "south" -> "south_west";
+                case "west" -> "north_west";
                 default -> null;
             };
             if (diagonal == null || !"true".equals(properties.get(diagonal))) continue;
 
-            // Diagonal Blocks rotates the corresponding cardinal segment 45 degrees
-            // toward the diagonal. With Minecraft's block-model Y rotation convention
-            // that is -45 degrees relative to the source segment.
-            appendVariant(out, firstOf(part.get("apply")), state, -45);
+            // The real client model does not merely rotate the cardinal arm. It first
+            // stretches the arm's travel axis by sqrt(2), then rotates the resulting
+            // geometry -45 degrees around the block centre. Without the stretch, diagonal
+            // fences/windows stop short of the block corner.
+            List<ModelQuad> segment = new ArrayList<>();
+            appendVariant(segment, firstOf(part.get("apply")), state, tintOverride);
+            for (ModelQuad quad : segment) {
+                out.add(diagonalize(quad, cardinal));
+            }
         }
+    }
+
+    private static ModelQuad diagonalize(ModelQuad quad, String cardinal) {
+        float[] positions = quad.positions().clone();
+        boolean scaleX = "east".equals(cardinal) || "west".equals(cardinal);
+        float diagonalScale = (float) Math.sqrt(2.0);
+        double radians = Math.toRadians(-45.0);
+        double cos = Math.cos(radians);
+        double sin = Math.sin(radians);
+
+        for (int i = 0; i < positions.length; i += 3) {
+            double x = positions[i] - 8.0;
+            double z = positions[i + 2] - 8.0;
+            if (scaleX) x *= diagonalScale;
+            else z *= diagonalScale;
+
+            double rx = x * cos - z * sin;
+            double rz = x * sin + z * cos;
+            positions[i] = (float) (rx + 8.0);
+            positions[i + 2] = (float) (rz + 8.0);
+        }
+
+        // A diagonal face has no single cardinal neighbour that may safely cull it.
+        return new ModelQuad(
+                null,
+                quad.shadeFace(),
+                positions,
+                quad.uvs().clone(),
+                quad.texture(),
+                quad.tint());
     }
 
     private static String cardinalPositiveCondition(JsonObject when) {
@@ -428,16 +507,32 @@ public final class ResourcePackSource implements BlockModelSource {
     }
 
     private void appendVariant(List<ModelQuad> out, JsonObject variant, BlockState state) {
-        appendVariant(out, variant, state, 0);
+        appendVariant(out, variant, state, 0, null);
+    }
+
+    private void appendVariant(
+            List<ModelQuad> out, JsonObject variant, BlockState state, Integer tintOverride) {
+        appendVariant(out, variant, state, 0, tintOverride);
     }
 
     private void appendVariant(List<ModelQuad> out, JsonObject variant, BlockState state, int extraY) {
+        appendVariant(out, variant, state, extraY, null);
+    }
+
+    private void appendVariant(
+            List<ModelQuad> out,
+            JsonObject variant,
+            BlockState state,
+            int extraY,
+            Integer tintOverride) {
         if (variant == null || !variant.has("model")) {
             return;
         }
         int rotX = variant.has("x") ? variant.get("x").getAsInt() : 0;
         int rotY = (variant.has("y") ? variant.get("y").getAsInt() : 0) + extraY;
-        appendModel(out, variant.get("model").getAsString(), rotX, rotY, Map.of(), state);
+        appendModel(
+                out, variant.get("model").getAsString(), rotX, rotY,
+                Map.of(), state, tintOverride);
     }
 
     /**
@@ -448,9 +543,34 @@ public final class ResourcePackSource implements BlockModelSource {
      */
     private void appendModel(List<ModelQuad> out, String modelRef, int rotX, int rotY,
                              Map<String, String> overrides, BlockState state) {
+        appendModel(out, modelRef, rotX, rotY, overrides, state, null);
+    }
+
+    private void appendModel(List<ModelQuad> out, String modelRef, int rotX, int rotY,
+                             Map<String, String> overrides, BlockState state,
+                             Integer tintOverride) {
         JsonObject objStub = findObjStub(modelRef);
         if (objStub != null) {
-            appendObjModel(out, modelRef, objStub, overrides);
+            List<ModelQuad> obj = new ArrayList<>();
+            appendObjModel(obj, modelRef, objStub, overrides);
+            if (rotX == 0 && rotY == 0) {
+                out.addAll(obj);
+            } else {
+                boolean cardinalRotation = Math.floorMod(rotY, 90) == 0;
+                for (ModelQuad quad : obj) {
+                    float[] positions = quad.positions().clone();
+                    applyVariantRotation(positions, rotX, rotY);
+                    Direction cull = cardinalRotation
+                            ? rotateDirection(quad.cullFace(), rotX, rotY)
+                            : null;
+                    Direction shade = cardinalRotation
+                            ? rotateDirection(quad.shadeFace(), rotX, rotY)
+                            : quad.shadeFace();
+                    out.add(new ModelQuad(
+                            cull, shade, positions, quad.uvs().clone(),
+                            quad.texture(), quad.tint()));
+                }
+            }
             return;
         }
         JsonObject model = resolveModel(modelRef, overrides);
@@ -524,12 +644,17 @@ public final class ResourcePackSource implements BlockModelSource {
                 // stands in. Untinted faces are left alone.
                 int tint = 0xFFFFFF;
                 // state is null for attachments, which name a model directly and so have no
-                // block to take a colour from.
+                // block to take a colour from. A compatibility source may provide the exact
+                // client-side tint (for example TrafficCraft paint from block-entity NBT).
                 if (state != null && faceDef.has("tintindex")
                         && faceDef.get("tintindex").getAsInt() >= 0) {
-                    int approximate = MapColorSource.mapColorOf(state);
-                    if (approximate >= 0) {
-                        tint = approximate;
+                    if (tintOverride != null) {
+                        tint = tintOverride;
+                    } else {
+                        int approximate = MapColorSource.mapColorOf(state);
+                        if (approximate >= 0) {
+                            tint = approximate;
+                        }
                     }
                 }
 
@@ -553,7 +678,13 @@ public final class ResourcePackSource implements BlockModelSource {
     }
 
     private static boolean isObjLoader(JsonObject model) {
-        return model.has("loader") && "neoforge:obj".equals(model.get("loader").getAsString());
+        if (!model.has("loader")) {
+            return false;
+        }
+        String loader = model.get("loader").getAsString();
+        return "neoforge:obj".equals(loader)
+                || "forge:obj".equals(loader)
+                || "porting_lib:obj".equals(loader);
     }
 
     /**
@@ -621,18 +752,36 @@ public final class ResourcePackSource implements BlockModelSource {
         }
         String objText = new String(objBytes, StandardCharsets.UTF_8);
 
-        // mtllib names a file in the same directory as the obj, not a resource location
-        // of its own.
         String mtlText = null;
-        String mtlName = findMtllib(objText);
-        if (mtlName != null) {
-            int slash = objPath.lastIndexOf('/');
-            String mtlPath = (slash >= 0 ? objPath.substring(0, slash + 1) : "") + mtlName;
-            byte[] mtlBytes = assets.read(mtlPath);
-            if (mtlBytes != null) {
-                mtlText = new String(mtlBytes, StandardCharsets.UTF_8);
-            } else {
-                LOGGER.debug("Obj model {} names material {} which is not available", modelRef, mtlPath);
+
+        // NeoForge supports mtl_override on the wrapper JSON. Prefer it when present,
+        // then fall back to the OBJ's local mtllib declaration.
+        if (stub.has("mtl_override")) {
+            ResourceLocation mtlLoc = parse(stub.get("mtl_override").getAsString());
+            if (mtlLoc != null) {
+                String mtlPath = "assets/" + mtlLoc.getNamespace() + "/" + mtlLoc.getPath();
+                byte[] mtlBytes = assets.read(mtlPath);
+                if (mtlBytes != null) {
+                    mtlText = new String(mtlBytes, StandardCharsets.UTF_8);
+                } else {
+                    LOGGER.debug("Obj model {} overrides material with {} which is not available",
+                            modelRef, mtlPath);
+                }
+            }
+        }
+
+        if (mtlText == null) {
+            String mtlName = findMtllib(objText);
+            if (mtlName != null) {
+                int slash = objPath.lastIndexOf('/');
+                String mtlPath = (slash >= 0 ? objPath.substring(0, slash + 1) : "") + mtlName;
+                byte[] mtlBytes = assets.read(mtlPath);
+                if (mtlBytes != null) {
+                    mtlText = new String(mtlBytes, StandardCharsets.UTF_8);
+                } else {
+                    LOGGER.debug("Obj model {} names material {} which is not available",
+                            modelRef, mtlPath);
+                }
             }
         }
 
