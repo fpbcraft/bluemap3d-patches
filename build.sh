@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.1.2"
+VERSION="1.1.3"
 
 python3 "$ROOT/scripts/validate-compat.py"
 
@@ -41,8 +41,13 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ChainConveyorSour
 mkdir -p core/src/main/java/dev/duzo/bluemap3d/api
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/ModelAttachment.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/ModelAttachment.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegment.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegment.java
+mkdir -p core/src/main/resources/assets/bluemap3d/models/block
+cp "$ROOT/overrides/core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json" \
+   core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/BakedMesh.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/BakedMesh.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/Bm3dWriter.java" \
@@ -54,6 +59,8 @@ cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/BeltPro
    addon-create/src/main/java/dev/duzo/bluemap3d/create/BeltProvider.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeProvider.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeProvider.java
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringProvider.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringProvider.java
 
 # Single native BlueMap 5.7 compatibility addon. Specialized adapters (Copycats,
 # TrafficCraft dynamic textures) and generic rule capabilities share this artifact.
