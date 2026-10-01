@@ -863,7 +863,7 @@ replace(
     'var BUILD = "core-history-15-special-models";',
     'var BUILD = "core-history-33-config-compat";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.1")
+replace("gradle.properties", "version=1.0.9", "version=1.1.2")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
@@ -903,7 +903,7 @@ if needle not in s:
 s = s.replace(
     needle,
     'CompatRegistry.get();\n\n        ' + needle
-        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.1 active; BlueMap target is 5.7.");',
+        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.2 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
