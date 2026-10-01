@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "dynamic-trees-natures-spirit",
+  "description": "Render Dynamic Trees for Nature's Spirit by replacing unsupported custom branch/root model resources while preserving the original Dynamic Trees blockstates.",
+  "rules": [
+    {
+      "id": "dynamic-trees-natures-spirit-branches",
+      "priority": 100,
+      "scope": [
+        "terrain"
+      ],
+      "match": {
+        "models": [
+          "dtnatures_spirit:block/*_branch"
+        ]
+      },
+      "model": {
+        "type": "resource_alias",
+        "sourceModel": "natures_spirit:block/${1}_log"
+      }
+    },
+    {
+      "id": "dynamic-trees-natures-spirit-roots",
+      "priority": 100,
+      "scope": [
+        "terrain"
+      ],
+      "match": {
+        "models": [
+          "dtnatures_spirit:block/*_root"
+        ]
+      },
+      "model": {
+        "type": "resource_alias",
+        "sourceModel": "natures_spirit:block/${1}_log"
+      }
+    }
+  ]
+}
