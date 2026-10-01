@@ -28,6 +28,8 @@ The build produces two installable JARs:
    - optional Create chain-conveyor and mechanical-belt animations (disabled by default)
    - live Create: Simulated physics ropes, using the server strand points and streamed segment transforms
    - live Create: Simulated springs, mirroring the renderer's Bézier curve across world/Sable endpoints
+   - generic restore-on-launch for persistent scene providers (position, rotation, scale and mesh version)
+   - generic history eligibility for persistent scene providers
    - trains/bogeys
    - moving Copycats / Create Connected material support
    - procedural and dynamic-texture adapters
@@ -196,6 +198,33 @@ data, not user configuration. It allows Aeronautics/Create child contraptions to
 visible after their live entity unloads and after a normal server restart without
 force-loading the Sable plot.
 
+## Generic scene-object lifecycle
+
+`SceneObjectProvider` now defaults to `SceneObjectLifecycle.PERSISTENT`. Core, rather
+than each integration, owns last-known-state persistence. The generated cache is:
+
+```text
+config/bluemap3d/cache/scene-objects.json
+```
+
+Persistent snapshots include provider/object identity, dimension, label, geometry version,
+position, rotation and scale. A snapshot is committed only after the matching BM3D mesh
+has been published, so startup restoration can reuse that mesh with
+`canBakeGeometry() == false` without force-loading chunks, entities or Sable plots.
+
+A provider returning no object is treated as temporary unavailability, not deletion.
+Providers report positive destruction/disassembly through `deletedObjectIds()`. Providers
+that are intentionally transient can opt into `LIVE_ONLY`; the Create belt and conveyor
+animation overlays do this.
+
+On the first upgrade from an older build, core can seed the generic cache from the previous
+`entities3d.json` feed. The older Sable-child cache is retained temporarily as a migration
+source, not as the primary persistence architecture.
+
+History consumers can inspect the same lifecycle and record every provider whose lifecycle
+has `recordHistory() == true`, so new persistent Create/Sable object types do not require
+a new history allow-list entry.
+
 ## Design rule
 
 Prefer this order when adding support for another mod:
@@ -209,7 +238,7 @@ The goal is to avoid an addon-per-mod architecture.
 
 ## Migrating from 1.0.28
 
-Remove the old native addon JARs before installing 1.1.3:
+Remove the old native addon JARs before installing 1.1.4:
 
 ```text
 config/bluemap/packs/bluemap-copycats-compat-1.0.28.jar
@@ -217,7 +246,7 @@ config/bluemap/packs/bluemap-trafficcraft-compat-1.0.28.jar
 config/bluemap/packs/bluemap-foliage-compat-1.0.28.jar
 ```
 
-Replace them with the single `bluemap-compat-1.1.3.jar`. Keeping the old addons installed
+Replace them with the single `bluemap-compat-1.1.4.jar`. Keeping the old addons installed
 would register duplicate renderer/block-entity hooks.
 
 
