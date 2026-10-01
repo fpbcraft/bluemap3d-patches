@@ -27,6 +27,7 @@ The build produces two installable JARs:
    - persistent Sable child contraptions (including Aeronautics propeller/sail assemblies), retained across distance unloads and server restarts
    - optional Create chain-conveyor and mechanical-belt animations (disabled by default)
    - live Create: Simulated physics ropes, using the server strand points and streamed segment transforms
+   - live Create: Simulated springs, mirroring the renderer's Bézier curve across world/Sable endpoints
    - trains/bogeys
    - moving Copycats / Create Connected material support
    - procedural and dynamic-texture adapters
@@ -70,7 +71,7 @@ Rules support:
 - separate `terrain` and `moving` scopes;
 - no tint / fixed RGB / NBT-or-adapter-backed palette tint;
 - wildcard moving-model namespace include/exclude policy;
-- moving runtime feature flags, including `simulated.ropeRendering` (enabled by default).
+- moving runtime feature flags, including `simulated.ropeRendering` and `simulated.springRendering` (enabled by default).
 
 Example:
 
@@ -114,9 +115,10 @@ The first config migration deliberately covers real existing compatibility code:
   not literals in the Create provider.
 
 Create: Simulated ropes use a small optional runtime adapter backed by the reusable
-`DynamicModelSegment` scene-object capability. Each physics edge keeps a stable mesh
-while BlueMap3D streams its midpoint and orientation; only a 1/32-block length-bucket
-change re-bakes that segment. The adapter is reflection-based, so Simulated is not a
+`DynamicModelSegment` scene-object capability. Each physics edge keeps one stable mesh
+while BlueMap3D streams midpoint, orientation and scale. Rope/spring stretching therefore
+does not re-bake geometry, and a small overlap prevents cracks between adjacent segments.
+The Simulated-specific adapters are reflection-based, so Simulated is not a
 hard dependency of the bundle.
 
 TrafficCraft signs remain a small adapter because BlueMap 5.7 cannot express dynamic
@@ -207,7 +209,7 @@ The goal is to avoid an addon-per-mod architecture.
 
 ## Migrating from 1.0.28
 
-Remove the old native addon JARs before installing 1.1.1:
+Remove the old native addon JARs before installing 1.1.3:
 
 ```text
 config/bluemap/packs/bluemap-copycats-compat-1.0.28.jar
@@ -215,7 +217,7 @@ config/bluemap/packs/bluemap-trafficcraft-compat-1.0.28.jar
 config/bluemap/packs/bluemap-foliage-compat-1.0.28.jar
 ```
 
-Replace them with the single `bluemap-compat-1.1.1.jar`. Keeping the old addons installed
+Replace them with the single `bluemap-compat-1.1.3.jar`. Keeping the old addons installed
 would register duplicate renderer/block-entity hooks.
 
 
