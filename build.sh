@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.1.3"
+VERSION="1.1.4"
 
 python3 "$ROOT/scripts/validate-compat.py"
 
@@ -43,6 +43,12 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/ModelAttachment.ja
    core/src/main/java/dev/duzo/bluemap3d/api/ModelAttachment.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectProvider.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectProvider.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectLifecycle.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectLifecycle.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/PersistentSceneObjectProvider.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/PersistentSceneObjectProvider.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegment.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegment.java
 mkdir -p core/src/main/resources/assets/bluemap3d/models/block
