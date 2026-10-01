@@ -797,7 +797,8 @@ s = s.replace(
     field_needle
         + '\n    private final ChainConveyorProvider chainConveyors = new ChainConveyorProvider(chunks);'
         + '\n    private final BeltProvider belts = new BeltProvider(chunks);'
-        + '\n    private final SimulatedRopeProvider simulatedRopes = new SimulatedRopeProvider();',
+        + '\n    private final SimulatedRopeProvider simulatedRopes = new SimulatedRopeProvider();'
+        + '\n    private final SimulatedSpringProvider simulatedSprings = new SimulatedSpringProvider(chunks);',
     1,
 )
 register_needle = '        BlueMap3D.register(bearings);'
@@ -808,7 +809,8 @@ s = s.replace(
     register_needle
         + '\n        BlueMap3D.register(chainConveyors);'
         + '\n        BlueMap3D.register(belts);'
-        + '\n        BlueMap3D.register(simulatedRopes);',
+        + '\n        BlueMap3D.register(simulatedRopes);'
+        + '\n        BlueMap3D.register(simulatedSprings);',
     1,
 )
 clear_needle = '        bearings.clear();'
@@ -819,7 +821,8 @@ s = s.replace(
     clear_needle
         + '\n        chainConveyors.clear();'
         + '\n        belts.clear();'
-        + '\n        simulatedRopes.clear();',
+        + '\n        simulatedRopes.clear();'
+        + '\n        simulatedSprings.clear();',
     1,
 )
 p.write_text(s)
@@ -861,9 +864,9 @@ p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-34-simulated-ropes";',
+    'var BUILD = "core-history-35-flexible-segments";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.2")
+replace("gradle.properties", "version=1.0.9", "version=1.1.3")
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
@@ -903,14 +906,129 @@ if needle not in s:
 s = s.replace(
     needle,
     'CompatRegistry.get();\n\n        ' + needle
-        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.2 active; BlueMap target is 5.7.");',
+        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.3 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
 
+# Stream optional per-object scale alongside position/rotation. This is used by flexible
+# rope/spring segments so their length can change without rebuilding their mesh.
+p = Path("core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java")
+ts = p.read_text()
+row_needle = '''                rows.add(new Row(providerId, object.id(), object.label(),
+                        object.dimension().location().toString(),
+                        current.meshUrl(), object.position(), object.rotation()));
+'''
+if row_needle not in ts:
+    raise SystemExit("SceneObjectTracker live-scale row insertion point not found")
+ts = ts.replace(
+    row_needle,
+    '''                rows.add(new Row(providerId, object.id(), object.label(),
+                        object.dimension().location().toString(),
+                        current.meshUrl(), object.position(), object.rotation(), object.scale()));
+''',
+    1,
+)
+
+json_needle = '''                json.name("rot").beginArray()
+                        .value(round(rotation.x))
+                        .value(round(rotation.y))
+                        .value(round(rotation.z))
+                        .value(round(rotation.w))
+                        .endArray();
+                json.endObject();
+'''
+if json_needle not in ts:
+    raise SystemExit("SceneObjectTracker live-scale JSON insertion point not found")
+json_replacement = '''                json.name("rot").beginArray()
+                        .value(round(rotation.x))
+                        .value(round(rotation.y))
+                        .value(round(rotation.z))
+                        .value(round(rotation.w))
+                        .endArray();
+                org.joml.Vector3f scale = row.scale();
+                json.name("scale").beginArray()
+                        .value(round(scale.x))
+                        .value(round(scale.y))
+                        .value(round(scale.z))
+                        .endArray();
+                json.endObject();
+'''
+ts = ts.replace(json_needle, json_replacement, 1)
+
+record_needle = '''    private record Row(String provider, String id, String label, String dimension,
+                       String meshUrl, Vec3 position, Quaternionf rotation) {
+    }
+'''
+if record_needle not in ts:
+    raise SystemExit("SceneObjectTracker live-scale record insertion point not found")
+ts = ts.replace(
+    record_needle,
+    '''    private record Row(String provider, String id, String label, String dimension,
+                       String meshUrl, Vec3 position, Quaternionf rotation,
+                       org.joml.Vector3f scale) {
+    }
+''',
+    1,
+)
+p.write_text(ts)
+
 # Browser support for KIND_LOOP. Layout stays fixed-width; v6 only adds the new semantic.
 p = Path("core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js")
 s = p.read_text()
+scale_sample_needle = '''            var sample = {
+                t: now,
+                pos: row.pos,
+                rot: row.rot
+            };
+'''
+if scale_sample_needle not in s:
+    raise SystemExit("web live-scale sample insertion point not found")
+s = s.replace(
+    scale_sample_needle,
+    '''            var sample = {
+                t: now,
+                pos: row.pos,
+                rot: row.rot,
+                scale: row.scale || [1, 1, 1]
+            };
+''',
+    1,
+)
+
+scale_transform_needle = '''        mesh.quaternion
+            .set(from.rot[0], from.rot[1], from.rot[2], from.rot[3])
+            .slerp(
+                _scratch.set(to.rot[0], to.rot[1], to.rot[2], to.rot[3]),
+                alpha
+            );
+
+        if (entry.nodeGroups) {
+'''
+if scale_transform_needle not in s:
+    raise SystemExit("web live-scale transform insertion point not found")
+s = s.replace(
+    scale_transform_needle,
+    '''        mesh.quaternion
+            .set(from.rot[0], from.rot[1], from.rot[2], from.rot[3])
+            .slerp(
+                _scratch.set(to.rot[0], to.rot[1], to.rot[2], to.rot[3]),
+                alpha
+            );
+
+        var fromScale = from.scale || [1, 1, 1];
+        var toScale = to.scale || [1, 1, 1];
+        mesh.scale.set(
+            fromScale[0] + (toScale[0] - fromScale[0]) * alpha,
+            fromScale[1] + (toScale[1] - fromScale[1]) * alpha,
+            fromScale[2] + (toScale[2] - fromScale[2]) * alpha
+        );
+
+        if (entry.nodeGroups) {
+''',
+    1,
+)
+
 kind_needle = '    var KIND_RATE = 3;'
 if kind_needle not in s:
     raise SystemExit("web loop kind insertion point not found")
