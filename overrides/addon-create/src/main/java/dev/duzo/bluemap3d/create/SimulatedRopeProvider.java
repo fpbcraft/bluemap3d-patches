@@ -32,15 +32,14 @@ import java.util.UUID;
  *
  * <p>Each physics edge is one {@link DynamicModelSegment}. Its mesh is almost always
  * immutable while only midpoint/rotation are streamed, avoiding a whole-rope re-bake on
- * every physics update. Segment length is quantized to 1/32 block before it can affect
- * geometry, which absorbs normal solver noise while still handling winch extension.
+ * every physics update. Segment length is streamed as live Y scale, so winch extension
+ * and solver movement do not rebuild meshes and adjacent segments cannot undershoot.
  */
 public final class SimulatedRopeProvider implements SceneObjectProvider {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/SimulatedRopes");
     private static final ResourceLocation ROPE_MODEL =
             ResourceLocation.fromNamespaceAndPath("simulated", "block/rope/rope");
-    private static final float LENGTH_QUANTUM = 1f / 32f;
 
     private final Map<ServerLevel, Map<UUID, RopeSnapshot>> lastKnown = new HashMap<>();
     private SimulatedApi api;
@@ -114,7 +113,6 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
                         Map.of(),
                         start,
                         end,
-                        LENGTH_QUANTUM,
                         "Simulated Rope"));
             }
         }
