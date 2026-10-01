@@ -126,16 +126,23 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
     }
 
     @Override
+    public Collection<String> authoritativeObjectPrefixes(ServerLevel level) {
+        return delegate.authoritativeObjectPrefixes(level);
+    }
+
+    @Override
     public Collection<? extends SceneObject> objects(ServerLevel level) {
         ensureLoaded();
 
         Collection<? extends SceneObject> live = delegate.objects(level);
         Map<String, SceneObject> merged = new LinkedHashMap<>();
+        Set<String> liveIds = new HashSet<>();
 
         if (live != null) {
             for (SceneObject object : live) {
                 if (object == null) continue;
                 merged.put(object.id(), object);
+                liveIds.add(object.id());
 
                 SavedObject snapshot = SavedObject.from(id(), object);
                 String key = key(id(), object.id());
@@ -158,6 +165,26 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
         }
 
         String dimension = level.dimension().location().toString();
+
+        // A provider can positively declare a logical-child scope complete. Remove saved
+        // children that no longer exist inside that scope while preserving every other
+        // missing object as merely unloaded.
+        Collection<String> authoritative = delegate.authoritativeObjectPrefixes(level);
+        if (authoritative != null && !authoritative.isEmpty()) {
+            for (String prefix : authoritative) {
+                if (prefix == null || prefix.isBlank()) continue;
+                for (SavedObject saved : List.copyOf(SAVED.values())) {
+                    if (!id().equals(saved.provider)
+                            || !dimension.equals(saved.dimension)
+                            || !saved.id.startsWith(prefix)
+                            || liveIds.contains(saved.id)) {
+                        continue;
+                    }
+                    removeSnapshot(id(), saved.id);
+                }
+            }
+        }
+
         for (SavedObject saved : SAVED.values()) {
             if (!id().equals(saved.provider) || !dimension.equals(saved.dimension)) continue;
             if (merged.containsKey(saved.id)) continue;
