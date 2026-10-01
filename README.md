@@ -26,6 +26,7 @@ The build produces two installable JARs:
    - persistent Sable/Create moving objects
    - persistent Sable child contraptions (including Aeronautics propeller/sail assemblies), retained across distance unloads and server restarts
    - optional Create chain-conveyor and mechanical-belt animations (disabled by default)
+   - live Create: Simulated physics ropes, using the server strand points and streamed segment transforms
    - trains/bogeys
    - moving Copycats / Create Connected material support
    - procedural and dynamic-texture adapters
@@ -69,7 +70,7 @@ Rules support:
 - separate `terrain` and `moving` scopes;
 - no tint / fixed RGB / NBT-or-adapter-backed palette tint;
 - wildcard moving-model namespace include/exclude policy;
-- moving runtime feature flags.
+- moving runtime feature flags, including `simulated.ropeRendering` (enabled by default).
 
 Example:
 
@@ -111,6 +112,12 @@ The first config migration deliberately covers real existing compatibility code:
   wildcard patterns, with palette data in JSON rather than Java.
 - `copycats` and `create_connected` moving-model namespace exceptions are config,
   not literals in the Create provider.
+
+Create: Simulated ropes use a small optional runtime adapter backed by the reusable
+`DynamicModelSegment` scene-object capability. Each physics edge keeps a stable mesh
+while BlueMap3D streams its midpoint and orientation; only a 1/32-block length-bucket
+change re-bakes that segment. The adapter is reflection-based, so Simulated is not a
+hard dependency of the bundle.
 
 TrafficCraft signs remain a small adapter because BlueMap 5.7 cannot express dynamic
 server-side sign PNG loading as data. Copycats remains specialized because its renderer
@@ -216,6 +223,9 @@ would register duplicate renderer/block-entity hooks.
 
 The existing `fpbcraft-bluemap-1.21.1-aeronautics-deep-seas-weathering.zip` is still
 needed for now.
+
+The Simulated rope adapter uses `simulated:block/rope/rope`, so this pack currently also
+supplies the rope model/texture to BlueMap's asset index.
 
 The compatibility addon replaces rendering/tint/decoder behavior, but it does not currently
 extract arbitrary nested third-party assets into BlueMap's resource-pack index. BlueMap 5.7
