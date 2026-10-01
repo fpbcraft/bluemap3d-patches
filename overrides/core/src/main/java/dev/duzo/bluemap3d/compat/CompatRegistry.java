@@ -86,7 +86,7 @@ public final class CompatRegistry {
 
     public ModelMatch model(String blockId, Map<String, String> properties) {
         for (Rule rule : current().rules) {
-            if (rule.model == null || !rule.appliesTo("moving")) continue;
+            if (rule.model == null || !rule.model.supportsMoving() || !rule.appliesTo("moving")) continue;
             List<String> captures = rule.captures(blockId, properties);
             if (captures != null) {
                 return new ModelMatch(rule.id, rule.model, captures);
@@ -374,9 +374,31 @@ public final class CompatRegistry {
     public static final class Model {
         private String type;
         private String sourceBlock;
+        private String sourceModel;
+        private String targetModel;
 
         public String type() {
             return type;
+        }
+
+        private boolean supportsMoving() {
+            return "alias".equals(type);
+        }
+
+        private void validate() {
+            if ("alias".equals(type)) {
+                if (sourceBlock == null || sourceBlock.isBlank()) {
+                    throw new IllegalArgumentException("alias model requires sourceBlock");
+                }
+                return;
+            }
+            if ("resource_alias".equals(type)) {
+                if (sourceModel == null || sourceModel.isBlank()) {
+                    throw new IllegalArgumentException("resource_alias model requires sourceModel");
+                }
+                return;
+            }
+            throw new IllegalArgumentException("unsupported model type " + type);
         }
 
         public String resolveSourceBlock(String targetBlockId) {
@@ -391,9 +413,15 @@ public final class CompatRegistry {
         }
 
         private int requiredCaptures() {
-            if (sourceBlock == null || sourceBlock.isBlank()) return 0;
+            return Math.max(
+                    highestCapture(sourceBlock),
+                    Math.max(highestCapture(sourceModel), highestCapture(targetModel)));
+        }
 
-            var matcher = Pattern.compile("\\$\\{(\\d+)\\}").matcher(sourceBlock);
+        private static int highestCapture(String template) {
+            if (template == null || template.isBlank()) return 0;
+
+            var matcher = Pattern.compile("\\$\\{(\\d+)\\}").matcher(template);
             int highest = 0;
             while (matcher.find()) {
                 int index = Integer.parseInt(matcher.group(1));
@@ -461,11 +489,12 @@ public final class CompatRegistry {
                 throw new IllegalArgumentException("match.blocks is empty");
             }
             if (model != null) {
+                model.validate();
                 int requiredCaptures = model.requiredCaptures();
                 for (Glob pattern : blockPatterns) {
                     if (pattern.captureCount() < requiredCaptures) {
                         throw new IllegalArgumentException(
-                                "model.sourceBlock references capture ${" + requiredCaptures
+                                "model template references capture ${" + requiredCaptures
                                         + "} but a block pattern provides only "
                                         + pattern.captureCount() + " capture(s)");
                     }
