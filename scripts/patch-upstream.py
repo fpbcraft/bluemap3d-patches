@@ -62,6 +62,7 @@ s = s.replace(
     import_needle,
     import_needle
         + '\nimport dev.duzo.bluemap3d.compat.CompatRegistry;'
+        + '\nimport dev.duzo.bluemap3d.api.BlueMap3D;'
         + '\nimport dev.ryanhcode.sable.Sable;'
         + '\nimport dev.ryanhcode.sable.api.sublevel.SubLevelContainer;'
         + '\nimport dev.ryanhcode.sable.sublevel.SubLevel;'
@@ -92,6 +93,8 @@ s = s.replace(
         + '\n    private final Set<String> sableProjected = ConcurrentHashMap.newKeySet();'
         + '\n\n    /** Last known child contraptions for Sable ships, retained when their live entity unloads. */'
         + '\n    private final Map<ServerLevel, Map<String, SableContraptionCache>> sableContraptionCaches = new ConcurrentHashMap<>();'
+        + '\n\n    /** Last world-space footprint of Create contraptions, used to invalidate stale terrain tiles. */'
+        + '\n    private final Map<String, Footprint> terrainFootprints = new ConcurrentHashMap<>();'
         + '\n\n    /** ControlledContraptionEntity controller position, used only to invalidate disassembled cached rotors. */'
         + '\n    private static final Field CONTROLLER_POS_FIELD = controllerPosField();'
         + '\n\n    /** Persistent last-known Sable child snapshots, separate from user-editable compatibility config. */'
@@ -160,6 +163,7 @@ s = s.replace(objects_needle, '''        loadPersistentSableContraptions(level, 
                 EntityTypeTest.forClass(AbstractContraptionEntity.class),
                 e -> !(e instanceof CarriageContraptionEntity));
         Set<String> liveSableContraptions = new HashSet<>();
+        Set<String> terrainPresent = new HashSet<>();
         for (AbstractContraptionEntity entity : entities) {
             SubLevel liveSubLevel = Sable.HELPER.getContaining(entity);
             if (liveSubLevel != null) {
@@ -169,11 +173,18 @@ s = s.replace(objects_needle, '''        loadPersistentSableContraptions(level, 
             SceneObject object = toSceneObject(level, entity, maxBlocks);
             if (object != null) {
                 out.add(object);
+                // Sable child contraptions exist in hidden plot space and did not remove
+                // blocks from the overworld. Only ordinary Create contraptions can leave
+                // stale pre-assembly terrain behind.
+                if (liveSubLevel == null) {
+                    trackTerrainObject(level, object, terrainPresent);
+                }
             }
         }
 
         appendCachedSableContraptions(level, out, liveSableContraptions);
-        out.addAll(trainCarriages(level, maxBlocks));''', 1)
+        out.addAll(trainCarriages(level, maxBlocks, terrainPresent));
+        sweepTerrainDeparted(level, terrainPresent);''', 1)
 
 
 # Persist Sable child contraptions after their Create entity unloads due player distance.
@@ -468,6 +479,163 @@ cache_methods = '''    private void rememberSableContraption(
 '''
 s = s.replace(cache_anchor, cache_methods + cache_anchor, 1)
 
+# Create removes contraption blocks from the world on assembly, but a BlueMap tile may
+# already contain their pre-assembly geometry. Track only appearance/disappearance and
+# re-render those transition footprints; never re-render continuously while they move.
+train_signature = '''    private Collection<SceneObject> trainCarriages(ServerLevel level, int maxBlocks) {'''
+if train_signature not in s:
+    raise SystemExit("ContraptionProvider trainCarriages signature not found")
+s = s.replace(
+    train_signature,
+    '''    private Collection<SceneObject> trainCarriages(
+            ServerLevel level, int maxBlocks, Set<String> terrainPresent) {''',
+    1,
+)
+
+train_add = '''                String objectId = dim.getNamespace() + "/" + dim.getPath() + "/" + train.id + "/" + index;
+                out.add(sceneObjectOf(objectId, entry.volume, entry.version, position, rotation, level.dimension()));'''
+if train_add not in s:
+    raise SystemExit("ContraptionProvider train carriage add point not found")
+s = s.replace(
+    train_add,
+    '''                String objectId = dim.getNamespace() + "/" + dim.getPath() + "/" + train.id + "/" + index;
+                SceneObject object = sceneObjectOf(
+                        objectId, entry.volume, entry.version, position, rotation, level.dimension());
+                out.add(object);
+                trackTerrainObject(level, object, terrainPresent);''',
+    1,
+)
+
+terrain_anchor = '''    /**
+     * Walks {@code Create.RAILWAYS.trains} rather than any entity list, so a train carries
+'''
+if terrain_anchor not in s:
+    raise SystemExit("ContraptionProvider terrain helper insertion point not found")
+terrain_helpers = '''    /** Last world-space X/Z bounds touched by a contraption. */
+    private record Footprint(int minX, int minZ, int maxX, int maxZ, int y) {
+    }
+
+    /**
+     * Keep the latest footprint, but invalidate terrain only when an object first appears.
+     *
+     * <p>At that transition Create has already removed the assembled blocks from the world.
+     * A previously-rendered BlueMap tile can still contain them, producing the frozen copy
+     * beside the live BlueMap3D object. Movement after assembly does not change terrain.
+     */
+    private void trackTerrainObject(
+            ServerLevel level, SceneObject object, Set<String> present) {
+        String key = level.dimension().location() + "/" + object.id();
+        present.add(key);
+        Footprint footprint = footprintOf(object);
+        Footprint previous = terrainFootprints.put(key, footprint);
+        if (previous == null) {
+            refreshFootprint(level, footprint);
+        }
+    }
+
+    /**
+     * Invalidate the final footprint when an object disappears, normally on disassembly.
+     *
+     * <p>The latest footprint is updated every publish while the object moves, so the
+     * refresh happens where Create restored the blocks, not where the contraption started.
+     */
+    private void sweepTerrainDeparted(ServerLevel level, Set<String> present) {
+        String prefix = level.dimension().location() + "/";
+        for (Map.Entry<String, Footprint> entry : Set.copyOf(terrainFootprints.entrySet())) {
+            String key = entry.getKey();
+            if (!key.startsWith(prefix) || present.contains(key)) {
+                continue;
+            }
+            terrainFootprints.remove(key);
+            refreshFootprint(level, entry.getValue());
+        }
+    }
+
+    /**
+     * Compute world-space bounds from the block volume and rigid transform.
+     *
+     * <p>Use full block-box corners (max + 1) rather than only block origins so a rotated
+     * contraption that crosses a BlueMap tile boundary cannot leave a sliver unrefreshed.
+     */
+    private static Footprint footprintOf(SceneObject object) {
+        BlockVolume volume = object.geometry();
+        BlockPos min = volume.min();
+        BlockPos max = volume.max();
+        Vec3 pivot = volume.pivot();
+        Vec3 position = object.position();
+        Quaternionf rotation = new Quaternionf(object.rotation());
+
+        double minX = Double.POSITIVE_INFINITY;
+        double minY = Double.POSITIVE_INFINITY;
+        double minZ = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double maxZ = Double.NEGATIVE_INFINITY;
+
+        int[] xs = {min.getX(), max.getX() + 1};
+        int[] ys = {min.getY(), max.getY() + 1};
+        int[] zs = {min.getZ(), max.getZ() + 1};
+
+        for (int x : xs) {
+            for (int y : ys) {
+                for (int z : zs) {
+                    Vector3f corner = new Vector3f(
+                            (float) (x - pivot.x),
+                            (float) (y - pivot.y),
+                            (float) (z - pivot.z));
+                    rotation.transform(corner);
+                    double worldX = position.x + corner.x;
+                    double worldY = position.y + corner.y;
+                    double worldZ = position.z + corner.z;
+                    minX = Math.min(minX, worldX);
+                    minY = Math.min(minY, worldY);
+                    minZ = Math.min(minZ, worldZ);
+                    maxX = Math.max(maxX, worldX);
+                    maxZ = Math.max(maxZ, worldZ);
+                }
+            }
+        }
+
+        return new Footprint(
+                (int) Math.floor(minX),
+                (int) Math.floor(minZ),
+                (int) Math.ceil(maxX),
+                (int) Math.ceil(maxZ),
+                (int) Math.floor(minY));
+    }
+
+    /**
+     * Queue all hires tiles touched by one transition footprint.
+     *
+     * <p>The refresh queue deduplicates these samples to tile coordinates. Sampling every
+     * 16 blocks is half the default hires tile width and therefore safely covers a rotated
+     * structure without queueing one update per contraption block.
+     */
+    private static void refreshFootprint(ServerLevel level, Footprint footprint) {
+        int step = 16;
+        int columns = (footprint.maxX() - footprint.minX()) / step + 1;
+        int rows = (footprint.maxZ() - footprint.minZ()) / step + 1;
+        if ((long) columns * rows > MAX_TERRAIN_REFRESH_SAMPLES) {
+            BlueMap3D.refreshArea(
+                    level, new BlockPos(footprint.minX(), footprint.y(), footprint.minZ()));
+            BlueMap3D.refreshArea(
+                    level, new BlockPos(footprint.maxX(), footprint.y(), footprint.maxZ()));
+            return;
+        }
+
+        for (int x = footprint.minX(); x <= footprint.maxX(); x += step) {
+            for (int z = footprint.minZ(); z <= footprint.maxZ(); z += step) {
+                BlueMap3D.refreshArea(level, new BlockPos(x, footprint.y(), z));
+            }
+        }
+        BlueMap3D.refreshArea(
+                level, new BlockPos(footprint.maxX(), footprint.y(), footprint.maxZ()));
+    }
+
+    private static final int MAX_TERRAIN_REFRESH_SAMPLES = 64;
+
+'''
+s = s.replace(terrain_anchor, terrain_helpers + terrain_anchor, 1)
+
 clear_needle = '''    public void clear() {
         carriageCaches.clear();
     }'''
@@ -480,6 +648,7 @@ s = s.replace(
         carriageCaches.clear();
         sableContraptionCaches.clear();
         sablePersistentLoaded.clear();
+        terrainFootprints.clear();
     }''',
     1,
 )
