@@ -41,8 +41,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>Unlike ropes, springs do not expose a server point chain. Simulated's renderer
  * constructs a cubic Bezier spline from the two spring block entities, their facing
  * normals and any Sable sub-level transforms. This provider reproduces that spline in
- * world space and emits 5-8 generic live segments. Segment length is a streamed scale,
- * so compression/stretching does not trigger mesh rebuilds.
+ * world space and emits a fixed 8 generic live segments. Using a fixed subdivision keeps
+ * segment identity stable for historical playback while segment length remains a streamed
+ * scale, so compression/stretching does not trigger mesh rebuilds.
  *
  * <p>Simulated itself remains optional. Spring-specific methods are reflected after the
  * class is discovered; Sable is already a compile-only integration dependency of the
@@ -289,7 +290,11 @@ public final class SimulatedSpringProvider implements SceneObjectProvider {
         double influence = distance / 5.0 + 0.25;
         Vec3 controlA = a.add(normalA.scale(influence));
         Vec3 controlB = b.add(normalB.scale(influence));
-        int segments = Math.max(5, Math.min(8, (int) Math.ceil(distance)));
+        // Simulated's client renderer varies this between 5 and 8 based on distance.
+        // That is fine for one live frame, but it changes which physical spline interval
+        // a given segment-N represents as the spring crosses an integer distance. Keep
+        // the maximum subdivision instead so history can interpolate stable identities.
+        int segments = 8;
 
         List<Vec3> points = new ArrayList<>(segments + 1);
         for (int i = 0; i <= segments; i++) {

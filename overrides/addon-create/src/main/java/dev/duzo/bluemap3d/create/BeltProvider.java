@@ -8,6 +8,7 @@ import dev.duzo.bluemap3d.api.BlockVolume;
 import dev.duzo.bluemap3d.api.ModelAttachment;
 import dev.duzo.bluemap3d.api.SceneObject;
 import dev.duzo.bluemap3d.api.SceneObjectProvider;
+import dev.duzo.bluemap3d.api.SceneObjectLifecycle;
 import dev.duzo.bluemap3d.compat.CompatRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -60,6 +61,13 @@ public final class BeltProvider implements SceneObjectProvider {
 
     public BeltProvider(ChunkTracker chunks) {
         this.chunks = chunks;
+    }
+
+    @Override
+    public SceneObjectLifecycle lifecycle() {
+        // This is a transient visual overlay for ordinary world blocks, not a durable
+        // moving entity. Never resurrect a stale animation after restart.
+        return SceneObjectLifecycle.LIVE_ONLY;
     }
 
     @Override

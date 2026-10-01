@@ -123,8 +123,15 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
                     continue;
                 }
 
+                // Simulated winches add/remove points at the BEGINNING of the rope.
+                // Numbering from that end made every existing segment change identity
+                // whenever the winch crossed a whole-block boundary, so historical
+                // interpolation connected unrelated physical segments. Number from the
+                // stable END instead: existing ids now survive addFirst/removeFirst.
+                int segmentFromEnd = points.size() - 1 - i;
+
                 out.add(DynamicModelSegment.between(
-                        rope.id() + "/segment-" + (i - 1),
+                        rope.id() + "/segment-" + segmentFromEnd,
                         level.dimension(),
                         ROPE_MODEL,
                         Map.of(),
@@ -137,8 +144,9 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
                 // rigid objects so streamed Y scaling on the rope body never stretches
                 // the knot itself.
                 if (i > 1) {
+                    int knotFromEnd = points.size() - i;
                     out.add(knotObject(
-                            rope.id() + "/knot-" + (i - 1),
+                            rope.id() + "/knot-" + knotFromEnd,
                             level.dimension(),
                             start));
                 }
