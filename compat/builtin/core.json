@@ -12,7 +12,8 @@
     },
     "features": {
       "create.chainConveyorAnimation": false,
-      "create.mechanicalBeltAnimation": false
+      "create.mechanicalBeltAnimation": false,
+      "simulated.ropeRendering": true
     }
   },
   "rules": []
