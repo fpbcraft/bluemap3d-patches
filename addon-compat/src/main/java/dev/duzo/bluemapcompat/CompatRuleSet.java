@@ -92,6 +92,21 @@ final class CompatRuleSet {
         return null;
     }
 
+    ResourceModelMatch resourceModel(String modelId, String scope) {
+        for (Rule rule : rules) {
+            if (rule.model == null
+                    || !"resource_alias".equals(rule.model.type)
+                    || !rule.appliesTo(scope)) {
+                continue;
+            }
+            List<String> captures = rule.modelCaptures(modelId);
+            if (captures != null) {
+                return new ResourceModelMatch(rule, rule.model, modelId, captures);
+            }
+        }
+        return null;
+    }
+
     int size() {
         return rules.size();
     }
@@ -220,6 +235,16 @@ final class CompatRuleSet {
         }
     }
 
+    record ResourceModelMatch(
+            Rule rule,
+            Model model,
+            String targetModel,
+            List<String> captures) {
+        String resolveSourceModel() {
+            return model.resolveSourceModel(targetModel, captures);
+        }
+    }
+
     static final class Document {
         int schemaVersion;
         String id;
@@ -237,12 +262,15 @@ final class CompatRuleSet {
         Model model;
 
         private transient List<Glob> blockPatterns = List.of();
+        private transient List<Glob> modelPatterns = List.of();
         private transient List<Glob> exclusions = List.of();
         private transient Map<String, Glob> propertyPatterns = Map.of();
 
         void compile() {
             if (id == null || id.isBlank()) throw new IllegalArgumentException("missing id");
+            if (match == null) throw new IllegalArgumentException("missing match");
             blockPatterns = Glob.compileAll(match.blocks);
+            modelPatterns = Glob.compileAll(match.models);
             exclusions = Glob.compileAll(match.exclude);
 
             Map<String, Glob> compiledProperties = new LinkedHashMap<>();
@@ -252,17 +280,29 @@ final class CompatRuleSet {
             }
             propertyPatterns = Map.copyOf(compiledProperties);
 
-            if (blockPatterns.isEmpty()) {
-                throw new IllegalArgumentException("match.blocks must contain at least one pattern");
+            if (blockPatterns.isEmpty() && modelPatterns.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "match must contain at least one block or model pattern");
+            }
+            if (tint != null && blockPatterns.isEmpty()) {
+                throw new IllegalArgumentException("tint rules require match.blocks");
             }
             if (model != null) {
                 model.validate();
                 int requiredCaptures = model.requiredCaptures();
-                for (Glob pattern : blockPatterns) {
+                List<Glob> capturePatterns =
+                        "resource_alias".equals(model.type) && !modelPatterns.isEmpty()
+                                ? modelPatterns
+                                : blockPatterns;
+                if (capturePatterns.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            model.type + " rules require a compatible match pattern");
+                }
+                for (Glob pattern : capturePatterns) {
                     if (pattern.captureCount() < requiredCaptures) {
                         throw new IllegalArgumentException(
                                 "model template references capture ${" + requiredCaptures
-                                        + "} but block pattern '" + pattern + "' provides only "
+                                        + "} but pattern '" + pattern + "' provides only "
                                         + pattern.captureCount() + " capture(s)");
                     }
                 }
@@ -276,7 +316,7 @@ final class CompatRuleSet {
         }
 
         boolean matches(String blockId, Map<String, String> properties) {
-            if (blockId == null) return false;
+            if (blockId == null || blockPatterns.isEmpty()) return false;
             if (blockPatterns.stream().noneMatch(pattern -> pattern.matches(blockId))) {
                 return false;
             }
@@ -291,7 +331,7 @@ final class CompatRuleSet {
         }
 
         List<String> captures(String blockId, Map<String, String> properties) {
-            if (blockId == null) return null;
+            if (blockId == null || blockPatterns.isEmpty()) return null;
 
             Glob matched = null;
             for (Glob pattern : blockPatterns) {
@@ -310,10 +350,20 @@ final class CompatRuleSet {
             }
             return matched.captures(blockId);
         }
+
+        List<String> modelCaptures(String modelId) {
+            if (modelId == null || modelPatterns.isEmpty()) return null;
+            for (Glob pattern : modelPatterns) {
+                List<String> captures = pattern.captures(modelId);
+                if (captures != null) return captures;
+            }
+            return null;
+        }
     }
 
     static final class Match {
         List<String> blocks;
+        List<String> models;
         List<String> exclude;
         Map<String, String> properties;
     }
