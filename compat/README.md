@@ -96,6 +96,33 @@ A numeric capture must exist in every block pattern in that rule; invalid local 
 rejected at load time. Aliases resolve against the original resource-pack mapping, so
 alias chains cannot accidentally form cycles.
 
+### Model-resource aliases
+
+Use `resource_alias` when the target blockstate is already correct but its referenced
+model uses a loader BlueMap cannot parse. This keeps the target blockstate intact and
+replaces only the model resource it points at. It is terrain-only.
+
+This is the preferred Dynamic Trees pattern because branch blockstates use a default
+variant, while primitive log blockstates typically require unrelated properties such as
+`axis`.
+
+```json
+{
+  "id": "dynamic-tree-family",
+  "priority": 100,
+  "scope": ["terrain"],
+  "match": { "blocks": ["dtexample:*_branch"] },
+  "model": {
+    "type": "resource_alias",
+    "sourceModel": "example:block/${1}_log"
+  }
+}
+```
+
+By default the target model is inferred as `<matched namespace>:block/<matched path>`.
+Set `targetModel` when a blockstate points somewhere else. `sourceModel` and
+`targetModel` support the same template and wildcard-capture syntax as `sourceBlock`.
+
 
 ## Moving feature flags
 
