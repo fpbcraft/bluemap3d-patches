@@ -106,17 +106,29 @@
           "model": {
             "type": "object",
             "required": [
-              "type",
-              "sourceBlock"
+              "type"
             ],
             "properties": {
               "type": {
-                "const": "alias"
+                "enum": [
+                  "alias",
+                  "resource_alias"
+                ]
               },
               "sourceBlock": {
                 "type": "string",
                 "minLength": 1,
-                "description": "Alias template. Supports ${id}, ${namespace}, ${path}, ${path0}/${path1}/..., and 1-based wildcard captures ${1}, ${2}, ... from '*' in the matched block glob."
+                "description": "For type=alias, the source block-id template."
+              },
+              "sourceModel": {
+                "type": "string",
+                "minLength": 1,
+                "description": "For type=resource_alias, the source BlueMap model resource template, e.g. natures_spirit:block/${1}_log."
+              },
+              "targetModel": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional target model resource template for resource_alias. Defaults to <matched namespace>:block/<matched path>."
               }
             }
           }
