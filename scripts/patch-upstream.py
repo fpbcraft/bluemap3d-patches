@@ -796,7 +796,8 @@ s = s.replace(
     field_needle,
     field_needle
         + '\n    private final ChainConveyorProvider chainConveyors = new ChainConveyorProvider(chunks);'
-        + '\n    private final BeltProvider belts = new BeltProvider(chunks);',
+        + '\n    private final BeltProvider belts = new BeltProvider(chunks);'
+        + '\n    private final SimulatedRopeProvider simulatedRopes = new SimulatedRopeProvider();',
     1,
 )
 register_needle = '        BlueMap3D.register(bearings);'
@@ -806,7 +807,8 @@ s = s.replace(
     register_needle,
     register_needle
         + '\n        BlueMap3D.register(chainConveyors);'
-        + '\n        BlueMap3D.register(belts);',
+        + '\n        BlueMap3D.register(belts);'
+        + '\n        BlueMap3D.register(simulatedRopes);',
     1,
 )
 clear_needle = '        bearings.clear();'
@@ -816,7 +818,8 @@ s = s.replace(
     clear_needle,
     clear_needle
         + '\n        chainConveyors.clear();'
-        + '\n        belts.clear();',
+        + '\n        belts.clear();'
+        + '\n        simulatedRopes.clear();',
     1,
 )
 p.write_text(s)
