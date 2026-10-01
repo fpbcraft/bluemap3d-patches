@@ -35,6 +35,8 @@ Prefer one wildcard rule for a whole block family instead of enumerating IDs:
 
 `*` matches any number of characters and `?` matches one character. Exact IDs and wildcards can be mixed in the same rule. Optional `match.properties` entries apply blockstate-property predicates and accept the same wildcards.
 
+For model aliases, each `*` in the matched `match.blocks` pattern also captures its substring. For terrain model-resource aliases, `match.models` can instead target the exact resource path (for example `dtnatures_spirit:block/*_branch`); its `*` captures are exposed the same way. Captures are numbered left-to-right as `${1}`, `${2}`, and so on. `?` remains a wildcard but does not create a capture. Exclusions and property predicates never contribute captures.
+
 Rules are merged by stable `id`. A server-local rule with the same ID replaces the built-in rule. Higher `priority` wins when several rules match.
 
 ## Tint rules
@@ -83,14 +85,46 @@ geometry should use a reusable renderer capability instead of a fragile alias.
   "match": { "blocks": ["example:*_fancy_fence"] },
   "model": {
     "type": "alias",
-    "sourceBlock": "example:${path}"
+    "sourceBlock": "example:${1}_fence"
   }
 }
 ```
 
-Alias templates can use `${id}`, `${namespace}`, `${path}`, and path-segment tokens
-such as `${path0}` / `${path1}`. Aliases resolve against the original resource-pack
-mapping, so alias chains cannot accidentally form cycles.
+Alias templates can use `${id}`, `${namespace}`, `${path}`, path-segment tokens
+such as `${path0}` / `${path1}`, and wildcard captures `${1}`, `${2}`, etc.
+A numeric capture must exist in every block pattern in that rule; invalid local rules are
+rejected at load time. Aliases resolve against the original resource-pack mapping, so
+alias chains cannot accidentally form cycles.
+
+### Model-resource aliases
+
+Use `resource_alias` when the target blockstate is already correct but its referenced
+model uses a loader BlueMap cannot parse. This keeps the target blockstate intact and
+replaces only the model resource it points at. It is terrain-only.
+
+This is the preferred Dynamic Trees pattern because branch blockstates use a default
+variant, while primitive log blockstates typically require unrelated properties such as
+`axis`.
+
+```json
+{
+  "id": "dynamic-tree-family",
+  "priority": 100,
+  "scope": ["terrain"],
+  "match": { "models": ["dtexample:block/*_branch"] },
+  "model": {
+    "type": "resource_alias",
+    "sourceModel": "example:block/${1}_log"
+  }
+}
+```
+
+Prefer `match.models` when replacing a custom-loader model: it targets the resource
+directly and also covers helper models whose path is not the block id (such as
+`sapling/...`, `smart_model/...`, or numbered helper models). A block match remains
+available when the target model path should be inferred from the block id; set
+`targetModel` when that inferred path is not correct. `sourceModel` and
+`targetModel` support the same template and wildcard-capture syntax as `sourceBlock`.
 
 
 ## Moving feature flags
