@@ -59,6 +59,13 @@
                   "type": "string"
                 }
               },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Model resource ids, e.g. dtru:block/redwood_branch. Used by terrain resource_alias/inline rules."
+              },
               "exclude": {
                 "type": "array",
                 "items": {
@@ -112,7 +119,8 @@
               "type": {
                 "enum": [
                   "alias",
-                  "resource_alias"
+                  "resource_alias",
+                  "inline"
                 ]
               },
               "sourceBlock": {
@@ -128,7 +136,11 @@
               "targetModel": {
                 "type": "string",
                 "minLength": 1,
-                "description": "Optional target model resource template for resource_alias. Defaults to <matched namespace>:block/<matched path>."
+                "description": "Optional target model resource template for block-matched resource_alias. Defaults to <matched namespace>:block/<matched path>."
+              },
+              "definition": {
+                "type": "object",
+                "description": "For type=inline, a vanilla/BlueMap-readable model JSON definition to install at the matched model resource id."
               }
             }
           }
