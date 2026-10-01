@@ -1,14 +1,13 @@
 {
   "schemaVersion": 1,
   "id": "dynamic-trees-natures-spirit",
-  "description": "Render Dynamic Trees for Nature's Spirit branch and surface-root smart models using the corresponding Nature's Spirit log models.",
+  "description": "Render Dynamic Trees for Nature's Spirit by replacing its unsupported custom branch/root model resources while preserving the original Dynamic Trees blockstates.",
   "rules": [
     {
       "id": "dynamic-trees-natures-spirit-branches",
       "priority": 100,
       "scope": [
-        "terrain",
-        "moving"
+        "terrain"
       ],
       "match": {
         "blocks": [
@@ -16,16 +15,15 @@
         ]
       },
       "model": {
-        "type": "alias",
-        "sourceBlock": "natures_spirit:${1}_log"
+        "type": "resource_alias",
+        "sourceModel": "natures_spirit:block/${1}_log"
       }
     },
     {
       "id": "dynamic-trees-natures-spirit-roots",
       "priority": 100,
       "scope": [
-        "terrain",
-        "moving"
+        "terrain"
       ],
       "match": {
         "blocks": [
@@ -33,8 +31,8 @@
         ]
       },
       "model": {
-        "type": "alias",
-        "sourceBlock": "natures_spirit:${1}_log"
+        "type": "resource_alias",
+        "sourceModel": "natures_spirit:block/${1}_log"
       }
     }
   ]
