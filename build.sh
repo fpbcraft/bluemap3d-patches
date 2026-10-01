@@ -50,6 +50,8 @@ cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/ChainCo
    addon-create/src/main/java/dev/duzo/bluemap3d/create/ChainConveyorProvider.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/BeltProvider.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/BeltProvider.java
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeProvider.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeProvider.java
 
 # Single native BlueMap 5.7 compatibility addon. Specialized adapters (Copycats,
 # TrafficCraft dynamic textures) and generic rule capabilities share this artifact.
