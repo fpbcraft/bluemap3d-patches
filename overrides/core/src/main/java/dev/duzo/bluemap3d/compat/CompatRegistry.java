@@ -478,18 +478,31 @@ public final class CompatRegistry {
         }
 
         boolean matches(String blockId, Map<String, String> properties) {
-            return captures(blockId, properties) != null;
+            if (blockId == null) return false;
+            if (blockPatterns.stream().noneMatch(pattern -> pattern.matches(blockId))) {
+                return false;
+            }
+            if (exclusions.stream().anyMatch(pattern -> pattern.matches(blockId))) {
+                return false;
+            }
+            for (Map.Entry<String, Glob> entry : propertyPatterns.entrySet()) {
+                String value = properties == null ? null : properties.get(entry.getKey());
+                if (value == null || !entry.getValue().matches(value)) return false;
+            }
+            return true;
         }
 
         List<String> captures(String blockId, Map<String, String> properties) {
             if (blockId == null) return null;
 
-            List<String> captures = null;
+            Glob matched = null;
             for (Glob pattern : blockPatterns) {
-                captures = pattern.captures(blockId);
-                if (captures != null) break;
+                if (pattern.matches(blockId)) {
+                    matched = pattern;
+                    break;
+                }
             }
-            if (captures == null) return null;
+            if (matched == null) return null;
             if (exclusions.stream().anyMatch(pattern -> pattern.matches(blockId))) {
                 return null;
             }
@@ -497,7 +510,7 @@ public final class CompatRegistry {
                 String value = properties == null ? null : properties.get(entry.getKey());
                 if (value == null || !entry.getValue().matches(value)) return null;
             }
-            return captures;
+            return matched.captures(blockId);
         }
     }
 
