@@ -620,6 +620,14 @@ public final class CompatRegistry {
 
             appendQuoted(regex, literal);
             return regex.append('
+        }
+
+        private static void appendQuoted(StringBuilder regex, StringBuilder literal) {
+            if (literal.isEmpty()) return;
+            regex.append(Pattern.quote(literal.toString()));
+            literal.setLength(0);
+        }
+    }
 }
 ).toString();
         }
