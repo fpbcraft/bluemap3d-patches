@@ -864,9 +864,107 @@ p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-35-flexible-segments";',
+    'var BUILD = "core-history-36-generic-lifecycle";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.3")
+replace("gradle.properties", "version=1.0.9", "version=1.1.4")
+
+# Make restore/history lifecycle generic at the provider registry boundary.
+p = Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")
+bs = p.read_text()
+
+register_needle = '''    public static void register(SceneObjectProvider provider) {
+        Objects.requireNonNull(provider, "provider");
+        String id = Objects.requireNonNull(provider.id(), "provider.id()");
+
+        for (SceneObjectProvider existing : PROVIDERS) {
+            if (existing.id().equals(id)) {
+                throw new IllegalArgumentException(
+                        "A SceneObjectProvider with id '" + id + "' is already registered: "
+                                + existing.getClass().getName());
+            }
+        }
+        PROVIDERS.add(provider);
+        LOGGER.info("Registered SceneObjectProvider '{}' ({})", id, provider.getClass().getName());
+    }
+'''
+if register_needle not in bs:
+    raise SystemExit("BlueMap3D persistent provider registration insertion point not found")
+bs = bs.replace(
+    register_needle,
+    '''    public static void register(SceneObjectProvider provider) {
+        Objects.requireNonNull(provider, "provider");
+        String id = Objects.requireNonNull(provider.id(), "provider.id()");
+
+        for (SceneObjectProvider existing : PROVIDERS) {
+            if (existing.id().equals(id)) {
+                throw new IllegalArgumentException(
+                        "A SceneObjectProvider with id '" + id + "' is already registered: "
+                                + PersistentSceneObjectProvider.unwrap(existing).getClass().getName());
+            }
+        }
+
+        SceneObjectProvider registered = PersistentSceneObjectProvider.wrap(provider);
+        PROVIDERS.add(registered);
+        LOGGER.info(
+                "Registered SceneObjectProvider '{}' ({}) lifecycle={}",
+                id,
+                provider.getClass().getName(),
+                provider.lifecycle());
+    }
+''',
+    1,
+)
+
+unregister_needle = '''    public static boolean unregister(SceneObjectProvider provider) {
+        return PROVIDERS.remove(provider);
+    }
+'''
+if unregister_needle not in bs:
+    raise SystemExit("BlueMap3D persistent provider unregister insertion point not found")
+bs = bs.replace(
+    unregister_needle,
+    '''    public static boolean unregister(SceneObjectProvider provider) {
+        for (SceneObjectProvider registered : PROVIDERS) {
+            if (PersistentSceneObjectProvider.wraps(registered, provider)) {
+                return PROVIDERS.remove(registered);
+            }
+        }
+        return false;
+    }
+''',
+    1,
+)
+
+published_needle = '''        PUBLISHED_MESHES.put(provider + "/" + objectId, publication);
+        for (MeshPublicationListener listener : MESH_LISTENERS) {
+'''
+if published_needle not in bs:
+    raise SystemExit("BlueMap3D persistence mesh-published insertion point not found")
+bs = bs.replace(
+    published_needle,
+    '''        PUBLISHED_MESHES.put(provider + "/" + objectId, publication);
+        PersistentSceneObjectProvider.meshPublished(provider, objectId, version);
+        for (MeshPublicationListener listener : MESH_LISTENERS) {
+''',
+    1,
+)
+
+clear_needle = '''    public static void clearPublishedMeshes() {
+        PUBLISHED_MESHES.clear();
+    }
+'''
+if clear_needle not in bs:
+    raise SystemExit("BlueMap3D persistence flush insertion point not found")
+bs = bs.replace(
+    clear_needle,
+    '''    public static void clearPublishedMeshes() {
+        PersistentSceneObjectProvider.flushNow();
+        PUBLISHED_MESHES.clear();
+    }
+''',
+    1,
+)
+p.write_text(bs)
 
 p = Path("core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java")
 s = p.read_text()
@@ -906,7 +1004,7 @@ if needle not in s:
 s = s.replace(
     needle,
     'CompatRegistry.get();\n\n        ' + needle
-        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.3 active; BlueMap target is 5.7.");',
+        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.4 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
