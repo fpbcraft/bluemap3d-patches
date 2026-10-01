@@ -115,7 +115,8 @@
               },
               "sourceBlock": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "Alias template. Supports ${id}, ${namespace}, ${path}, ${path0}/${path1}/..., and 1-based wildcard captures ${1}, ${2}, ... from '*' in the matched block glob."
               }
             }
           }
