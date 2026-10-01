@@ -313,7 +313,7 @@ final class CompatRuleSet {
         int requiredCaptures() {
             if (sourceBlock == null || sourceBlock.isBlank()) return 0;
 
-            var matcher = Pattern.compile("\\\$\\\{(\\d+)\\\}").matcher(sourceBlock);
+            var matcher = Pattern.compile("\\$\\{(\\d+)\\}").matcher(sourceBlock);
             int highest = 0;
             while (matcher.find()) {
                 int index = Integer.parseInt(matcher.group(1));
