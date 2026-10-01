@@ -471,11 +471,14 @@ public final class CompatRegistry {
         Model model;
 
         private transient List<Glob> blockPatterns = List.of();
+        private transient List<Glob> modelPatterns = List.of();
         private transient List<Glob> exclusions = List.of();
         private transient Map<String, Glob> propertyPatterns = Map.of();
 
         void compile() {
+            if (match == null) throw new IllegalArgumentException("missing match");
             blockPatterns = Glob.compileAll(match.blocks);
+            modelPatterns = Glob.compileAll(match.models);
             exclusions = Glob.compileAll(match.exclude);
 
             Map<String, Glob> compiled = new LinkedHashMap<>();
@@ -485,17 +488,29 @@ public final class CompatRegistry {
             }
             propertyPatterns = Map.copyOf(compiled);
 
-            if (blockPatterns.isEmpty()) {
-                throw new IllegalArgumentException("match.blocks is empty");
+            if (blockPatterns.isEmpty() && modelPatterns.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "match must contain at least one block or model pattern");
+            }
+            if (tint != null && blockPatterns.isEmpty()) {
+                throw new IllegalArgumentException("tint rules require match.blocks");
             }
             if (model != null) {
                 model.validate();
                 int requiredCaptures = model.requiredCaptures();
-                for (Glob pattern : blockPatterns) {
+                List<Glob> capturePatterns =
+                        "resource_alias".equals(model.type) && !modelPatterns.isEmpty()
+                                ? modelPatterns
+                                : blockPatterns;
+                if (capturePatterns.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            model.type + " rules require a compatible match pattern");
+                }
+                for (Glob pattern : capturePatterns) {
                     if (pattern.captureCount() < requiredCaptures) {
                         throw new IllegalArgumentException(
                                 "model template references capture ${" + requiredCaptures
-                                        + "} but a block pattern provides only "
+                                        + "} but a pattern provides only "
                                         + pattern.captureCount() + " capture(s)");
                     }
                 }
@@ -507,7 +522,7 @@ public final class CompatRegistry {
         }
 
         boolean matches(String blockId, Map<String, String> properties) {
-            if (blockId == null) return false;
+            if (blockId == null || blockPatterns.isEmpty()) return false;
             if (blockPatterns.stream().noneMatch(pattern -> pattern.matches(blockId))) {
                 return false;
             }
@@ -522,7 +537,7 @@ public final class CompatRegistry {
         }
 
         List<String> captures(String blockId, Map<String, String> properties) {
-            if (blockId == null) return null;
+            if (blockId == null || blockPatterns.isEmpty()) return null;
 
             Glob matched = null;
             for (Glob pattern : blockPatterns) {
@@ -545,6 +560,7 @@ public final class CompatRegistry {
 
     private static final class Match {
         List<String> blocks;
+        List<String> models;
         List<String> exclude;
         Map<String, String> properties;
     }
