@@ -140,7 +140,8 @@ without rebuilding:
     "features": {
       "create.chainConveyorAnimation": false,
       "create.mechanicalBeltAnimation": false,
-      "simulated.ropeRendering": true
+      "simulated.ropeRendering": true,
+      "simulated.springRendering": true
     }
   },
   "rules": []
@@ -150,3 +151,5 @@ without rebuilding:
 The built-in defaults keep both Create conveyor-chain and mechanical-belt animations off.
 Their ordinary static BlueMap geometry remains visible. Create: Simulated physics-rope
 rendering defaults on and can be disabled with `simulated.ropeRendering: false`.
+Create: Simulated spring rendering also defaults on and can be disabled with
+`simulated.springRendering: false`.
