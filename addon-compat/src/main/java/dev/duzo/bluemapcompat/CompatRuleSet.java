@@ -1,6 +1,7 @@
 package dev.duzo.bluemapcompat;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import de.bluecolored.bluemap.core.logger.Logger;
 
@@ -87,6 +88,17 @@ final class CompatRuleSet {
             List<String> captures = rule.captures(blockId, properties);
             if (captures != null) {
                 return new ModelMatch(rule, rule.model, captures);
+            }
+        }
+        return null;
+    }
+
+    ModelResourceMatch modelResource(String modelId, String scope) {
+        for (Rule rule : rules) {
+            if (rule.model == null || !rule.appliesTo(scope)) continue;
+            List<String> captures = rule.modelCaptures(modelId);
+            if (captures != null) {
+                return new ModelResourceMatch(rule, rule.model, captures);
             }
         }
         return null;
@@ -220,6 +232,16 @@ final class CompatRuleSet {
         }
     }
 
+    record ModelResourceMatch(Rule rule, Model model, List<String> captures) {
+        String resolveSourceModel(String targetModelId) {
+            return model.resolveSourceModel(targetModelId, captures);
+        }
+
+        JsonObject inlineDefinition() {
+            return model.definition;
+        }
+    }
+
     static final class Document {
         int schemaVersion;
         String id;
@@ -237,12 +259,14 @@ final class CompatRuleSet {
         Model model;
 
         private transient List<Glob> blockPatterns = List.of();
+        private transient List<Glob> modelPatterns = List.of();
         private transient List<Glob> exclusions = List.of();
         private transient Map<String, Glob> propertyPatterns = Map.of();
 
         void compile() {
             if (id == null || id.isBlank()) throw new IllegalArgumentException("missing id");
             blockPatterns = Glob.compileAll(match.blocks);
+            modelPatterns = Glob.compileAll(match.models);
             exclusions = Glob.compileAll(match.exclude);
 
             Map<String, Glob> compiledProperties = new LinkedHashMap<>();
@@ -252,17 +276,20 @@ final class CompatRuleSet {
             }
             propertyPatterns = Map.copyOf(compiledProperties);
 
-            if (blockPatterns.isEmpty()) {
-                throw new IllegalArgumentException("match.blocks must contain at least one pattern");
+            if (blockPatterns.isEmpty() && modelPatterns.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "match must contain at least one blocks or models pattern");
             }
             if (model != null) {
                 model.validate();
                 int requiredCaptures = model.requiredCaptures();
-                for (Glob pattern : blockPatterns) {
+                List<Glob> capturePatterns =
+                        !modelPatterns.isEmpty() ? modelPatterns : blockPatterns;
+                for (Glob pattern : capturePatterns) {
                     if (pattern.captureCount() < requiredCaptures) {
                         throw new IllegalArgumentException(
                                 "model template references capture ${" + requiredCaptures
-                                        + "} but block pattern '" + pattern + "' provides only "
+                                        + "} but pattern '" + pattern + "' provides only "
                                         + pattern.captureCount() + " capture(s)");
                     }
                 }
@@ -276,7 +303,7 @@ final class CompatRuleSet {
         }
 
         boolean matches(String blockId, Map<String, String> properties) {
-            if (blockId == null) return false;
+            if (blockId == null || blockPatterns.isEmpty()) return false;
             if (blockPatterns.stream().noneMatch(pattern -> pattern.matches(blockId))) {
                 return false;
             }
@@ -291,7 +318,7 @@ final class CompatRuleSet {
         }
 
         List<String> captures(String blockId, Map<String, String> properties) {
-            if (blockId == null) return null;
+            if (blockId == null || blockPatterns.isEmpty()) return null;
 
             Glob matched = null;
             for (Glob pattern : blockPatterns) {
@@ -310,10 +337,20 @@ final class CompatRuleSet {
             }
             return matched.captures(blockId);
         }
+
+        List<String> modelCaptures(String modelId) {
+            if (modelId == null || modelPatterns.isEmpty()) return null;
+            for (Glob pattern : modelPatterns) {
+                List<String> captures = pattern.captures(modelId);
+                if (captures != null) return captures;
+            }
+            return null;
+        }
     }
 
     static final class Match {
         List<String> blocks;
+        List<String> models;
         List<String> exclude;
         Map<String, String> properties;
     }
@@ -323,6 +360,7 @@ final class CompatRuleSet {
         String sourceBlock;
         String sourceModel;
         String targetModel;
+        JsonObject definition;
 
         void validate() {
             if ("alias".equals(type)) {
@@ -334,6 +372,12 @@ final class CompatRuleSet {
             if ("resource_alias".equals(type)) {
                 if (sourceModel == null || sourceModel.isBlank()) {
                     throw new IllegalArgumentException("resource_alias model requires sourceModel");
+                }
+                return;
+            }
+            if ("inline".equals(type)) {
+                if (definition == null) {
+                    throw new IllegalArgumentException("inline model requires definition");
                 }
                 return;
             }
