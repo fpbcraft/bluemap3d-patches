@@ -59,6 +59,13 @@
                   "type": "string"
                 }
               },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Model-resource globs used by terrain resource_alias rules, e.g. dtnatures_spirit:block/*_branch."
+              },
               "exclude": {
                 "type": "array",
                 "items": {
