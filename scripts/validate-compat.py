@@ -12,6 +12,7 @@ INDEX = BUILTIN / "index.txt"
 SCHEMA_VERSION = 1
 SUPPORTED_TINTS = {"none", "fixed", "palette"}
 HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
+NUMERIC_TEMPLATE_REF = re.compile(r"\$\{(\d+)\}")
 
 
 def fail(message: str) -> None:
@@ -107,11 +108,18 @@ def main() -> None:
             match = rule.get("match")
             if not isinstance(match, dict):
                 fail(f"{where}: match object is required")
-            blocks = match.get("blocks")
-            if not isinstance(blocks, list) or not blocks or not all(
+            blocks = match.get("blocks", [])
+            models = match.get("models", [])
+            if not isinstance(blocks, list) or not all(
                 isinstance(item, str) and item for item in blocks
             ):
-                fail(f"{where}: match.blocks must contain patterns")
+                fail(f"{where}: match.blocks must contain strings")
+            if not isinstance(models, list) or not all(
+                isinstance(item, str) and item for item in models
+            ):
+                fail(f"{where}: match.models must contain strings")
+            if not blocks and not models:
+                fail(f"{where}: match must contain block or model patterns")
 
             for key in ("exclude",):
                 values = match.get(key, [])
@@ -140,15 +148,70 @@ def main() -> None:
             if model is not None:
                 if not isinstance(model, dict):
                     fail(f"{where}: model must be an object")
-                if model.get("type") != "alias":
-                    fail(f"{where}: unsupported model type {model.get('type')!r}")
-                source_block = model.get("sourceBlock")
-                if not isinstance(source_block, str) or not source_block:
-                    fail(f"{where}: alias model requires sourceBlock")
+
+                model_type = model.get("type")
+                templates: list[str] = []
+
+                if model_type == "alias":
+                    source_block = model.get("sourceBlock")
+                    if not isinstance(source_block, str) or not source_block:
+                        fail(f"{where}: alias model requires sourceBlock")
+                    templates.append(source_block)
+                elif model_type == "resource_alias":
+                    source_model = model.get("sourceModel")
+                    if not isinstance(source_model, str) or not source_model:
+                        fail(f"{where}: resource_alias model requires sourceModel")
+                    if "moving" in scope:
+                        fail(
+                            f"{where}: resource_alias is terrain-only; "
+                            "remove moving from scope"
+                        )
+                    templates.append(source_model)
+                    target_model = model.get("targetModel")
+                    if target_model is not None:
+                        if not isinstance(target_model, str) or not target_model:
+                            fail(
+                                f"{where}: resource_alias targetModel must be "
+                                "a non-empty string"
+                            )
+                        templates.append(target_model)
+                else:
+                    fail(f"{where}: unsupported model type {model_type!r}")
+
+                capture_refs = [
+                    int(match.group(1))
+                    for template in templates
+                    for match in NUMERIC_TEMPLATE_REF.finditer(template)
+                ]
+                if any(index < 1 for index in capture_refs):
+                    fail(f"{where}: wildcard captures are 1-based")
+                if capture_refs:
+                    highest_capture = max(capture_refs)
+                    capture_patterns = (
+                        models
+                        if model_type == "resource_alias" and models
+                        else blocks
+                    )
+                    if not capture_patterns:
+                        fail(
+                            f"{where}: model type {model_type!r} has no "
+                            "compatible match patterns"
+                        )
+                    for pattern in capture_patterns:
+                        available = pattern.count("*")
+                        if available < highest_capture:
+                            fail(
+                                f"{where}: model template references "
+                                f"${{{highest_capture}}} but pattern "
+                                f"{pattern!r} has only "
+                                f"{available} '*' capture(s)"
+                            )
 
             tint = rule.get("tint")
             if tint is None:
                 continue
+            if not blocks:
+                fail(f"{where}: tint rules require match.blocks")
             if not isinstance(tint, dict):
                 fail(f"{where}: tint must be an object")
 
