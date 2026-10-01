@@ -1,13 +1,19 @@
 package dev.duzo.bluemap3d.create;
 
+import dev.duzo.bluemap3d.api.BlockVolume;
 import dev.duzo.bluemap3d.api.DynamicModelSegment;
+import dev.duzo.bluemap3d.api.ModelAttachment;
 import dev.duzo.bluemap3d.api.SceneObject;
 import dev.duzo.bluemap3d.api.SceneObjectProvider;
 import dev.duzo.bluemap3d.compat.CompatRegistry;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.joml.Vector3dc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +46,17 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
     private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/SimulatedRopes");
     private static final ResourceLocation ROPE_MODEL =
             ResourceLocation.fromNamespaceAndPath("simulated", "block/rope/rope");
+    private static final ResourceLocation KNOT_MODEL =
+            ResourceLocation.fromNamespaceAndPath("simulated", "block/rope/knot");
+    private static final BlockVolume KNOT_GEOMETRY = BlockVolume.attachments(
+            BlockPos.ZERO,
+            BlockPos.ZERO,
+            Vec3.ZERO,
+            List.of(new ModelAttachment(
+                    BlockPos.ZERO,
+                    KNOT_MODEL,
+                    Map.of(),
+                    new Matrix4f().translation(-0.5f, -0.5f, -0.5f))));
 
     private final Map<ServerLevel, Map<UUID, RopeSnapshot>> lastKnown = new HashMap<>();
     private SimulatedApi api;
@@ -114,10 +131,36 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
                         start,
                         end,
                         "Simulated Rope"));
+
+                // Match Simulated's rope renderer: internal joints from the second one
+                // onward also carry the little knot model. Keep knots as their own
+                // rigid objects so streamed Y scaling on the rope body never stretches
+                // the knot itself.
+                if (i > 1) {
+                    out.add(knotObject(
+                            rope.id() + "/knot-" + (i - 1),
+                            level.dimension(),
+                            start));
+                }
             }
         }
 
         return out;
+    }
+
+    private static SceneObject knotObject(
+            String id,
+            ResourceKey<Level> dimension,
+            Vec3 position) {
+        return new SceneObject() {
+            @Override public String id() { return id; }
+            @Override public BlockVolume geometry() { return KNOT_GEOMETRY; }
+            @Override public long geometryVersion() { return 1L; }
+            @Override public Vec3 position() { return position; }
+            @Override public Quaternionf rotation() { return new Quaternionf(); }
+            @Override public String label() { return "Simulated Rope Knot"; }
+            @Override public ResourceKey<Level> dimension() { return dimension; }
+        };
     }
 
     public void clear() {
