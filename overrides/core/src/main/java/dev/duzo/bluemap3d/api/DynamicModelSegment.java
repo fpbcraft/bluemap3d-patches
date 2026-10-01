@@ -5,26 +5,27 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
 import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * A cheap live scene object for flexible ropes, hoses, cables and similar geometry.
+ * A cheap live scene object for ropes, springs, hoses, cables and similar flexible
+ * geometry.
  *
- * <p>The expensive mesh is a straight model authored along local +Y. Runtime motion is
- * represented entirely by the object's midpoint and quaternion, so bending a rope does
- * not force a re-bake. The only geometry change is a quantized segment-length change.
- * Physics ropes normally keep every interior segment at a fixed length, which means their
- * meshes are effectively immutable while they swing.
+ * <p>The expensive mesh is a one-block straight model authored along local +Y.
+ * Midpoint, orientation and length are all streamed transforms. Bending or stretching
+ * therefore never re-bakes the mesh.
  */
 public final class DynamicModelSegment implements SceneObject {
 
     private static final Vec3 LOCAL_PIVOT = new Vec3(0.5, 0.5, 0.5);
     private static final double EPSILON = 1.0e-8;
+    /** Tiny total extension shared across both ends to hide raster/rounding seams. */
+    private static final float DEFAULT_OVERLAP = 1f / 64f;
 
     private final String id;
     private final ResourceKey<Level> dimension;
@@ -32,7 +33,7 @@ public final class DynamicModelSegment implements SceneObject {
     private final Map<String, String> textures;
     private final Vec3 position;
     private final Quaternionf rotation;
-    private final float bakedLength;
+    private final Vector3f scale;
     private final long geometryVersion;
     private final String label;
 
@@ -43,7 +44,7 @@ public final class DynamicModelSegment implements SceneObject {
             Map<String, String> textures,
             Vec3 position,
             Quaternionf rotation,
-            float bakedLength,
+            Vector3f scale,
             long geometryVersion,
             String label) {
         this.id = Objects.requireNonNull(id, "id");
@@ -52,16 +53,28 @@ public final class DynamicModelSegment implements SceneObject {
         this.textures = textures == null ? Map.of() : Map.copyOf(textures);
         this.position = Objects.requireNonNull(position, "position");
         this.rotation = new Quaternionf(Objects.requireNonNull(rotation, "rotation"));
-        this.bakedLength = bakedLength;
+        this.scale = new Vector3f(Objects.requireNonNull(scale, "scale"));
         this.geometryVersion = geometryVersion;
         this.label = label;
     }
 
+    /** One-block cross section; useful for models that already encode their own width. */
+    public static DynamicModelSegment between(
+            String id,
+            ResourceKey<Level> dimension,
+            ResourceLocation model,
+            Map<String, String> textures,
+            Vec3 start,
+            Vec3 end,
+            float ignoredLengthQuantum,
+            String label) {
+        return between(id, dimension, model, textures, start, end, 1f, label);
+    }
+
     /**
-     * Creates one segment between two world-space endpoints.
+     * Creates one deforming segment between two world-space endpoints.
      *
-     * @param lengthQuantum how coarsely length changes should trigger a mesh rebuild.
-     *                      1/32 block is a useful rope default.
+     * @param crossSectionScale X/Z scale relative to the authored model
      */
     public static DynamicModelSegment between(
             String id,
@@ -70,7 +83,7 @@ public final class DynamicModelSegment implements SceneObject {
             Map<String, String> textures,
             Vec3 start,
             Vec3 end,
-            float lengthQuantum,
+            float crossSectionScale,
             String label) {
         Objects.requireNonNull(start, "start");
         Objects.requireNonNull(end, "end");
@@ -80,19 +93,19 @@ public final class DynamicModelSegment implements SceneObject {
         if (!Double.isFinite(length) || length <= EPSILON) {
             throw new IllegalArgumentException("segment endpoints must be finite and distinct");
         }
-        if (!Float.isFinite(lengthQuantum) || lengthQuantum <= 0f) {
-            throw new IllegalArgumentException("lengthQuantum must be finite and positive");
+        if (!Float.isFinite(crossSectionScale) || crossSectionScale <= 0f) {
+            throw new IllegalArgumentException("crossSectionScale must be finite and positive");
         }
 
-        int lengthBucket = Math.max(1, Math.round((float) length / lengthQuantum));
-        float bakedLength = lengthBucket * lengthQuantum;
         Vec3 midpoint = start.add(end).scale(0.5);
         Quaternionf rotation = rotationFromUp(delta.scale(1.0 / length));
 
+        // Geometry no longer depends on length. Only model/texture/cross-section changes
+        // require a bake; length is a live Y scale in the feed.
         long version = 0xcbf29ce484222325L;
         version = mix(version, model.toString().hashCode());
         version = mix(version, textures == null ? 0 : textures.hashCode());
-        version = mix(version, lengthBucket);
+        version = mix(version, Float.floatToIntBits(crossSectionScale));
 
         return new DynamicModelSegment(
                 id,
@@ -101,7 +114,10 @@ public final class DynamicModelSegment implements SceneObject {
                 textures,
                 midpoint,
                 rotation,
-                bakedLength,
+                new Vector3f(
+                        crossSectionScale,
+                        (float) length + DEFAULT_OVERLAP,
+                        crossSectionScale),
                 version,
                 label);
     }
@@ -138,13 +154,8 @@ public final class DynamicModelSegment implements SceneObject {
 
     @Override
     public BlockVolume geometry() {
-        Matrix4f transform = new Matrix4f()
-                .translation(0.5f, 0.5f, 0.5f)
-                .scale(1f, bakedLength, 1f)
-                .translate(-0.5f, -0.5f, -0.5f);
-
         ModelAttachment attachment =
-                new ModelAttachment(BlockPos.ZERO, model, textures, transform);
+                new ModelAttachment(BlockPos.ZERO, model, textures);
 
         return BlockVolume.attachments(
                 BlockPos.ZERO,
@@ -166,6 +177,11 @@ public final class DynamicModelSegment implements SceneObject {
     @Override
     public Quaternionf rotation() {
         return new Quaternionf(rotation);
+    }
+
+    @Override
+    public Vector3f scale() {
+        return new Vector3f(scale);
     }
 
     @Override
