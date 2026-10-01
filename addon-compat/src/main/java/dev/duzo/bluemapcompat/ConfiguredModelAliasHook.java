@@ -90,7 +90,7 @@ final class ConfiguredModelAliasHook {
                     CompatManager.rules().model(blockId, Map.of(), "terrain");
             if (match == null) continue;
 
-            String sourceId = match.model().resolveSourceBlock(blockId);
+            String sourceId = match.resolveSourceBlock(blockId);
             if (sourceId == null || sourceId.equals(blockId)) continue;
 
             var sourcePath = originalPaths.get(sourceId);
