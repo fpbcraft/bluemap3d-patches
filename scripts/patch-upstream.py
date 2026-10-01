@@ -864,9 +864,9 @@ p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-36-generic-lifecycle";',
+    'var BUILD = "core-history-37-replay-stable-topology";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.4")
+replace("gradle.properties", "version=1.0.9", "version=1.1.5")
 
 # Make restore/history lifecycle generic at the provider registry boundary.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")
@@ -1004,7 +1004,7 @@ if needle not in s:
 s = s.replace(
     needle,
     'CompatRegistry.get();\n\n        ' + needle
-        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.4 active; BlueMap target is 5.7.");',
+        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.5 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
