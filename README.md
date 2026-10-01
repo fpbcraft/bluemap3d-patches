@@ -26,6 +26,7 @@ The build produces two installable JARs:
    - persistent Sable/Create moving objects
    - persistent Sable child contraptions (including Aeronautics propeller/sail assemblies), retained across distance unloads and server restarts
    - optional Create chain-conveyor and mechanical-belt animations (disabled by default)
+   - live Create: Simulated physics ropes, rendered from the server-authoritative rope points
    - trains/bogeys
    - moving Copycats / Create Connected material support
    - procedural and dynamic-texture adapters
@@ -180,6 +181,12 @@ config/bluemap/packs/
 Restart BlueMap/the server after changing addon JARs. External JSON compatibility rules
 do not require a JAR rebuild or server restart, but static terrain needs a rerender to
 reflect visual changes.
+
+Create: Simulated ropes are enabled by default through the `simulated.ropeRendering`
+runtime feature. Each physics interval is published as a rigid BlueMap3D object, so the
+rope mesh is cached while its position and orientation use the normal live interpolation
+path. Inactive strands keep their last server-side points until Simulated removes the
+strand, which also provides the distance-unloaded fallback without force-loading chunks.
 
 BlueMap3D stores last-known Sable child-contraption snapshots in
 `config/bluemap3d/cache/sable-child-contraptions.nbt`. This is generated runtime cache
