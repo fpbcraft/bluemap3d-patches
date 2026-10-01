@@ -59,6 +59,13 @@
                   "type": "string"
                 }
               },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Model-resource globs used by terrain resource_alias rules, e.g. dtnatures_spirit:block/*_branch."
+              },
               "exclude": {
                 "type": "array",
                 "items": {
@@ -106,16 +113,29 @@
           "model": {
             "type": "object",
             "required": [
-              "type",
-              "sourceBlock"
+              "type"
             ],
             "properties": {
               "type": {
-                "const": "alias"
+                "enum": [
+                  "alias",
+                  "resource_alias"
+                ]
               },
               "sourceBlock": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "For type=alias, the source block-id template."
+              },
+              "sourceModel": {
+                "type": "string",
+                "minLength": 1,
+                "description": "For type=resource_alias, the source BlueMap model resource template, e.g. natures_spirit:block/${1}_log."
+              },
+              "targetModel": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional target model resource template for resource_alias. Defaults to <matched namespace>:block/<matched path>."
               }
             }
           }

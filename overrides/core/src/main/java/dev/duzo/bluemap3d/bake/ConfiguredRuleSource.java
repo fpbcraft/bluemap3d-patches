@@ -52,7 +52,7 @@ public final class ConfiguredRuleSource implements BlockModelSource {
 
         BlockState renderState = state;
         if (modelMatch != null) {
-            String sourceId = modelMatch.model().resolveSourceBlock(blockId);
+            String sourceId = modelMatch.resolveSourceBlock(blockId);
             BlockState aliased = aliasState(sourceId, state);
             if (aliased != null) {
                 renderState = aliased;

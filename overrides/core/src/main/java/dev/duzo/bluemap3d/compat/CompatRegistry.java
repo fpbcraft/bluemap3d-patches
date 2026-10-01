@@ -86,9 +86,10 @@ public final class CompatRegistry {
 
     public ModelMatch model(String blockId, Map<String, String> properties) {
         for (Rule rule : current().rules) {
-            if (rule.model == null || !rule.appliesTo("moving")) continue;
-            if (rule.matches(blockId, properties)) {
-                return new ModelMatch(rule.id, rule.model);
+            if (rule.model == null || !rule.model.supportsMoving() || !rule.appliesTo("moving")) continue;
+            List<String> captures = rule.captures(blockId, properties);
+            if (captures != null) {
+                return new ModelMatch(rule.id, rule.model, captures);
             }
         }
         return null;
@@ -325,7 +326,10 @@ public final class CompatRegistry {
     public record TintMatch(String ruleId, Tint tint) {
     }
 
-    public record ModelMatch(String ruleId, Model model) {
+    public record ModelMatch(String ruleId, Model model, List<String> captures) {
+        public String resolveSourceBlock(String targetBlockId) {
+            return model == null ? null : model.resolveSourceBlock(targetBlockId, captures);
+        }
     }
 
     public static final class Tint {
@@ -370,16 +374,63 @@ public final class CompatRegistry {
     public static final class Model {
         private String type;
         private String sourceBlock;
+        private String sourceModel;
+        private String targetModel;
 
         public String type() {
             return type;
         }
 
+        private boolean supportsMoving() {
+            return "alias".equals(type);
+        }
+
+        private void validate() {
+            if ("alias".equals(type)) {
+                if (sourceBlock == null || sourceBlock.isBlank()) {
+                    throw new IllegalArgumentException("alias model requires sourceBlock");
+                }
+                return;
+            }
+            if ("resource_alias".equals(type)) {
+                if (sourceModel == null || sourceModel.isBlank()) {
+                    throw new IllegalArgumentException("resource_alias model requires sourceModel");
+                }
+                return;
+            }
+            throw new IllegalArgumentException("unsupported model type " + type);
+        }
+
         public String resolveSourceBlock(String targetBlockId) {
+            return resolveSourceBlock(targetBlockId, List.of());
+        }
+
+        private String resolveSourceBlock(String targetBlockId, List<String> captures) {
             if (!"alias".equals(type) || sourceBlock == null || sourceBlock.isBlank()) {
                 return null;
             }
-            return expandTemplate(sourceBlock, targetBlockId);
+            return expandTemplate(sourceBlock, targetBlockId, captures);
+        }
+
+        private int requiredCaptures() {
+            return Math.max(
+                    highestCapture(sourceBlock),
+                    Math.max(highestCapture(sourceModel), highestCapture(targetModel)));
+        }
+
+        private static int highestCapture(String template) {
+            if (template == null || template.isBlank()) return 0;
+
+            var matcher = Pattern.compile("\\$\\{(\\d+)\\}").matcher(template);
+            int highest = 0;
+            while (matcher.find()) {
+                int index = Integer.parseInt(matcher.group(1));
+                if (index < 1) {
+                    throw new IllegalArgumentException("wildcard captures are 1-based");
+                }
+                highest = Math.max(highest, index);
+            }
+            return highest;
         }
     }
 
@@ -420,11 +471,14 @@ public final class CompatRegistry {
         Model model;
 
         private transient List<Glob> blockPatterns = List.of();
+        private transient List<Glob> modelPatterns = List.of();
         private transient List<Glob> exclusions = List.of();
         private transient Map<String, Glob> propertyPatterns = Map.of();
 
         void compile() {
+            if (match == null) throw new IllegalArgumentException("missing match");
             blockPatterns = Glob.compileAll(match.blocks);
+            modelPatterns = Glob.compileAll(match.models);
             exclusions = Glob.compileAll(match.exclude);
 
             Map<String, Glob> compiled = new LinkedHashMap<>();
@@ -434,8 +488,32 @@ public final class CompatRegistry {
             }
             propertyPatterns = Map.copyOf(compiled);
 
-            if (blockPatterns.isEmpty()) {
-                throw new IllegalArgumentException("match.blocks is empty");
+            if (blockPatterns.isEmpty() && modelPatterns.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "match must contain at least one block or model pattern");
+            }
+            if (tint != null && blockPatterns.isEmpty()) {
+                throw new IllegalArgumentException("tint rules require match.blocks");
+            }
+            if (model != null) {
+                model.validate();
+                int requiredCaptures = model.requiredCaptures();
+                List<Glob> capturePatterns =
+                        "resource_alias".equals(model.type) && !modelPatterns.isEmpty()
+                                ? modelPatterns
+                                : blockPatterns;
+                if (capturePatterns.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            model.type + " rules require a compatible match pattern");
+                }
+                for (Glob pattern : capturePatterns) {
+                    if (pattern.captureCount() < requiredCaptures) {
+                        throw new IllegalArgumentException(
+                                "model template references capture ${" + requiredCaptures
+                                        + "} but a pattern provides only "
+                                        + pattern.captureCount() + " capture(s)");
+                    }
+                }
             }
         }
 
@@ -444,7 +522,7 @@ public final class CompatRegistry {
         }
 
         boolean matches(String blockId, Map<String, String> properties) {
-            if (blockId == null) return false;
+            if (blockId == null || blockPatterns.isEmpty()) return false;
             if (blockPatterns.stream().noneMatch(pattern -> pattern.matches(blockId))) {
                 return false;
             }
@@ -457,10 +535,32 @@ public final class CompatRegistry {
             }
             return true;
         }
+
+        List<String> captures(String blockId, Map<String, String> properties) {
+            if (blockId == null || blockPatterns.isEmpty()) return null;
+
+            Glob matched = null;
+            for (Glob pattern : blockPatterns) {
+                if (pattern.matches(blockId)) {
+                    matched = pattern;
+                    break;
+                }
+            }
+            if (matched == null) return null;
+            if (exclusions.stream().anyMatch(pattern -> pattern.matches(blockId))) {
+                return null;
+            }
+            for (Map.Entry<String, Glob> entry : propertyPatterns.entrySet()) {
+                String value = properties == null ? null : properties.get(entry.getKey());
+                if (value == null || !entry.getValue().matches(value)) return null;
+            }
+            return matched.captures(blockId);
+        }
     }
 
     private static final class Match {
         List<String> blocks;
+        List<String> models;
         List<String> exclude;
         Map<String, String> properties;
     }
@@ -488,6 +588,13 @@ public final class CompatRegistry {
     }
 
     private static String expandTemplate(String template, String targetBlockId) {
+        return expandTemplate(template, targetBlockId, List.of());
+    }
+
+    private static String expandTemplate(
+            String template,
+            String targetBlockId,
+            List<String> captures) {
         int colon = targetBlockId.indexOf(':');
         String namespace = colon < 0 ? "minecraft" : targetBlockId.substring(0, colon);
         String path = colon < 0 ? targetBlockId : targetBlockId.substring(colon + 1);
@@ -501,6 +608,11 @@ public final class CompatRegistry {
         for (int i = 0; i < segments.length; i++) {
             result = result.replace("${path" + i + "}", segments[i]);
         }
+        if (captures != null) {
+            for (int i = 0; i < captures.size(); i++) {
+                result = result.replace("${" + (i + 1) + "}", captures.get(i));
+            }
+        }
         return result;
     }
 
@@ -509,28 +621,56 @@ public final class CompatRegistry {
 
         Glob(String source) {
             Objects.requireNonNull(source, "glob");
-            StringBuilder regex = new StringBuilder("^");
-            for (int i = 0; i < source.length(); i++) {
-                char c = source.charAt(i);
-                switch (c) {
-                    case '*' -> regex.append(".*");
-                    case '?' -> regex.append('.');
-                    case '.', '(', ')', '+', '|', '^', '$', '@', '%' ->
-                            regex.append('\\').append(c);
-                    case '\\' -> regex.append("\\\\");
-                    default -> regex.append(c);
-                }
-            }
-            pattern = Pattern.compile(regex.append('$').toString());
+            pattern = Pattern.compile(toRegex(source));
         }
 
         boolean matches(String value) {
             return pattern.matcher(value).matches();
         }
 
+        List<String> captures(String value) {
+            var matcher = pattern.matcher(value);
+            if (!matcher.matches()) return null;
+            if (matcher.groupCount() == 0) return List.of();
+
+            List<String> captures = new ArrayList<>(matcher.groupCount());
+            for (int i = 1; i <= matcher.groupCount(); i++) {
+                captures.add(matcher.group(i));
+            }
+            return List.copyOf(captures);
+        }
+
+        int captureCount() {
+            return pattern.matcher("").groupCount();
+        }
+
         static List<Glob> compileAll(List<String> source) {
             if (source == null || source.isEmpty()) return List.of();
             return source.stream().map(Glob::new).toList();
+        }
+
+        private static String toRegex(String glob) {
+            StringBuilder regex = new StringBuilder("^");
+            StringBuilder literal = new StringBuilder();
+
+            for (int i = 0; i < glob.length(); i++) {
+                char c = glob.charAt(i);
+                if (c == '*' || c == '?') {
+                    appendQuoted(regex, literal);
+                    regex.append(c == '*' ? "(.*)" : ".");
+                } else {
+                    literal.append(c);
+                }
+            }
+
+            appendQuoted(regex, literal);
+            return regex.append('$').toString();
+        }
+
+        private static void appendQuoted(StringBuilder regex, StringBuilder literal) {
+            if (literal.isEmpty()) return;
+            regex.append(Pattern.quote(literal.toString()));
+            literal.setLength(0);
         }
     }
 }
