@@ -141,15 +141,40 @@ def main() -> None:
             if model is not None:
                 if not isinstance(model, dict):
                     fail(f"{where}: model must be an object")
-                if model.get("type") != "alias":
-                    fail(f"{where}: unsupported model type {model.get('type')!r}")
-                source_block = model.get("sourceBlock")
-                if not isinstance(source_block, str) or not source_block:
-                    fail(f"{where}: alias model requires sourceBlock")
+
+                model_type = model.get("type")
+                templates: list[str] = []
+
+                if model_type == "alias":
+                    source_block = model.get("sourceBlock")
+                    if not isinstance(source_block, str) or not source_block:
+                        fail(f"{where}: alias model requires sourceBlock")
+                    templates.append(source_block)
+                elif model_type == "resource_alias":
+                    source_model = model.get("sourceModel")
+                    if not isinstance(source_model, str) or not source_model:
+                        fail(f"{where}: resource_alias model requires sourceModel")
+                    if "moving" in scope:
+                        fail(
+                            f"{where}: resource_alias is terrain-only; "
+                            "remove moving from scope"
+                        )
+                    templates.append(source_model)
+                    target_model = model.get("targetModel")
+                    if target_model is not None:
+                        if not isinstance(target_model, str) or not target_model:
+                            fail(
+                                f"{where}: resource_alias targetModel must be "
+                                "a non-empty string"
+                            )
+                        templates.append(target_model)
+                else:
+                    fail(f"{where}: unsupported model type {model_type!r}")
 
                 capture_refs = [
                     int(match.group(1))
-                    for match in NUMERIC_TEMPLATE_REF.finditer(source_block)
+                    for template in templates
+                    for match in NUMERIC_TEMPLATE_REF.finditer(template)
                 ]
                 if any(index < 1 for index in capture_refs):
                     fail(f"{where}: wildcard captures are 1-based")
@@ -159,8 +184,9 @@ def main() -> None:
                         available = block_pattern.count("*")
                         if available < highest_capture:
                             fail(
-                                f"{where}: sourceBlock references ${{{highest_capture}}} "
-                                f"but block pattern {block_pattern!r} has only "
+                                f"{where}: model template references "
+                                f"${{{highest_capture}}} but block pattern "
+                                f"{block_pattern!r} has only "
                                 f"{available} '*' capture(s)"
                             )
 
