@@ -142,6 +142,31 @@ final class ConfiguredModelAliasHook {
             }
         }
 
+        for (ResourcePath<Model> targetPath : originalModels.keySet()) {
+            String targetId = targetPath.getFormatted();
+            CompatRuleSet.ResourceModelMatch match =
+                    CompatManager.rules().resourceModel(targetId, "terrain");
+            if (match == null) continue;
+
+            String sourceId = match.resolveSourceModel();
+            if (sourceId == null || sourceId.equals(targetId)) continue;
+
+            ResourcePath<Model> sourcePath = new ResourcePath<>(sourceId);
+            Model sourceModel = originalModels.get(sourcePath);
+            if (sourceModel == null) {
+                warnMissing(
+                        match.rule().id,
+                        targetId,
+                        sourceId,
+                        "source model");
+                continue;
+            }
+
+            liveModels.put(targetPath, sourceModel);
+            appliedModelTargets.add(targetPath);
+            modelAliases++;
+        }
+
         Logger.global.logInfo(String.format(
                 "Config-driven model aliases applied: %s blockstate alias(es), %s model-resource alias(es)",
                 blockAliases,
