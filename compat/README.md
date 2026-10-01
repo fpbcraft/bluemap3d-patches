@@ -35,7 +35,7 @@ Prefer one wildcard rule for a whole block family instead of enumerating IDs:
 
 `*` matches any number of characters and `?` matches one character. Exact IDs and wildcards can be mixed in the same rule. Optional `match.properties` entries apply blockstate-property predicates and accept the same wildcards.
 
-For model aliases, each `*` in the **matched `match.blocks` pattern** also captures its substring. Captures are numbered left-to-right as `${1}`, `${2}`, and so on. `?` remains a wildcard but does not create a capture. Exclusions and property predicates never contribute captures.
+For model aliases, each `*` in the matched `match.blocks` pattern also captures its substring. For terrain model-resource aliases, `match.models` can instead target the exact resource path (for example `dtnatures_spirit:block/*_branch`); its `*` captures are exposed the same way. Captures are numbered left-to-right as `${1}`, `${2}`, and so on. `?` remains a wildcard but does not create a capture. Exclusions and property predicates never contribute captures.
 
 Rules are merged by stable `id`. A server-local rule with the same ID replaces the built-in rule. Higher `priority` wins when several rules match.
 
@@ -111,7 +111,7 @@ variant, while primitive log blockstates typically require unrelated properties 
   "id": "dynamic-tree-family",
   "priority": 100,
   "scope": ["terrain"],
-  "match": { "blocks": ["dtexample:*_branch"] },
+  "match": { "models": ["dtexample:block/*_branch"] },
   "model": {
     "type": "resource_alias",
     "sourceModel": "example:block/${1}_log"
@@ -119,8 +119,11 @@ variant, while primitive log blockstates typically require unrelated properties 
 }
 ```
 
-By default the target model is inferred as `<matched namespace>:block/<matched path>`.
-Set `targetModel` when a blockstate points somewhere else. `sourceModel` and
+Prefer `match.models` when replacing a custom-loader model: it targets the resource
+directly and also covers helper models whose path is not the block id (such as
+`sapling/...`, `smart_model/...`, or numbered helper models). A block match remains
+available when the target model path should be inferred from the block id; set
+`targetModel` when that inferred path is not correct. `sourceModel` and
 `targetModel` support the same template and wildcard-capture syntax as `sourceBlock`.
 
 
