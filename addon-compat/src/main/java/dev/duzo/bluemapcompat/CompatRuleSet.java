@@ -210,6 +210,14 @@ final class CompatRuleSet {
         String resolveSourceBlock(String targetBlockId) {
             return model.resolveSourceBlock(targetBlockId, captures);
         }
+
+        String resolveSourceModel(String targetBlockId) {
+            return model.resolveSourceModel(targetBlockId, captures);
+        }
+
+        String resolveTargetModel(String targetBlockId) {
+            return model.resolveTargetModel(targetBlockId, captures);
+        }
     }
 
     static final class Document {
@@ -248,11 +256,12 @@ final class CompatRuleSet {
                 throw new IllegalArgumentException("match.blocks must contain at least one pattern");
             }
             if (model != null) {
+                model.validate();
                 int requiredCaptures = model.requiredCaptures();
                 for (Glob pattern : blockPatterns) {
                     if (pattern.captureCount() < requiredCaptures) {
                         throw new IllegalArgumentException(
-                                "model.sourceBlock references capture ${" + requiredCaptures
+                                "model template references capture ${" + requiredCaptures
                                         + "} but block pattern '" + pattern + "' provides only "
                                         + pattern.captureCount() + " capture(s)");
                     }
@@ -312,6 +321,24 @@ final class CompatRuleSet {
     static final class Model {
         String type;
         String sourceBlock;
+        String sourceModel;
+        String targetModel;
+
+        void validate() {
+            if ("alias".equals(type)) {
+                if (sourceBlock == null || sourceBlock.isBlank()) {
+                    throw new IllegalArgumentException("alias model requires sourceBlock");
+                }
+                return;
+            }
+            if ("resource_alias".equals(type)) {
+                if (sourceModel == null || sourceModel.isBlank()) {
+                    throw new IllegalArgumentException("resource_alias model requires sourceModel");
+                }
+                return;
+            }
+            throw new IllegalArgumentException("unsupported model type " + type);
+        }
 
         String resolveSourceBlock(String targetBlockId) {
             return resolveSourceBlock(targetBlockId, List.of());
@@ -324,10 +351,35 @@ final class CompatRuleSet {
             return expandTemplate(sourceBlock, targetBlockId, captures);
         }
 
-        int requiredCaptures() {
-            if (sourceBlock == null || sourceBlock.isBlank()) return 0;
+        String resolveSourceModel(String targetBlockId, List<String> captures) {
+            if (!"resource_alias".equals(type) || sourceModel == null || sourceModel.isBlank()) {
+                return null;
+            }
+            return expandTemplate(sourceModel, targetBlockId, captures);
+        }
 
-            var matcher = Pattern.compile("\\$\\{(\\d+)\\}").matcher(sourceBlock);
+        String resolveTargetModel(String targetBlockId, List<String> captures) {
+            if (!"resource_alias".equals(type)) return null;
+            if (targetModel != null && !targetModel.isBlank()) {
+                return expandTemplate(targetModel, targetBlockId, captures);
+            }
+
+            int colon = targetBlockId.indexOf(':');
+            String namespace = colon < 0 ? "minecraft" : targetBlockId.substring(0, colon);
+            String path = colon < 0 ? targetBlockId : targetBlockId.substring(colon + 1);
+            return namespace + ":block/" + path;
+        }
+
+        int requiredCaptures() {
+            return Math.max(
+                    highestCapture(sourceBlock),
+                    Math.max(highestCapture(sourceModel), highestCapture(targetModel)));
+        }
+
+        private static int highestCapture(String template) {
+            if (template == null || template.isBlank()) return 0;
+
+            var matcher = Pattern.compile("\\$\\{(\\d+)\\}").matcher(template);
             int highest = 0;
             while (matcher.find()) {
                 int index = Integer.parseInt(matcher.group(1));
