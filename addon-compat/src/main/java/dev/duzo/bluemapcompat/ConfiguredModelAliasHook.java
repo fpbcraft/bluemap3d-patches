@@ -4,10 +4,12 @@ import de.bluecolored.bluemap.api.BlueMapAPI;
 import de.bluecolored.bluemap.common.api.BlueMapAPIImpl;
 import de.bluecolored.bluemap.core.logger.Logger;
 import de.bluecolored.bluemap.core.resources.ResourcePath;
+import de.bluecolored.bluemap.core.resources.adapter.ResourcesGson;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.model.Model;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -27,6 +29,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 final class ConfiguredModelAliasHook {
 
+    private final ResourcePack resourcePack;
+
     private final Map<String,
             ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
             originalPaths;
@@ -42,10 +46,12 @@ final class ConfiguredModelAliasHook {
     private final Set<ResourcePath<Model>> appliedModelTargets = ConcurrentHashMap.newKeySet();
 
     private ConfiguredModelAliasHook(
+            ResourcePack resourcePack,
             Map<String,
                     ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
                     livePaths,
             Map<ResourcePath<Model>, Model> liveModels) {
+        this.resourcePack = resourcePack;
         this.livePaths = livePaths;
         this.originalPaths = new LinkedHashMap<>(livePaths);
         this.liveModels = liveModels;
@@ -78,7 +84,8 @@ final class ConfiguredModelAliasHook {
                     pathsField.get(resourcePack);
             var models = (Map<ResourcePath<Model>, Model>) modelsField.get(resourcePack);
 
-            ConfiguredModelAliasHook hook = new ConfiguredModelAliasHook(paths, models);
+            ConfiguredModelAliasHook hook =
+                    new ConfiguredModelAliasHook(resourcePack, paths, models);
             hook.apply();
             CompatManager.onReload(hook::apply);
             return hook;
@@ -93,6 +100,8 @@ final class ConfiguredModelAliasHook {
 
         int blockAliases = 0;
         int modelAliases = 0;
+        int inlineModels = 0;
+        Map<ResourcePath<Model>, Model> inlineToBake = new LinkedHashMap<>();
 
         for (String blockId : originalPaths.keySet()) {
             CompatRuleSet.ModelMatch match =
@@ -142,10 +151,79 @@ final class ConfiguredModelAliasHook {
             }
         }
 
+        // Model-resource rules are matched directly against model ids. This covers assets
+        // that have no one-to-one block id (Dynamic Trees saplings, helper models and
+        // smart-model fragments), so an old compatibility resource pack can be represented
+        // entirely by config.
+        for (ResourcePath<Model> targetPath : new ArrayList<>(originalModels.keySet())) {
+            String targetId = targetPath.getFormatted();
+            CompatRuleSet.ModelResourceMatch match =
+                    CompatManager.rules().modelResource(targetId, "terrain");
+            if (match == null) continue;
+
+            if ("resource_alias".equals(match.model().type)) {
+                String sourceId = match.resolveSourceModel(targetId);
+                if (sourceId == null || sourceId.equals(targetId)) continue;
+
+                ResourcePath<Model> sourcePath = new ResourcePath<>(sourceId);
+                Model sourceModel = originalModels.get(sourcePath);
+                if (sourceModel == null) {
+                    warnMissing(
+                            match.rule().id,
+                            targetId,
+                            sourceId,
+                            "source model");
+                    continue;
+                }
+
+                liveModels.put(targetPath, sourceModel);
+                appliedModelTargets.add(targetPath);
+                modelAliases++;
+                continue;
+            }
+
+            if ("inline".equals(match.model().type)) {
+                try {
+                    Model inline = ResourcesGson.INSTANCE.fromJson(
+                            match.inlineDefinition(), Model.class);
+                    if (inline == null) {
+                        throw new IllegalArgumentException("inline definition parsed to null");
+                    }
+                    liveModels.put(targetPath, inline);
+                    appliedModelTargets.add(targetPath);
+                    inlineToBake.put(targetPath, inline);
+                    inlineModels++;
+                } catch (RuntimeException error) {
+                    Logger.global.logWarning(String.format(
+                            "Could not apply inline model rule '%s' to %s: %s",
+                            match.rule().id, targetId, error.getMessage()));
+                }
+            }
+        }
+
+        // BlueMap normally resolves parents and optimizes models during ResourcePack.bake().
+        // Inline models arrive later, so perform those same model-local bake steps after all
+        // replacements are installed. Doing this as a second pass lets one inline model
+        // inherit from another inline model regardless of rule order.
+        for (Map.Entry<ResourcePath<Model>, Model> entry : inlineToBake.entrySet()) {
+            try {
+                Model model = entry.getValue();
+                model.applyParent(resourcePack);
+                model.optimize(resourcePack);
+                model.calculateProperties(resourcePack);
+            } catch (RuntimeException error) {
+                Logger.global.logWarning(String.format(
+                        "Could not bake inline compatibility model %s: %s",
+                        entry.getKey().getFormatted(), error.getMessage()));
+            }
+        }
+
         Logger.global.logInfo(String.format(
-                "Config-driven model aliases applied: %s blockstate alias(es), %s model-resource alias(es)",
+                "Config-driven model aliases applied: %s blockstate alias(es), "
+                        + "%s model-resource alias(es), %s inline model override(s)",
                 blockAliases,
-                modelAliases));
+                modelAliases,
+                inlineModels));
     }
 
     private void restore() {
