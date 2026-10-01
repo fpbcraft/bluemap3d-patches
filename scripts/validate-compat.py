@@ -12,6 +12,7 @@ INDEX = BUILTIN / "index.txt"
 SCHEMA_VERSION = 1
 SUPPORTED_TINTS = {"none", "fixed", "palette"}
 HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
+NUMERIC_TEMPLATE_REF = re.compile(r"\$\{(\d+)\}")
 
 
 def fail(message: str) -> None:
@@ -145,6 +146,23 @@ def main() -> None:
                 source_block = model.get("sourceBlock")
                 if not isinstance(source_block, str) or not source_block:
                     fail(f"{where}: alias model requires sourceBlock")
+
+                capture_refs = [
+                    int(match.group(1))
+                    for match in NUMERIC_TEMPLATE_REF.finditer(source_block)
+                ]
+                if any(index < 1 for index in capture_refs):
+                    fail(f"{where}: wildcard captures are 1-based")
+                if capture_refs:
+                    highest_capture = max(capture_refs)
+                    for block_pattern in blocks:
+                        available = block_pattern.count("*")
+                        if available < highest_capture:
+                            fail(
+                                f"{where}: sourceBlock references ${{{highest_capture}}} "
+                                f"but block pattern {block_pattern!r} has only "
+                                f"{available} '*' capture(s)"
+                            )
 
             tint = rule.get("tint")
             if tint is None:
