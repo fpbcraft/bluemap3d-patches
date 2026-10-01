@@ -59,6 +59,7 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
                     new Matrix4f().translation(-0.5f, -0.5f, -0.5f))));
 
     private final Map<ServerLevel, Map<UUID, RopeSnapshot>> lastKnown = new HashMap<>();
+    private final Map<ServerLevel, Set<String>> authoritativePrefixes = new HashMap<>();
     private SimulatedApi api;
     private boolean discoveryAttempted;
     private boolean warned;
@@ -96,11 +97,17 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
                 cache.put(snapshot.id(), snapshot);
             }
 
-            // ServerLevelRopeManager owns the complete rope set, including inactive ropes
-            // whose physics chunks/sub-level attachments are currently unloaded. Missing
-            // ids therefore mean the rope was actually removed.
+            // The manager only reports strands whose owning holder is currently loaded.
+            // Drop them from this RAM working set when absent and let generic persistence
+            // supply their last-known scene children. For strands we DID see, however,
+            // their current child topology is authoritative and stale saved segment/knot
+            // ids can be pruned safely.
             cache.keySet().retainAll(seen);
+            Set<String> prefixes = new HashSet<>();
+            for (UUID id : seen) prefixes.add(id + "/");
+            authoritativePrefixes.put(level, Set.copyOf(prefixes));
         } catch (ReflectiveOperationException | RuntimeException error) {
+            authoritativePrefixes.put(level, Set.of());
             if (!warned) {
                 warned = true;
                 LOGGER.warn(
@@ -171,8 +178,14 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
         };
     }
 
+    @Override
+    public Collection<String> authoritativeObjectPrefixes(ServerLevel level) {
+        return authoritativePrefixes.getOrDefault(level, Set.of());
+    }
+
     public void clear() {
         lastKnown.clear();
+        authoritativePrefixes.clear();
     }
 
     private SimulatedApi api() {
