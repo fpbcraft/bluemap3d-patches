@@ -87,8 +87,9 @@ public final class CompatRegistry {
     public ModelMatch model(String blockId, Map<String, String> properties) {
         for (Rule rule : current().rules) {
             if (rule.model == null || !rule.appliesTo("moving")) continue;
-            if (rule.matches(blockId, properties)) {
-                return new ModelMatch(rule.id, rule.model);
+            List<String> captures = rule.captures(blockId, properties);
+            if (captures != null) {
+                return new ModelMatch(rule.id, rule.model, captures);
             }
         }
         return null;
@@ -325,7 +326,10 @@ public final class CompatRegistry {
     public record TintMatch(String ruleId, Tint tint) {
     }
 
-    public record ModelMatch(String ruleId, Model model) {
+    public record ModelMatch(String ruleId, Model model, List<String> captures) {
+        public String resolveSourceBlock(String targetBlockId) {
+            return model == null ? null : model.resolveSourceBlock(targetBlockId, captures);
+        }
     }
 
     public static final class Tint {
@@ -376,10 +380,14 @@ public final class CompatRegistry {
         }
 
         public String resolveSourceBlock(String targetBlockId) {
+            return resolveSourceBlock(targetBlockId, List.of());
+        }
+
+        private String resolveSourceBlock(String targetBlockId, List<String> captures) {
             if (!"alias".equals(type) || sourceBlock == null || sourceBlock.isBlank()) {
                 return null;
             }
-            return expandTemplate(sourceBlock, targetBlockId);
+            return expandTemplate(sourceBlock, targetBlockId, captures);
         }
     }
 
@@ -444,18 +452,26 @@ public final class CompatRegistry {
         }
 
         boolean matches(String blockId, Map<String, String> properties) {
-            if (blockId == null) return false;
-            if (blockPatterns.stream().noneMatch(pattern -> pattern.matches(blockId))) {
-                return false;
+            return captures(blockId, properties) != null;
+        }
+
+        List<String> captures(String blockId, Map<String, String> properties) {
+            if (blockId == null) return null;
+
+            List<String> captures = null;
+            for (Glob pattern : blockPatterns) {
+                captures = pattern.captures(blockId);
+                if (captures != null) break;
             }
+            if (captures == null) return null;
             if (exclusions.stream().anyMatch(pattern -> pattern.matches(blockId))) {
-                return false;
+                return null;
             }
             for (Map.Entry<String, Glob> entry : propertyPatterns.entrySet()) {
                 String value = properties == null ? null : properties.get(entry.getKey());
-                if (value == null || !entry.getValue().matches(value)) return false;
+                if (value == null || !entry.getValue().matches(value)) return null;
             }
-            return true;
+            return captures;
         }
     }
 
@@ -488,6 +504,13 @@ public final class CompatRegistry {
     }
 
     private static String expandTemplate(String template, String targetBlockId) {
+        return expandTemplate(template, targetBlockId, List.of());
+    }
+
+    private static String expandTemplate(
+            String template,
+            String targetBlockId,
+            List<String> captures) {
         int colon = targetBlockId.indexOf(':');
         String namespace = colon < 0 ? "minecraft" : targetBlockId.substring(0, colon);
         String path = colon < 0 ? targetBlockId : targetBlockId.substring(colon + 1);
@@ -501,6 +524,11 @@ public final class CompatRegistry {
         for (int i = 0; i < segments.length; i++) {
             result = result.replace("${path" + i + "}", segments[i]);
         }
+        if (captures != null) {
+            for (int i = 0; i < captures.size(); i++) {
+                result = result.replace("${" + (i + 1) + "}", captures.get(i));
+            }
+        }
         return result;
     }
 
@@ -509,28 +537,54 @@ public final class CompatRegistry {
 
         Glob(String source) {
             Objects.requireNonNull(source, "glob");
-            StringBuilder regex = new StringBuilder("^");
-            for (int i = 0; i < source.length(); i++) {
-                char c = source.charAt(i);
-                switch (c) {
-                    case '*' -> regex.append(".*");
-                    case '?' -> regex.append('.');
-                    case '.', '(', ')', '+', '|', '^', '$', '@', '%' ->
-                            regex.append('\\').append(c);
-                    case '\\' -> regex.append("\\\\");
-                    default -> regex.append(c);
-                }
-            }
-            pattern = Pattern.compile(regex.append('$').toString());
+            pattern = Pattern.compile(toRegex(source));
         }
 
         boolean matches(String value) {
             return pattern.matcher(value).matches();
         }
 
+        List<String> captures(String value) {
+            var matcher = pattern.matcher(value);
+            if (!matcher.matches()) return null;
+            if (matcher.groupCount() == 0) return List.of();
+
+            List<String> captures = new ArrayList<>(matcher.groupCount());
+            for (int i = 1; i <= matcher.groupCount(); i++) {
+                captures.add(matcher.group(i));
+            }
+            return List.copyOf(captures);
+        }
+
         static List<Glob> compileAll(List<String> source) {
             if (source == null || source.isEmpty()) return List.of();
             return source.stream().map(Glob::new).toList();
+        }
+
+        private static String toRegex(String glob) {
+            StringBuilder regex = new StringBuilder("^");
+            StringBuilder literal = new StringBuilder();
+
+            for (int i = 0; i < glob.length(); i++) {
+                char c = glob.charAt(i);
+                if (c == '*' || c == '?') {
+                    appendQuoted(regex, literal);
+                    regex.append(c == '*' ? "(.*)" : ".");
+                } else {
+                    literal.append(c);
+                }
+            }
+
+            appendQuoted(regex, literal);
+            return regex.append('
+}
+).toString();
+        }
+
+        private static void appendQuoted(StringBuilder regex, StringBuilder literal) {
+            if (literal.isEmpty()) return;
+            regex.append(Pattern.quote(literal.toString()));
+            literal.setLength(0);
         }
     }
 }
