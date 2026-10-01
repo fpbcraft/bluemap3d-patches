@@ -142,7 +142,7 @@ public final class DynamicTreesTerrainDispatch {
             String blockId,
             de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState stateResource) {
         String path = path(blockId);
-        boolean branchName = path.endsWith("_branch");
+        boolean branchName = path.endsWith("_branch") || path.endsWith("_roots");
         boolean rootName = path.endsWith("_root");
         if (!branchName && !rootName) return null;
 
@@ -179,6 +179,8 @@ public final class DynamicTreesTerrainDispatch {
         }
         if (path.endsWith("_branch")) {
             path = path.substring(0, path.length() - "_branch".length());
+        } else if (path.endsWith("_roots")) {
+            path = path.substring(0, path.length() - "_roots".length());
         } else if (path.endsWith("_root")) {
             path = path.substring(0, path.length() - "_root".length());
         }
