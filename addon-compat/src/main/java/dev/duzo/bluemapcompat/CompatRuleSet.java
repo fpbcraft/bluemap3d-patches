@@ -247,6 +247,17 @@ final class CompatRuleSet {
             if (blockPatterns.isEmpty()) {
                 throw new IllegalArgumentException("match.blocks must contain at least one pattern");
             }
+            if (model != null) {
+                int requiredCaptures = model.requiredCaptures();
+                for (Glob pattern : blockPatterns) {
+                    if (pattern.captureCount() < requiredCaptures) {
+                        throw new IllegalArgumentException(
+                                "model.sourceBlock references capture ${" + requiredCaptures
+                                        + "} but block pattern '" + pattern + "' provides only "
+                                        + pattern.captureCount() + " capture(s)");
+                    }
+                }
+            }
         }
 
         boolean appliesTo(String wantedScope) {
@@ -297,6 +308,21 @@ final class CompatRuleSet {
                 return null;
             }
             return expandTemplate(sourceBlock, targetBlockId, captures);
+        }
+
+        int requiredCaptures() {
+            if (sourceBlock == null || sourceBlock.isBlank()) return 0;
+
+            var matcher = Pattern.compile("\\\$\\\{(\\d+)\\\}").matcher(sourceBlock);
+            int highest = 0;
+            while (matcher.find()) {
+                int index = Integer.parseInt(matcher.group(1));
+                if (index < 1) {
+                    throw new IllegalArgumentException("wildcard captures are 1-based");
+                }
+                highest = Math.max(highest, index);
+            }
+            return highest;
         }
     }
 
@@ -386,6 +412,10 @@ final class CompatRuleSet {
                 captures.add(matcher.group(i));
             }
             return List.copyOf(captures);
+        }
+
+        int captureCount() {
+            return pattern.matcher("").groupCount();
         }
 
         static List<Glob> compileAll(List<String> patterns) {
