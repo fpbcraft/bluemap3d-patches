@@ -108,11 +108,18 @@ def main() -> None:
             match = rule.get("match")
             if not isinstance(match, dict):
                 fail(f"{where}: match object is required")
-            blocks = match.get("blocks")
-            if not isinstance(blocks, list) or not blocks or not all(
+            blocks = match.get("blocks", [])
+            models = match.get("models", [])
+            if not isinstance(blocks, list) or not all(
                 isinstance(item, str) and item for item in blocks
             ):
-                fail(f"{where}: match.blocks must contain patterns")
+                fail(f"{where}: match.blocks must contain strings")
+            if not isinstance(models, list) or not all(
+                isinstance(item, str) and item for item in models
+            ):
+                fail(f"{where}: match.models must contain strings")
+            if not blocks and not models:
+                fail(f"{where}: match requires blocks or models patterns")
 
             for key in ("exclude",):
                 values = match.get(key, [])
@@ -168,6 +175,16 @@ def main() -> None:
                                 "a non-empty string"
                             )
                         templates.append(target_model)
+                elif model_type == "inline":
+                    definition = model.get("definition")
+                    if not isinstance(definition, dict):
+                        fail(f"{where}: inline model requires definition object")
+                    if "moving" in scope:
+                        fail(
+                            f"{where}: inline model is terrain-only; remove moving from scope"
+                        )
+                    if not models:
+                        fail(f"{where}: inline model requires match.models")
                 else:
                     fail(f"{where}: unsupported model type {model_type!r}")
 
@@ -180,13 +197,13 @@ def main() -> None:
                     fail(f"{where}: wildcard captures are 1-based")
                 if capture_refs:
                     highest_capture = max(capture_refs)
-                    for block_pattern in blocks:
-                        available = block_pattern.count("*")
+                    for capture_pattern in (models or blocks):
+                        available = capture_pattern.count("*")
                         if available < highest_capture:
                             fail(
                                 f"{where}: model template references "
-                                f"${{{highest_capture}}} but block pattern "
-                                f"{block_pattern!r} has only "
+                                f"${{{highest_capture}}} but pattern "
+                                f"{capture_pattern!r} has only "
                                 f"{available} '*' capture(s)"
                             )
 
