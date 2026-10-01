@@ -66,9 +66,8 @@ public final class DynamicModelSegment implements SceneObject {
             Map<String, String> textures,
             Vec3 start,
             Vec3 end,
-            float ignoredLengthQuantum,
             String label) {
-        return between(id, dimension, model, textures, start, end, 1f, label);
+        return betweenScaled(id, dimension, model, textures, start, end, 1f, label);
     }
 
     /**
@@ -76,7 +75,7 @@ public final class DynamicModelSegment implements SceneObject {
      *
      * @param crossSectionScale X/Z scale relative to the authored model
      */
-    public static DynamicModelSegment between(
+    public static DynamicModelSegment betweenScaled(
             String id,
             ResourceKey<Level> dimension,
             ResourceLocation model,
