@@ -26,7 +26,8 @@ The build produces two installable JARs:
    - persistent Sable/Create moving objects
    - persistent Sable child contraptions (including Aeronautics propeller/sail assemblies), retained across distance unloads and server restarts
    - optional Create chain-conveyor and mechanical-belt animations (disabled by default)
-   - live Create: Simulated physics ropes, rendered from the server-authoritative rope points
+   - live Create: Simulated physics ropes, using the server strand points and streamed segment transforms
+   - live Create: Simulated springs, mirroring the renderer's Bézier curve across world/Sable endpoints
    - trains/bogeys
    - moving Copycats / Create Connected material support
    - procedural and dynamic-texture adapters
@@ -70,7 +71,7 @@ Rules support:
 - separate `terrain` and `moving` scopes;
 - no tint / fixed RGB / NBT-or-adapter-backed palette tint;
 - wildcard moving-model namespace include/exclude policy;
-- moving runtime feature flags.
+- moving runtime feature flags, including `simulated.ropeRendering` and `simulated.springRendering` (enabled by default).
 
 Example:
 
@@ -112,6 +113,13 @@ The first config migration deliberately covers real existing compatibility code:
   wildcard patterns, with palette data in JSON rather than Java.
 - `copycats` and `create_connected` moving-model namespace exceptions are config,
   not literals in the Create provider.
+
+Create: Simulated ropes use a small optional runtime adapter backed by the reusable
+`DynamicModelSegment` scene-object capability. Each physics edge keeps one stable mesh
+while BlueMap3D streams midpoint, orientation and scale. Rope/spring stretching therefore
+does not re-bake geometry, and a small overlap prevents cracks between adjacent segments.
+The Simulated-specific adapters are reflection-based, so Simulated is not a
+hard dependency of the bundle.
 
 TrafficCraft signs remain a small adapter because BlueMap 5.7 cannot express dynamic
 server-side sign PNG loading as data. Copycats remains specialized because its renderer
@@ -182,12 +190,6 @@ Restart BlueMap/the server after changing addon JARs. External JSON compatibilit
 do not require a JAR rebuild or server restart, but static terrain needs a rerender to
 reflect visual changes.
 
-Create: Simulated ropes are enabled by default through the `simulated.ropeRendering`
-runtime feature. Each physics interval is published as a rigid BlueMap3D object, so the
-rope mesh is cached while its position and orientation use the normal live interpolation
-path. Inactive strands keep their last server-side points until Simulated removes the
-strand, which also provides the distance-unloaded fallback without force-loading chunks.
-
 BlueMap3D stores last-known Sable child-contraption snapshots in
 `config/bluemap3d/cache/sable-child-contraptions.nbt`. This is generated runtime cache
 data, not user configuration. It allows Aeronautics/Create child contraptions to remain
@@ -207,7 +209,7 @@ The goal is to avoid an addon-per-mod architecture.
 
 ## Migrating from 1.0.28
 
-Remove the old native addon JARs before installing 1.1.1:
+Remove the old native addon JARs before installing 1.1.3:
 
 ```text
 config/bluemap/packs/bluemap-copycats-compat-1.0.28.jar
@@ -215,7 +217,7 @@ config/bluemap/packs/bluemap-trafficcraft-compat-1.0.28.jar
 config/bluemap/packs/bluemap-foliage-compat-1.0.28.jar
 ```
 
-Replace them with the single `bluemap-compat-1.1.1.jar`. Keeping the old addons installed
+Replace them with the single `bluemap-compat-1.1.3.jar`. Keeping the old addons installed
 would register duplicate renderer/block-entity hooks.
 
 
@@ -223,6 +225,9 @@ would register duplicate renderer/block-entity hooks.
 
 The existing `fpbcraft-bluemap-1.21.1-aeronautics-deep-seas-weathering.zip` is still
 needed for now.
+
+The Simulated rope adapter uses `simulated:block/rope/rope`, so this pack currently also
+supplies the rope model/texture to BlueMap's asset index.
 
 The compatibility addon replaces rendering/tint/decoder behavior, but it does not currently
 extract arbitrary nested third-party assets into BlueMap's resource-pack index. BlueMap 5.7
