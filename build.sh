@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.1.5"
+VERSION="1.1.6"
 
 python3 "$ROOT/scripts/validate-compat.py"
 
