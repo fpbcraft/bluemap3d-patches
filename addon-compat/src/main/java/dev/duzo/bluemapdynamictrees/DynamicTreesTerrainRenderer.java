@@ -427,11 +427,11 @@ public final class DynamicTreesTerrainRenderer implements BlockRenderer {
                 positions[6] / 16f, positions[7] / 16f, positions[8] / 16f,
                 positions[9] / 16f, positions[10] / 16f, positions[11] / 16f);
 
-        // Keep the same texel density on branch sleeves and thick trunks. Values are
-        // normalized per face rather than stretched over the complete object.
-        float[][] uv = faceUvs(face, positions);
-        target.setUvs(f1, uv[0][0],uv[0][1], uv[1][0],uv[1][1], uv[2][0],uv[2][1]);
-        target.setUvs(f2, uv[0][0],uv[0][1], uv[2][0],uv[2][1], uv[3][0],uv[3][1]);
+        // Each emitted face gets a local 0..1 texture frame. Thick side faces are split
+        // into <=16-pixel strips before reaching this method, so bark keeps its normal
+        // density instead of stretching across a 2-3 block trunk.
+        target.setUvs(f1, 0f,1f, 1f,1f, 1f,0f);
+        target.setUvs(f2, 0f,1f, 1f,0f, 0f,0f);
 
         int textureId = textureGallery.get(texture == null ? ResourcePack.MISSING_TEXTURE : texture);
         target.setMaterialIndex(f1, textureId);
@@ -455,40 +455,6 @@ public final class DynamicTreesTerrainRenderer implements BlockRenderer {
         target.setAOs(f2, 1f, 1f, 1f);
 
         emitted++;
-    }
-
-    private static float[][] faceUvs(Direction face, float[] p) {
-        float[][] uv = new float[4][2];
-        for (int i = 0; i < 4; i++) {
-            float x = p[i * 3];
-            float y = p[i * 3 + 1];
-            float z = p[i * 3 + 2];
-            switch (face) {
-                case UP, DOWN -> {
-                    uv[i][0] = frac16(x);
-                    uv[i][1] = frac16(z);
-                }
-                case NORTH, SOUTH -> {
-                    uv[i][0] = frac16(x);
-                    uv[i][1] = frac16(16f - y);
-                }
-                case WEST, EAST -> {
-                    uv[i][0] = frac16(z);
-                    uv[i][1] = frac16(16f - y);
-                }
-            }
-        }
-        return uv;
-    }
-
-    private static float frac16(float value) {
-        float normalized = value / 16f;
-        float floor = (float) Math.floor(normalized);
-        float result = normalized - floor;
-        // Keep exact positive boundaries at 1 instead of wrapping to 0, otherwise a
-        // full 16-pixel face collapses to a zero-width UV interval.
-        if (Math.abs(result) < 1e-6f && value > 0f) return 1f;
-        return result;
     }
 
     private static float shade(Direction face) {
