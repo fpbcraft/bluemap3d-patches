@@ -27,7 +27,6 @@ public final class DynamicTreesTerrainAdapter {
                     existing.getClass().getName()));
         }
 
-        BlueMapAPI.onEnable(DynamicTreesTerrainDispatch::apply);
         Logger.global.logInfo("Dynamic Trees native terrain renderer registered");
     }
 }
