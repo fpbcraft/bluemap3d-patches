@@ -130,22 +130,22 @@ public final class EntityModelSource implements BlockModelSource {
             EntityKey entity, String layer, Map<String, String> metadata) {
         String exact = entity.namespace() + ":" + entity.path() + "#" + layer;
         RawMesh direct = vanilla.get(exact);
-        if (direct != null && appearanceScore(metadata, exact) == 0) {
+        if (direct != null && EntityAssetMatch.appearanceScore(metadata, exact) == 0) {
             return direct;
         }
 
         RawMesh best = direct;
         int bestScore = direct == null
                 ? Integer.MIN_VALUE
-                : assetMatchScore(entity.path(), exact, layer) + appearanceScore(metadata, exact);
+                : EntityAssetMatch.score(entity.path(), exact, layer) + EntityAssetMatch.appearanceScore(metadata, exact);
 
         String suffix = "#" + layer;
         for (Map.Entry<String, RawMesh> entry : vanilla.entrySet()) {
             String key = entry.getKey();
             if (!key.endsWith(suffix)) continue;
 
-            int score = assetMatchScore(entity.path(), key, layer)
-                    + appearanceScore(metadata, key);
+            int score = EntityAssetMatch.score(entity.path(), key, layer)
+                    + EntityAssetMatch.appearanceScore(metadata, key);
             if (score > bestScore) {
                 best = entry.getValue();
                 bestScore = score;
@@ -235,11 +235,11 @@ public final class EntityModelSource implements BlockModelSource {
                     candidate -> candidate.toLowerCase(Locale.ROOT).endsWith(".geo.json"),
                     512));
             discovered.removeIf(candidate ->
-                    assetMatchScore(entity.path(), candidate, "main")
-                            + appearanceScore(metadata, candidate) <= 0);
+                    EntityAssetMatch.score(entity.path(), candidate, "main")
+                            + EntityAssetMatch.appearanceScore(metadata, candidate) <= 0);
             discovered.sort(Comparator.comparingInt(
-                    (String candidate) -> assetMatchScore(entity.path(), candidate, "main")
-                            + appearanceScore(metadata, candidate))
+                    (String candidate) -> EntityAssetMatch.score(entity.path(), candidate, "main")
+                            + EntityAssetMatch.appearanceScore(metadata, candidate))
                     .reversed());
             candidates.addAll(discovered);
         }
@@ -343,8 +343,8 @@ public final class EntityModelSource implements BlockModelSource {
                     : string(description, "identifier", null);
             int score = identifier == null
                     ? 0
-                    : assetMatchScore(entity.path(), identifier, "main")
-                            + appearanceScore(metadata, identifier);
+                    : EntityAssetMatch.score(entity.path(), identifier, "main")
+                            + EntityAssetMatch.appearanceScore(metadata, identifier);
             if (best == null || score > bestScore) {
                 best = geometry;
                 bestScore = score;
@@ -647,7 +647,7 @@ public final class EntityModelSource implements BlockModelSource {
                 "assets/" + namespace + "/textures",
                 candidate -> candidate.toLowerCase(Locale.ROOT).endsWith(".png"),
                 2048)) {
-            if (assetMatchScore(path, discovered, layer) > 0) {
+            if (EntityAssetMatch.score(path, discovered, layer) > 0) {
                 available.add(discovered);
             }
         }
@@ -655,8 +655,8 @@ public final class EntityModelSource implements BlockModelSource {
         String selected = null;
         int selectedScore = Integer.MIN_VALUE;
         for (String candidate : available) {
-            int score = assetMatchScore(path, candidate, layer)
-                    + appearanceScore(metadata, candidate);
+            int score = EntityAssetMatch.score(path, candidate, layer)
+                    + EntityAssetMatch.appearanceScore(metadata, candidate);
             if (score > selectedScore) {
                 selected = candidate;
                 selectedScore = score;
@@ -760,78 +760,6 @@ public final class EntityModelSource implements BlockModelSource {
         } catch (NumberFormatException e) {
             return fallback;
         }
-    }
-
-    private static int appearanceScore(
-            Map<String, String> metadata, String candidate) {
-        if (metadata == null || metadata.isEmpty() || candidate == null) return 0;
-        String normalizedCandidate = compactName(candidate);
-        int score = 0;
-
-        for (Map.Entry<String, String> entry : metadata.entrySet()) {
-            if (!entry.getKey().startsWith("__bm3d_visual_")) continue;
-            String token = compactName(entry.getValue());
-            if (token.length() < 2) continue;
-            if (normalizedCandidate.contains(token)) {
-                score += 400;
-            }
-        }
-        return score;
-    }
-
-    static int assetMatchScore(String entityPath, String assetPath, String layer) {
-        String entity = compactName(leaf(entityPath));
-        if (entity.isEmpty()) return 0;
-
-        String stem = compactName(assetStem(assetPath));
-        String whole = compactName(assetPath);
-        int score = 0;
-
-        if (stem.equals(entity)) score = 1000;
-        else if (stem.startsWith(entity) || stem.endsWith(entity)) score = 850;
-        else if (stem.contains(entity)) score = 700;
-        else if (whole.contains(entity)) score = 450;
-
-        // Layer names and appearance tokens may rank candidates for the same entity,
-        // but must never turn an unrelated model into a match (e.g. cow -> sheep#fur).
-        if (score == 0) return 0;
-
-        String normalizedLayer = compactName(layer);
-        if (!"main".equals(layer) && !normalizedLayer.isEmpty()) {
-            if (stem.contains(normalizedLayer)) score += 220;
-            else if (whole.contains(normalizedLayer)) score += 100;
-            else score -= 100;
-        }
-
-        // Prefer assets in entity-specific folders over coincidental filename matches
-        // elsewhere in the namespace.
-        String lower = assetPath.toLowerCase(Locale.ROOT);
-        if (lower.contains("/entity/") || lower.contains("/entities/")
-                || lower.contains("/geo/") || lower.contains("/geckolib/")) {
-            score += 80;
-        }
-        return Math.max(score, 0);
-    }
-
-    private static String assetStem(String path) {
-        String name = leaf(path);
-        String lower = name.toLowerCase(Locale.ROOT);
-        for (String suffix : new String[]{".geo.json", ".json", ".png"}) {
-            if (lower.endsWith(suffix)) {
-                return name.substring(0, name.length() - suffix.length());
-            }
-        }
-        return name;
-    }
-
-    private static String compactName(String value) {
-        if (value == null) return "";
-        StringBuilder out = new StringBuilder(value.length());
-        for (int i = 0; i < value.length(); i++) {
-            char ch = Character.toLowerCase(value.charAt(i));
-            if (Character.isLetterOrDigit(ch)) out.append(ch);
-        }
-        return out.toString();
     }
 
     private static String leaf(String path) {
