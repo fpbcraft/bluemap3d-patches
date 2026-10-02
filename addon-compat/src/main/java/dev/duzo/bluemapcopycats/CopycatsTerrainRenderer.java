@@ -5,25 +5,16 @@ import de.bluecolored.bluemap.core.map.hires.RenderSettings;
 import de.bluecolored.bluemap.core.map.hires.TileModel;
 import de.bluecolored.bluemap.core.map.hires.TileModelView;
 import de.bluecolored.bluemap.core.map.hires.block.BlockRenderer;
-import de.bluecolored.bluemap.core.resources.BlockColorCalculatorFactory;
-import de.bluecolored.bluemap.core.resources.ResourcePath;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.Variant;
-import de.bluecolored.bluemap.core.resources.pack.resourcepack.model.Element;
-import de.bluecolored.bluemap.core.resources.pack.resourcepack.model.Face;
-import de.bluecolored.bluemap.core.resources.pack.resourcepack.model.Model;
-import de.bluecolored.bluemap.core.resources.pack.resourcepack.texture.Texture;
 import de.bluecolored.bluemap.core.util.Direction;
 import de.bluecolored.bluemap.core.util.math.Color;
-import de.bluecolored.bluemap.core.world.BlockState;
 import de.bluecolored.bluemap.core.world.LightData;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 import de.bluecolored.bluemap.core.logger.Logger;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -39,10 +30,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
 
     private static final Set<String> TRACED = ConcurrentHashMap.newKeySet();
 
-    private final ResourcePack resourcePack;
-    private final TextureGallery textureGallery;
-    private final BlockColorCalculatorFactory.BlockColorCalculator blockColorCalculator;
     private final CopycatsTemplateGeometry templateGeometry;
+    private final CopycatsAppearanceResolver appearanceResolver;
 
     private BlockNeighborhood block;
     private TileModelView tileModel;
@@ -51,10 +40,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             ResourcePack resourcePack,
             TextureGallery textureGallery,
             RenderSettings renderSettings) {
-        this.resourcePack = resourcePack;
-        this.textureGallery = textureGallery;
-        this.blockColorCalculator = resourcePack.getColorCalculatorFactory().createCalculator();
         this.templateGeometry = new CopycatsTemplateGeometry(resourcePack);
+        this.appearanceResolver = new CopycatsAppearanceResolver(resourcePack, textureGallery);
     }
 
     @Override
@@ -646,7 +633,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private boolean emit(Quad quad) {
-        Appearance appearance = appearance(quad.material(), quad.face());
+        CopycatsAppearanceResolver.Appearance appearance =
+                appearanceResolver.resolve(quad.material(), quad.face(), block);
         if (appearance == null) return false;
 
         float[] p = quad.positions();
@@ -682,62 +670,6 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         target.setAOs(f1, 1f,1f,1f);
         target.setAOs(f2, 1f,1f,1f);
         return true;
-    }
-
-    private Appearance appearance(CopycatsMaterial material, Direction wantedFace) {
-        BlockState materialState = material.asBlockState();
-        var stateResource = resourcePack.getBlockState(materialState);
-        if (stateResource == null) return null;
-
-        List<Variant> variants = new ArrayList<>(2);
-        stateResource.forEach(
-                materialState,
-                block.getX(),
-                block.getY(),
-                block.getZ(),
-                variants::add);
-        if (variants.isEmpty()) return null;
-
-        Model model = variants.getFirst().getModel().getResource(resourcePack::getModel);
-        if (model == null || model.getElements() == null) return null;
-
-        Face selected = null;
-        for (Element element : model.getElements()) {
-            if (element == null) continue;
-            Face face = element.getFaces().get(wantedFace);
-            if (face != null) {
-                selected = face;
-                break;
-            }
-        }
-        if (selected == null) {
-            outer:
-            for (Element element : model.getElements()) {
-                if (element == null) continue;
-                for (Direction direction : Direction.values()) {
-                    Face face = element.getFaces().get(direction);
-                    if (face != null) {
-                        selected = face;
-                        break outer;
-                    }
-                }
-            }
-        }
-        if (selected == null) return null;
-
-        ResourcePath<Texture> texture =
-                selected.getTexture().getTexturePath(model.getTextures()::get);
-        if (texture == null) texture = ResourcePack.MISSING_TEXTURE;
-        int textureIndex = textureGallery.get(texture);
-
-        Color tint = new Color().set(1f, 1f, 1f, 1f, true);
-        if (selected.getTintindex() >= 0) {
-            blockColorCalculator.getBlockColor(
-                    new MaterialStateBlock(block, materialState),
-                    tint);
-            if (tint.a < 0) tint.set(1f,1f,1f,1f,true);
-        }
-        return new Appearance(textureIndex, tint);
     }
 
     private CopycatsMaterial materialFor(CopycatsTerrainBlockEntity entity, String part) {
@@ -787,9 +719,6 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private record Quad(float[] positions, Direction face, CopycatsMaterial material) {
-    }
-
-    private record Appearance(int textureIndex, Color tint) {
     }
 
     private static final class Transform {
