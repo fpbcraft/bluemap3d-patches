@@ -18,6 +18,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -165,18 +166,43 @@ public final class EntityModelSource implements BlockModelSource {
      * Bedrock-style model exporters. No mod id or entity id is registered in code.
      */
     private List<ModelQuad> geo(EntityKey entity) {
-        for (String path : geoCandidates(entity.path())) {
-            byte[] bytes = assets.read("assets/" + entity.namespace() + "/" + path);
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+
+        // Fast path for conventional GeckoLib/AzureLib names.
+        for (String relative : geoCandidates(entity.path())) {
+            candidates.add("assets/" + entity.namespace() + "/" + relative);
+        }
+
+        // Automatic path discovery for mods whose model filename does not exactly match
+        // the registry id (e.g. ostrich_model.geo.json, nested model families, etc.).
+        String namespaceRoot = "assets/" + entity.namespace() + "/";
+        for (String prefix : List.of(
+                namespaceRoot + "geo",
+                namespaceRoot + "geckolib/models",
+                namespaceRoot + "models")) {
+            List<String> discovered = new ArrayList<>(assets.findPaths(
+                    prefix,
+                    candidate -> candidate.toLowerCase(Locale.ROOT).endsWith(".geo.json"),
+                    512));
+            discovered.removeIf(candidate -> assetMatchScore(entity.path(), candidate, "main") <= 0);
+            discovered.sort(Comparator.comparingInt(
+                    (String candidate) -> assetMatchScore(entity.path(), candidate, "main"))
+                    .reversed());
+            candidates.addAll(discovered);
+        }
+
+        for (String assetPath : candidates) {
+            byte[] bytes = assets.read(assetPath);
             if (bytes == null) continue;
             try {
                 List<ModelQuad> parsed = parseGeo(entity, bytes);
                 if (!parsed.isEmpty()) {
-                    LOGGER.debug("Resolved {} from {}", entity.id(), path);
+                    LOGGER.debug("Resolved {} from {}", entity.id(), assetPath);
                     return parsed;
                 }
             } catch (RuntimeException e) {
                 LOGGER.debug("Could not parse entity geo {} for {}: {}",
-                        path, entity.id(), e.toString());
+                        assetPath, entity.id(), e.toString());
             }
         }
         return List.of();
@@ -201,7 +227,8 @@ public final class EntityModelSource implements BlockModelSource {
         JsonArray geometries = root.getAsJsonArray("minecraft:geometry");
         if (geometries == null || geometries.isEmpty()) return List.of();
 
-        JsonObject geometry = geometries.get(0).getAsJsonObject();
+        JsonObject geometry = selectGeometry(entity, geometries);
+        if (geometry == null) return List.of();
         JsonObject description = geometry.has("description")
                 ? geometry.getAsJsonObject("description")
                 : new JsonObject();
@@ -246,6 +273,30 @@ public final class EntityModelSource implements BlockModelSource {
 
         normalizeGeo(out);
         return out.isEmpty() ? List.of() : List.copyOf(out);
+    }
+
+    private static JsonObject selectGeometry(EntityKey entity, JsonArray geometries) {
+        JsonObject best = null;
+        int bestScore = Integer.MIN_VALUE;
+
+        for (JsonElement element : geometries) {
+            if (!element.isJsonObject()) continue;
+            JsonObject geometry = element.getAsJsonObject();
+            JsonObject description = geometry.has("description")
+                    ? geometry.getAsJsonObject("description")
+                    : null;
+            String identifier = description == null
+                    ? null
+                    : string(description, "identifier", null);
+            int score = identifier == null
+                    ? 0
+                    : assetMatchScore(entity.path(), identifier, "main");
+            if (best == null || score > bestScore) {
+                best = geometry;
+                bestScore = score;
+            }
+        }
+        return best;
     }
 
     private static Matrix4f boneTransform(
@@ -458,6 +509,28 @@ public final class EntityModelSource implements BlockModelSource {
                 return namespace + ":" + candidate;
             }
         }
+
+        // Mods are not required to name renderer textures after the registry id. Scan the
+        // owning namespace and rank plausible entity textures instead of maintaining
+        // per-mod compatibility tables.
+        String textureRoot = "assets/" + namespace + "/textures";
+        List<String> discovered = new ArrayList<>(assets.findPaths(
+                textureRoot,
+                candidate -> candidate.toLowerCase(Locale.ROOT).endsWith(".png"),
+                2048));
+        discovered.removeIf(candidate -> assetMatchScore(path, candidate, layer) <= 0);
+        discovered.sort(Comparator.comparingInt(
+                (String candidate) -> assetMatchScore(path, candidate, layer)).reversed());
+
+        if (!discovered.isEmpty()) {
+            String selected = discovered.get(0);
+            String marker = "assets/" + namespace + "/textures/";
+            if (selected.startsWith(marker) && selected.endsWith(".png")) {
+                String resourcePath = selected.substring(marker.length(), selected.length() - 4);
+                LOGGER.debug("Resolved texture for {}:{}#{} from {}", namespace, path, layer, selected);
+                return namespace + ":" + resourcePath;
+            }
+        }
         return null;
     }
 
@@ -538,6 +611,57 @@ public final class EntityModelSource implements BlockModelSource {
         } catch (NumberFormatException e) {
             return fallback;
         }
+    }
+
+    private static int assetMatchScore(String entityPath, String assetPath, String layer) {
+        String entity = compactName(leaf(entityPath));
+        if (entity.isEmpty()) return 0;
+
+        String stem = compactName(assetStem(assetPath));
+        String whole = compactName(assetPath);
+        int score = 0;
+
+        if (stem.equals(entity)) score = 1000;
+        else if (stem.startsWith(entity) || stem.endsWith(entity)) score = 850;
+        else if (stem.contains(entity)) score = 700;
+        else if (whole.contains(entity)) score = 450;
+
+        String normalizedLayer = compactName(layer);
+        if (!"main".equals(layer) && !normalizedLayer.isEmpty()) {
+            if (stem.contains(normalizedLayer)) score += 220;
+            else if (whole.contains(normalizedLayer)) score += 100;
+            else score -= 100;
+        }
+
+        // Prefer assets in entity-specific folders over coincidental filename matches
+        // elsewhere in the namespace.
+        String lower = assetPath.toLowerCase(Locale.ROOT);
+        if (lower.contains("/entity/") || lower.contains("/entities/")
+                || lower.contains("/geo/") || lower.contains("/geckolib/")) {
+            score += 80;
+        }
+        return Math.max(score, 0);
+    }
+
+    private static String assetStem(String path) {
+        String name = leaf(path);
+        String lower = name.toLowerCase(Locale.ROOT);
+        for (String suffix : new String[]{".geo.json", ".json", ".png"}) {
+            if (lower.endsWith(suffix)) {
+                return name.substring(0, name.length() - suffix.length());
+            }
+        }
+        return name;
+    }
+
+    private static String compactName(String value) {
+        if (value == null) return "";
+        StringBuilder out = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char ch = Character.toLowerCase(value.charAt(i));
+            if (Character.isLetterOrDigit(ch)) out.append(ch);
+        }
+        return out.toString();
     }
 
     private static String leaf(String path) {
