@@ -217,6 +217,12 @@ Providers report positive destruction/disassembly through `deletedObjectIds()`. 
 that are intentionally transient can opt into `LIVE_ONLY`; the Create belt and conveyor
 animation overlays do this.
 
+Sable sub-level removal is one such positive lifecycle event. A sub-level removed with
+`SubLevelRemovalReason.REMOVED` is deleted from both the Sable snapshot cache and generic
+scene persistence; `UNLOADED` remains restorable. Generic scene cache format v4 performs
+a one-time purge of older `sable_ships` snapshots so orphan ghosts created by previous
+builds are removed automatically on upgrade.
+
 On the first upgrade from an older build, core can seed the generic cache from the previous
 `entities3d.json` feed. The older Sable-child cache is retained temporarily as a migration
 source, not as the primary persistence architecture.
@@ -238,7 +244,7 @@ The goal is to avoid an addon-per-mod architecture.
 
 ## Migrating from 1.0.28
 
-Remove the old native addon JARs before installing 1.1.9:
+Remove the old native addon JARs before installing 1.1.10:
 
 ```text
 config/bluemap/packs/bluemap-copycats-compat-1.0.28.jar
@@ -246,7 +252,7 @@ config/bluemap/packs/bluemap-trafficcraft-compat-1.0.28.jar
 config/bluemap/packs/bluemap-foliage-compat-1.0.28.jar
 ```
 
-Replace them with the single `bluemap-compat-1.1.9.jar`. Keeping the old addons installed
+Replace them with the single `bluemap-compat-1.1.10.jar`. Keeping the old addons installed
 would register duplicate renderer/block-entity hooks.
 
 
