@@ -106,18 +106,18 @@ ship_source = ship_source.replace(
 ''',
     1,
 )
-# Sable snapshot cache format 3 intentionally refuses pre-fix cached hull meshes.
+# Sable snapshot cache format 4 intentionally refuses pre-fix cached ship snapshots.
 # Those snapshots may contain child blocks that were assembled away while the old dirty
 # hook missed the removal. Current ships repopulate the cache after their corrected mesh
 # is published; unloaded ships stay hidden rather than showing a known-stale hull.
 ship_source = ship_source.replace(
     "if (state != null && state.ships() != null) {",
-    "if (state != null && state.format() >= 3 && state.ships() != null) {",
+    "if (state != null && state.format() >= 4 && state.ships() != null) {",
     1,
 )
 ship_source = ship_source.replace(
     "new SnapshotFile(1, List.copyOf(saved.values()))",
-    "new SnapshotFile(3, List.copyOf(saved.values()))",
+    "new SnapshotFile(4, List.copyOf(saved.values()))",
     1,
 )
 deleted_method_needle = '    private void observeContainer(ServerLevel level, ServerSubLevelContainer container) {'
