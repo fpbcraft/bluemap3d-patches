@@ -1,33 +1,42 @@
 from pathlib import Path
 
 
+TARGET = Path(
+    "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java"
+)
+
+
+def _replace_file(old: str, new: str) -> None:
+    source = TARGET.read_text()
+    if old not in source:
+        raise SystemExit(f"expected text not found in {TARGET}: {old!r}")
+    TARGET.write_text(source.replace(old, new))
+
+
 def apply() -> None:
     """Apply the FPB Create/Sable integration to upstream ContraptionProvider."""
-    def replace(path: str, old: str, new: str) -> None:
-        target = Path(path)
-        source = target.read_text()
-        if old not in source:
-            raise SystemExit(f"expected text not found in {path}: {old!r}")
-        target.write_text(source.replace(old, new))
-
-    replace(
-        "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
+    _replace_file(
         "GEOMETRY_REVISION + 15",
         "GEOMETRY_REVISION + 33",
     )
+
     # ShipProvider's old geometry version is a cheap heuristic (bounds + mass + section
     # serialized sizes) and can miss real block removal/re-addition. Replace the complete
     # method after the base patch with an exact structural hash cached behind Sable's
     # authoritative block-change signal.
-    replace(
-        "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
+    _replace_file(
         'if (!"copycats".equals(namespace)) {',
         'if (!CompatRegistry.get().preserveMovingNamespace(namespace)) {',
     )
-    
-    p = Path("addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java")
-    s = p.read_text()
-    
+
+    source = TARGET.read_text()
+    source = _apply_sable_integration(source)
+    source = _apply_terrain_invalidation(source)
+    TARGET.write_text(source)
+
+
+def _apply_sable_integration(s: str) -> str:
+    """Add Sable projection, child persistence, and positive deletion semantics."""
     import_needle = 'import dev.duzo.bluemap3d.api.SceneObjectProvider;'
     if import_needle not in s:
         raise SystemExit("ContraptionProvider Sable import insertion point not found")
@@ -501,7 +510,11 @@ def apply() -> None:
     }''',
         1,
     )
-    
+    return s
+
+
+def _apply_terrain_invalidation(s: str) -> str:
+    """Track Create assembly footprints and refresh BlueMap terrain on transitions."""
     # A Create assembly removes its blocks from the world immediately, but BlueMap may still
     # have those blocks baked into an old terrain tile. Track the moving object's footprint so
     # we can invalidate the source tile once on assembly and the destination tile once on
@@ -800,5 +813,4 @@ def apply() -> None:
 
 '''
     s = s.replace(terrain_methods_anchor, terrain_methods + terrain_methods_anchor, 1)
-    
-    p.write_text(s)
+    return s
