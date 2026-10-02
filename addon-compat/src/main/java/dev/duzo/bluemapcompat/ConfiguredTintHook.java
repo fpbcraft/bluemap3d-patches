@@ -113,7 +113,7 @@ final class ConfiguredTintHook {
         Color target = (Color) args[2];
 
         String blockId = block.getBlockState().getFormatted();
-        CompatRuleSet.TintMatch match = CompatManager.rules().tint(
+        SharedCompatRules.TintMatch match = CompatManager.rules().tint(
                 blockId,
                 block.getBlockState().getProperties(),
                 "terrain");
@@ -136,7 +136,7 @@ final class ConfiguredTintHook {
     }
 
     private Integer resolveTint(
-            CompatRuleSet.Tint tint,
+            SharedCompatRules.Tint tint,
             String blockId,
             BlockNeighborhood block) {
         if (tint == null || tint.type == null) return null;
@@ -153,11 +153,11 @@ final class ConfiguredTintHook {
     }
 
     private Integer paletteColor(
-            CompatRuleSet.Tint tint,
+            SharedCompatRules.Tint tint,
             String blockId,
             BlockNeighborhood block) {
         int value = -1;
-        CompatRuleSet.ValueSource source =
+        SharedCompatRules.ValueSource source =
                 tint.value == null ? null : tint.value.terrain;
 
         if (source != null
@@ -180,7 +180,7 @@ final class ConfiguredTintHook {
         }
 
         if (tint.defaultByBlock != null) {
-            for (CompatRuleSet.DefaultColor entry : tint.defaultByBlock) {
+            for (SharedCompatRules.DefaultColor entry : tint.defaultByBlock) {
                 if (entry != null && entry.matches(blockId)) {
                     return parseColor(entry.color);
                 }

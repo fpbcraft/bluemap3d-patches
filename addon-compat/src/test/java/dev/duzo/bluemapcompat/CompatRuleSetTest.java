@@ -6,68 +6,77 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-class CompatRuleSetTest {
+final class CompatRuleSetTest {
 
     @Test
-    void globMatchingPreservesCapturesPropertiesAndExclusions() {
-        var rule = new CompatRuleSet.Rule();
-        rule.id = "leaves";
-        rule.match = new CompatRuleSet.Match();
-        rule.match.blocks = List.of("quark:*_leaves");
-        rule.match.exclude = List.of("quark:ancient_*");
-        rule.match.properties = Map.of("persistent", "false");
-        rule.compile();
+    void globMatchingCapturesStarsButNotQuestionMarks() {
+        var glob = new SharedCompatRules.Glob("example:?_*_branch");
 
-        assertTrue(rule.matches("quark:orange_leaves", Map.of("persistent", "false")));
-        assertEquals(
-                List.of("orange"),
-                rule.captures("quark:orange_leaves", Map.of("persistent", "false")));
-        assertFalse(rule.matches("quark:orange_leaves", Map.of("persistent", "true")));
-        assertFalse(rule.matches("quark:ancient_oak_leaves", Map.of("persistent", "false")));
+        assertTrue(glob.matches("example:x_oak_branch"));
+        assertEquals(List.of("oak"), glob.captures("example:x_oak_branch"));
+        assertNull(glob.captures("example:oak_branch"));
+        assertEquals(1, glob.captureCount());
     }
 
     @Test
-    void aliasTemplatesResolveWildcardCaptures() {
-        var rule = new CompatRuleSet.Rule();
-        rule.id = "wall-alias";
-        rule.scope = List.of("terrain");
-        rule.match = new CompatRuleSet.Match();
-        rule.match.blocks = List.of("example:*_wall");
-        rule.model = new CompatRuleSet.Model();
-        rule.model.type = "alias";
-        rule.model.sourceBlock = "minecraft:${1}_wall";
+    void ruleMatchingHonorsPropertiesAndExclusions() {
+        var match = new SharedCompatRules.Match();
+        match.blocks = List.of("example:*_fence");
+        match.exclude = List.of("example:debug_*");
+        match.properties = Map.of("waterlogged", "fals?");
+
+        var rule = new SharedCompatRules.Rule();
+        rule.id = "fences";
+        rule.match = match;
         rule.compile();
 
-        var captures = rule.captures("example:diorite_wall", Map.of());
-        assertEquals(List.of("diorite"), captures);
-        assertEquals(
-                "minecraft:diorite_wall",
-                rule.model.resolveSourceBlock("example:diorite_wall", captures));
-        assertTrue(rule.appliesTo("terrain"));
-        assertFalse(rule.appliesTo("moving"));
+        assertTrue(rule.matches("example:oak_fence", Map.of("waterlogged", "false")));
+        assertFalse(rule.matches("example:oak_fence", Map.of("waterlogged", "true")));
+        assertFalse(rule.matches("example:debug_fence", Map.of("waterlogged", "false")));
     }
 
     @Test
-    void invalidTemplateCaptureFailsAtCompileTime() {
-        var rule = new CompatRuleSet.Rule();
-        rule.id = "invalid";
-        rule.match = new CompatRuleSet.Match();
-        rule.match.blocks = List.of("example:*");
-        rule.model = new CompatRuleSet.Model();
-        rule.model.type = "alias";
-        rule.model.sourceBlock = "minecraft:${2}";
+    void aliasTemplatesUseWildcardAndIdTokens() {
+        var model = new SharedCompatRules.Model();
+        model.type = "alias";
+        model.sourceBlock = "replacement:${1}_${path0}";
+
+        assertEquals(
+                "replacement:oak_trees",
+                model.resolveSourceBlock(
+                        "example:trees/oak_branch",
+                        List.of("oak")));
+    }
+
+    @Test
+    void resourceAliasDefaultsTargetToMatchedBlockModel() {
+        var model = new SharedCompatRules.Model();
+        model.type = "resource_alias";
+        model.sourceModel = "example:block/${1}_log";
+
+        assertEquals(
+                "trees:block/smart/oak_branch",
+                model.resolveTargetModel("trees:smart/oak_branch", List.of("oak")));
+        assertEquals(
+                "example:block/oak_log",
+                model.resolveSourceModel("trees:smart/oak_branch", List.of("oak")));
+    }
+
+    @Test
+    void compileRejectsTemplatesThatReferenceMissingCaptures() {
+        var match = new SharedCompatRules.Match();
+        match.blocks = List.of("example:*_fence");
+
+        var model = new SharedCompatRules.Model();
+        model.type = "alias";
+        model.sourceBlock = "example:${2}_fence";
+
+        var rule = new SharedCompatRules.Rule();
+        rule.id = "bad-capture";
+        rule.match = match;
+        rule.model = model;
 
         var error = assertThrows(IllegalArgumentException.class, rule::compile);
         assertTrue(error.getMessage().contains("capture ${2}"));
-    }
-
-    @Test
-    void templateExpansionKeepsNamespacePathAndCapturesStable() {
-        assertEquals(
-                "copy/block:block/a/b/leaf",
-                CompatRuleSet.expandTemplate(
-                        "${namespace}/${path0}:${path}/${1}",
-                        "copy:block/a/b",
-                        List.of("leaf")));
     }
 }

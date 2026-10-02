@@ -1040,6 +1040,7 @@ if "testImplementation 'org.junit.jupiter:junit-jupiter'" not in core_build:
     core_build += test_config
 p.write_text(core_build)
 
+
 # Make restore/history lifecycle generic at the provider registry boundary.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")
 bs = p.read_text()
