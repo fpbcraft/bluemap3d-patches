@@ -241,6 +241,7 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
 
                     if (entries != null) {
                         int droppedLegacyCreate = 0;
+                        int droppedLegacySable = 0;
                         for (JsonElement element : entries) {
                             SavedObject saved = GSON.fromJson(element, SavedObject.class);
                             if (saved == null || !saved.valid()) continue;
@@ -249,15 +250,22 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
                                 dirty = true;
                                 continue;
                             }
+                            if (legacyFormat && "sable_ships".equals(saved.provider)) {
+                                droppedLegacySable++;
+                                dirty = true;
+                                continue;
+                            }
                             SAVED.put(key(saved.provider, saved.id), saved);
                             // The cache is only written after mesh publication.
                             PUBLISHED.put(key(saved.provider, saved.id), saved.version);
                         }
-                        if (droppedLegacyCreate > 0) {
+                        if (droppedLegacyCreate > 0 || droppedLegacySable > 0) {
                             LOGGER.info(
-                                    "Dropped {} legacy Create scene snapshot(s) while migrating "
-                                            + "generic persistence; current objects will repopulate",
-                                    droppedLegacyCreate);
+                                    "Dropped {} legacy Create and {} legacy Sable scene snapshot(s) "
+                                            + "while migrating generic persistence; authoritative "
+                                            + "providers will repopulate current objects",
+                                    droppedLegacyCreate,
+                                    droppedLegacySable);
                         }
                         if (legacyFormat) dirty = true;
                     }
