@@ -304,5 +304,5 @@ public final class SimulatedSpringProvider implements SceneObjectProvider {
                             projectNormal(facingOf(partner.getBlockState()), bSubLevel)),
                     sizeOf(controller.getBlockState()));
         }
-
+    }
 }
