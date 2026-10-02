@@ -106,6 +106,13 @@ ship_source = ship_source.replace(
 )
 p.write_text(ship_source)
 
+# Register the optional Create: Simulated spring lifecycle mixin.
+p = Path("addon-create/src/main/resources/META-INF/neoforge.mods.toml")
+create_toml = p.read_text()
+if 'config="bluemap3d_create.mixins.json"' not in create_toml:
+    create_toml += '\n[[mixins]]\nconfig="bluemap3d_create.mixins.json"\n'
+p.write_text(create_toml)
+
 # Register the addon-sable mixin that receives Sable's authoritative server block changes.
 p = Path("addon-sable/src/main/resources/META-INF/neoforge.mods.toml")
 sable_toml = p.read_text()
@@ -956,9 +963,9 @@ p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-40-sable-prechange-dirty";',
+    'var BUILD = "core-history-41-no-stale-topology";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.8")
+replace("gradle.properties", "version=1.0.9", "version=1.1.9")
 
 # Make restore/history lifecycle generic at the provider registry boundary.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")
@@ -1096,7 +1103,7 @@ if needle not in s:
 s = s.replace(
     needle,
     'CompatRegistry.get();\n\n        ' + needle
-        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.8 active; BlueMap target is 5.7.");',
+        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.9 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
@@ -1105,6 +1112,55 @@ p.write_text(s)
 # rope/spring segments so their length can change without rebuilding their mesh.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java")
 ts = p.read_text()
+
+# A changed geometryVersion means the previous mesh has stale topology. Keeping it in the
+# feed while the replacement bakes creates a deterministic duplicate window when a Sable
+# child contraption appears before the parent hull rebake finishes. Resolve an already
+# published target-version mesh first; otherwise hide the object until that version is ready.
+stale_needle = '''            if (current == null) {
+                String existing = publisher.existingMeshUrl(providerId, object.id(), version);
+                if (existing != null) {
+                    current = new Ready(version, existing);
+                    ready.put(key, current);
+                    // Keep mesh-archive consumers in sync even though no bake happened.
+                    BlueMap3D.meshPublished(providerId, object.id(), version, existing);
+                }
+            }
+
+            if ((current == null || current.version() != version)
+                    && object.canBakeGeometry()) {
+                requestBake(providerId, object, key, version);
+            }
+            if (current != null) {
+'''
+if stale_needle not in ts:
+    raise SystemExit("SceneObjectTracker stale topology insertion point not found")
+ts = ts.replace(
+    stale_needle,
+    '''            if (current == null || current.version() != version) {
+                String existing = publisher.existingMeshUrl(providerId, object.id(), version);
+                if (existing != null) {
+                    current = new Ready(version, existing);
+                    ready.put(key, current);
+                    BlueMap3D.meshPublished(providerId, object.id(), version, existing);
+                }
+            }
+
+            if ((current == null || current.version() != version)
+                    && object.canBakeGeometry()) {
+                requestBake(providerId, object, key, version);
+            }
+
+            // Never publish known-stale topology. The browser drops the old object now
+            // and it reappears only once the requested geometry version is actually ready.
+            if (current != null && current.version() != version) {
+                current = null;
+            }
+            if (current != null) {
+''',
+    1,
+)
+
 row_needle = '''                rows.add(new Row(providerId, object.id(), object.label(),
                         object.dimension().location().toString(),
                         current.meshUrl(), object.position(), object.rotation()));
