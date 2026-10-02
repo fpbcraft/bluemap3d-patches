@@ -22,12 +22,14 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Publishes every loaded surface mob. Model resolution is intentionally not done here:
@@ -109,6 +111,10 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
             "getTexture",
             "getPuffState");
 
+    /** Reflection discovery is per entity class, not per mob per publish tick. */
+    private static final Map<Class<?>, List<Method>> APPEARANCE_METHODS =
+            new ConcurrentHashMap<>();
+
     private static Map<String, String> appearanceMetadata(Mob mob, float width, float height) {
         Map<String, String> metadata = new HashMap<>();
         metadata.put("__bm3d_width", Float.toString(width));
@@ -129,23 +135,34 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
         }
 
         int visual = 0;
-        for (String getter : APPEARANCE_GETTERS) {
+        for (Method method : APPEARANCE_METHODS.computeIfAbsent(
+                mob.getClass(), SurfaceMobProvider::discoverAppearanceMethods)) {
             try {
-                java.lang.reflect.Method method = mob.getClass().getMethod(getter);
-                if (method.getParameterCount() != 0
-                        || java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
-                    continue;
-                }
-
                 String token = appearanceToken(method.invoke(mob));
                 if (token == null || token.isBlank()) continue;
                 metadata.put("__bm3d_visual_" + visual++, token);
             } catch (ReflectiveOperationException | RuntimeException ignored) {
-                // Optional convention: absence or a mod-specific getter failure is harmless.
+                // Optional convention: a mod-specific getter failure is harmless.
             }
         }
 
         return Map.copyOf(metadata);
+    }
+
+    private static List<Method> discoverAppearanceMethods(Class<?> type) {
+        List<Method> methods = new ArrayList<>();
+        for (String getter : APPEARANCE_GETTERS) {
+            try {
+                Method method = type.getMethod(getter);
+                if (method.getParameterCount() == 0
+                        && !java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
+                    methods.add(method);
+                }
+            } catch (NoSuchMethodException | SecurityException ignored) {
+                // Convention not exposed by this entity type.
+            }
+        }
+        return List.copyOf(methods);
     }
 
     private static String appearanceToken(Object value) {
