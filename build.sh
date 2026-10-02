@@ -68,6 +68,12 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/ModelAttachment.ja
    core/src/main/java/dev/duzo/bluemap3d/api/ModelAttachment.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneInstance.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/SceneInstance.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneInstanceGroup.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/SceneInstanceGroup.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/InstancedSceneObject.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/InstancedSceneObject.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectProvider.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectProvider.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectLifecycle.java" \
@@ -140,6 +146,11 @@ cp "$ROOT/compat/local-template.json" addon-compat/src/main/resources/bluemap3d-
 cp "$ROOT/compat/local-template.json" core/src/main/resources/bluemap3d-compat/local-template.json
 
 python3 "$ROOT/scripts/patch-upstream.py"
+
+# Shared-instance tracker is a maintained full override. Apply it after structural
+# transforms so the deterministic upstream patch anchors remain valid.
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java" \
+   core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java
 
 # Generate exhaustive static dispatch resources at build time.
 python3 "$ROOT/scripts/generate-static-resources.py"

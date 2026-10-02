@@ -7,7 +7,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Optional lifecycle hook for Create: Simulated springs. */
+/**
+ * Optional lifecycle hook for Create: Simulated springs.
+ *
+ * <p>The target is named as a string so addon-create retains no hard Simulated
+ * dependency. When Simulated is absent this optional mixin config simply has no target.
+ */
 @Mixin(
         targets = "dev.simulated_team.simulated.content.blocks.spring.SpringBlockEntity",
         remap = false)

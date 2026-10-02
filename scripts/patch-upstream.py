@@ -1,4 +1,5 @@
 from pathlib import Path
+import runpy
 
 from release_metadata import load_release
 from transforms.contraption_provider import apply as patch_contraption_provider
@@ -36,3 +37,8 @@ s = s.replace(
     1,
 )
 p.write_text(s)
+
+runpy.run_path(
+    Path(__file__).parent / "transforms" / "instanced_scene_runtime.py",
+    run_name="__bluemap3d_instanced_scene_runtime__",
+)

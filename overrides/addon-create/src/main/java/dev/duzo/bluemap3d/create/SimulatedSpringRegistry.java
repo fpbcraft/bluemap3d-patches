@@ -13,14 +13,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Lifecycle registry for loaded Create: Simulated spring block entities.
- *
- * <p>SpringBlockEntity.remove() is a positive destruction signal (it also destroys the
- * paired endpoint unless the spring is assembling). Remembering the logical id before
- * remove() mutates the endpoint lets persistence distinguish destruction from an ordinary
- * unloaded/missing provider object.
- */
+/** Lifecycle registry for loaded Create: Simulated spring block entities. */
 public final class SimulatedSpringRegistry {
 
     private static final Map<ServerLevel, Map<BlockEntity, String>> ACTIVE =
@@ -58,9 +51,8 @@ public final class SimulatedSpringRegistry {
         Map<BlockEntity, String> active = ACTIVE.get(level);
         if (active == null || active.isEmpty()) return List.of();
 
-        // A stale registry entry can also result from an unload path that did not invoke
-        // Simulated's remove(). Do not treat that as deletion; persistence is responsible
-        // for keeping last-known unloaded objects.
+        // Missing stale entries can be ordinary unloads. Only SpringBlockEntity.remove()
+        // supplies positive destruction evidence via forget().
         active.keySet().removeIf(blockEntity ->
                 blockEntity == null
                         || blockEntity.isRemoved()
