@@ -23,6 +23,8 @@ Current ownership:
   model-source registration, and dynamic model attachment translation.
 - `0040-sable-persistence.patch`: Sable deletion evidence, cache migration, and exact
   structure-based geometry revisioning.
+- `0050-scene-object-publication.patch`: mesh-version suppression and live object scale
+  publication.
 
 ## Remaining Python transformations
 
@@ -31,7 +33,6 @@ regression coverage around each migration:
 
 - `ContraptionProvider.java`: Sable projection, dynamic topology and compatibility behavior.
 - `BlueMap3DMod.java`: release-version startup marker only.
-- `SceneObjectTracker.java`: geometry-version/live-scale publication semantics.
 - `bluemap3d.core.js`: live/replay dynamic-node runtime.
 - release-version/build-marker substitutions that depend on `release.json`.
 
