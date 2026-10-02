@@ -36,7 +36,7 @@ class ReleaseMetadataTest(unittest.TestCase):
                 )
             )
             with self.assertRaisesRegex(ValueError, "invalid release version"):
-                load_release(path)
+                load_release(path, apply_version_override=False)
 
     def test_release_version_can_be_overridden_for_tagged_builds(self) -> None:
         with patch.dict("os.environ", {"RELEASE_VERSION": "2.4.0-rc.1"}):
