@@ -64,7 +64,7 @@ class CompatRuleSetTest {
     @Test
     void templateExpansionKeepsNamespacePathAndCapturesStable() {
         assertEquals(
-                "copy/example:block/a/b/leaf",
+                "copy/block:block/a/b/leaf",
                 CompatRuleSet.expandTemplate(
                         "${namespace}/${path0}:${path}/${1}",
                         "copy:block/a/b",
