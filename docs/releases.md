@@ -29,10 +29,10 @@ In GitHub:
 5. For `exact`, enter a stable `MAJOR.MINOR.PATCH` newer than the latest semantic tag.
 
 The workflow resolves the target version, runs the full build/test suite, and only after a
-successful build creates the annotated Git tag. It then creates the GitHub Release with generated
+successful build creates the semantic tag and GitHub Release in the publish step, with generated
 release notes, checksums, and the BlueMap3D bundle JAR, `bluemap-compat-<version>.jar`, and the versioned distribution ZIP.
 
-This ordering prevents a failed build from reserving a release tag.
+This ordering prevents a failed build from reserving a release tag and avoids a separate tag-push step that could strand a tag without a release.
 
 ## Tag-driven release
 
