@@ -1,0 +1,98 @@
+diff --git a/settings.gradle b/settings.gradle
+--- a/settings.gradle
++++ b/settings.gradle
+@@ -24,6 +24,7 @@
+ include("addon-turtles")
+ include("addon-sable")
+ include("addon-create")
++include("addon-compat")
+ 
+ // Local end-to-end test harness. Never published, never in the bundle jar - it is how
+ // you see the whole pipeline working in a browser without needing CC, Sable or Create
+diff --git a/addon-create/build.gradle b/addon-create/build.gradle
+--- a/addon-create/build.gradle
++++ b/addon-create/build.gradle
+@@ -35,6 +35,9 @@
+     // jar-in-jar at runtime, so it must never go into devMods or get bundled.
+     compileOnly "net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1"
+ 
++    compileOnly("dev.ryanhcode.sable:sable-neoforge-${minecraft_version}:${sable_version}") { transitive = false }
++    compileOnly "dev.ryanhcode.sable-companion:sable-companion-common-${minecraft_version}:${sable_companion_version}"
++
+     // The real mod, for the dev server - the main jar rather than slim, because this one
+     // has to actually run and the loader needs the jar-in-jars unpacked. Create declares
+     // no external mod dependencies on 1.21.1; everything it needs is inside.
+diff --git a/addon-create/src/main/resources/META-INF/neoforge.mods.toml b/addon-create/src/main/resources/META-INF/neoforge.mods.toml
+--- a/addon-create/src/main/resources/META-INF/neoforge.mods.toml
++++ b/addon-create/src/main/resources/META-INF/neoforge.mods.toml
+@@ -38,3 +38,6 @@
+ versionRange="${create_version_range}"
+ ordering="AFTER"
+ side="SERVER"
++
++[[mixins]]
++config="bluemap3d_create.mixins.json"
+diff --git a/addon-sable/src/main/resources/META-INF/neoforge.mods.toml b/addon-sable/src/main/resources/META-INF/neoforge.mods.toml
+--- a/addon-sable/src/main/resources/META-INF/neoforge.mods.toml
++++ b/addon-sable/src/main/resources/META-INF/neoforge.mods.toml
+@@ -38,3 +38,6 @@
+ versionRange="[${sable_version},)"
+ ordering="AFTER"
+ side="SERVER"
++
++[[mixins]]
++config="bluemap3d_sable.mixins.json"
+diff --git a/addon-create/src/main/java/dev/duzo/bluemap3d/create/CreateAddon.java b/addon-create/src/main/java/dev/duzo/bluemap3d/create/CreateAddon.java
+--- a/addon-create/src/main/java/dev/duzo/bluemap3d/create/CreateAddon.java
++++ b/addon-create/src/main/java/dev/duzo/bluemap3d/create/CreateAddon.java
+@@ -22,6 +22,10 @@
+     // provider that reads it are kept as fields rather than built inline below.
+     private final ChunkTracker chunks = new ChunkTracker();
+     private final BearingProvider bearings = new BearingProvider(chunks);
++    private final ChainConveyorProvider chainConveyors = new ChainConveyorProvider(chunks);
++    private final BeltProvider belts = new BeltProvider(chunks);
++    private final SimulatedRopeProvider simulatedRopes = new SimulatedRopeProvider();
++    private final SimulatedSpringProvider simulatedSprings = new SimulatedSpringProvider(chunks);
+     private final ContraptionProvider contraptions = new ContraptionProvider();
+     private final StationFlagProvider stationFlags = new StationFlagProvider();
+ 
+@@ -32,6 +36,10 @@
+         BlueMap3D.register(contraptions);
+         BlueMap3D.register(new CurvedTrackProvider());
+         BlueMap3D.register(bearings);
++        BlueMap3D.register(chainConveyors);
++        BlueMap3D.register(belts);
++        BlueMap3D.register(simulatedRopes);
++        BlueMap3D.register(simulatedSprings);
+         BlueMap3D.register(stationFlags);
+     }
+ 
+@@ -39,6 +47,10 @@
+     public void onServerStopped(ServerStoppedEvent event) {
+         chunks.clear();
+         bearings.clear();
++        chainConveyors.clear();
++        belts.clear();
++        simulatedRopes.clear();
++        simulatedSprings.clear();
+         contraptions.clear();
+         stationFlags.clear();
+     }
+diff --git a/core/build.gradle b/core/build.gradle
+--- a/core/build.gradle
++++ b/core/build.gradle
+@@ -55,3 +55,14 @@
+         }
+     }
+ }
++
++
++dependencies {
++    testImplementation platform('org.junit:junit-bom:5.11.4')
++    testImplementation 'org.junit.jupiter:junit-jupiter'
++    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
++}
++
++tasks.named('test') {
++    useJUnitPlatform()
++}
