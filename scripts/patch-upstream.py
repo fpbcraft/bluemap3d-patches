@@ -1,5 +1,11 @@
 from pathlib import Path
 
+from release_metadata import load_release
+
+RELEASE = load_release()
+VERSION = RELEASE["version"]
+BLUEMAP_TARGET = RELEASE["blueMapVersion"]
+
 def replace(path, old, new):
     p = Path(path)
     s = p.read_text()
@@ -1014,7 +1020,7 @@ replace(
     'var BUILD = "core-history-15-special-models";',
     'var BUILD = "core-history-43-rope-removal";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.11")
+replace("gradle.properties", "version=1.0.9", f"version={VERSION}")
 
 # Make restore/history lifecycle generic at the provider registry boundary.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")
@@ -1152,7 +1158,7 @@ if needle not in s:
 s = s.replace(
     needle,
     'CompatRegistry.get();\n\n        ' + needle
-        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.11 active; BlueMap target is 5.7.");',
+        + f'\n        LOGGER.info("BlueMap3D FPB patches {VERSION} active; BlueMap target is {BLUEMAP_TARGET}.");',
     1,
 )
 p.write_text(s)
