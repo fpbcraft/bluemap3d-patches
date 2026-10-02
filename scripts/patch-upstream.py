@@ -139,6 +139,8 @@ s = s.replace(
         + '\n    private final Set<String> sableProjected = ConcurrentHashMap.newKeySet();'
         + '\n\n    /** Last known child contraptions for Sable ships, retained when their live entity unloads. */'
         + '\n    private final Map<ServerLevel, Map<String, SableContraptionCache>> sableContraptionCaches = new ConcurrentHashMap<>();'
+        + '\n\n    /** Positive deletion evidence consumed by generic scene persistence. */'
+        + '\n    private final Map<ServerLevel, Set<String>> deletedContraptionIds = new ConcurrentHashMap<>();'
         + '\n\n    /** ControlledContraptionEntity controller position, used only to invalidate disassembled cached rotors. */'
         + '\n    private static final Field CONTROLLER_POS_FIELD = controllerPosField();'
         + '\n\n    /** Persistent last-known Sable child snapshots, separate from user-editable compatibility config. */'
@@ -257,7 +259,16 @@ cache_methods = '''    private void rememberSableContraption(
                 .computeIfAbsent(level, ignored -> new ConcurrentHashMap<>())
                 .put(cacheKey, next);
 
-        if (previous == null || previous.version() != next.version()) {
+        if (previous != null && !previous.objectId().equals(next.objectId())) {
+            // Reassembly creates a new Create entity UUID for the same logical bearing.
+            // Generic persistence otherwise keeps the previous UUID forever because a
+            // missing object is intentionally treated as possibly unloaded.
+            markContraptionDeleted(level, previous.objectId());
+        }
+
+        if (previous == null
+                || previous.version() != next.version()
+                || !previous.objectId().equals(next.objectId())) {
             savePersistentSableCaches();
         }
     }
@@ -432,6 +443,7 @@ cache_methods = '''    private void rememberSableContraption(
             SubLevel subLevel = container.getSubLevel(cached.subLevelId());
             if (subLevel == null || subLevel.isRemoved()) {
                 cache.remove(entry.getKey());
+                markContraptionDeleted(level, cached.objectId());
                 savePersistentSableCaches();
                 continue;
             }
@@ -443,6 +455,7 @@ cache_methods = '''    private void rememberSableContraption(
                 if (controller instanceof MechanicalBearingBlockEntity bearing
                         && !bearing.isRunning()) {
                     cache.remove(entry.getKey());
+                    markContraptionDeleted(level, cached.objectId());
                     savePersistentSableCaches();
                     continue;
                 }
@@ -522,10 +535,28 @@ if clear_needle not in s:
     raise SystemExit("ContraptionProvider clear() insertion point not found")
 s = s.replace(
     clear_needle,
-    '''    public void clear() {
+    '''    @Override
+    public Collection<String> deletedObjectIds(ServerLevel level) {
+        Set<String> deleted = deletedContraptionIds.get(level);
+        if (deleted == null || deleted.isEmpty()) return List.of();
+
+        List<String> result = List.copyOf(deleted);
+        deleted.removeAll(result);
+        return result;
+    }
+
+    private void markContraptionDeleted(ServerLevel level, String objectId) {
+        if (objectId == null || objectId.isBlank()) return;
+        deletedContraptionIds
+                .computeIfAbsent(level, ignored -> ConcurrentHashMap.newKeySet())
+                .add(objectId);
+    }
+
+    public void clear() {
         savePersistentSableCaches();
         carriageCaches.clear();
         sableContraptionCaches.clear();
+        deletedContraptionIds.clear();
         sablePersistentLoaded.clear();
         terrainFootprints.clear();
     }''',
