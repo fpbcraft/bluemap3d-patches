@@ -5,12 +5,15 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import org.slf4j.Logger;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Resolves resource-pack model parent chains, texture indirection and OBJ wrappers.
@@ -57,6 +60,94 @@ final class ResourcePackModelResolver {
             value = value.substring(0, hash);
         }
         return ResourceLocation.tryParse(value.contains(":") ? value : "minecraft:" + value);
+    }
+
+    JsonElement selectVariant(JsonObject variants, BlockState state) {
+        Map<String, String> props = propertiesOf(state);
+
+        JsonElement fallback = null;
+        for (Map.Entry<String, JsonElement> entry : variants.entrySet()) {
+            String key = entry.getKey();
+            if (key.isEmpty()) {
+                fallback = entry.getValue();
+                continue;
+            }
+            boolean ok = true;
+            for (String pair : key.split(",")) {
+                int eq = pair.indexOf('=');
+                if (eq < 0) {
+                    continue;
+                }
+                String name = pair.substring(0, eq).trim();
+                String want = pair.substring(eq + 1).trim();
+                if (!propertyMatches(want, props.get(name))) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) {
+                return entry.getValue();
+            }
+        }
+        return fallback;
+    }
+
+    boolean matches(JsonObject when, BlockState state) {
+        if (when.has("OR")) {
+            for (JsonElement alt : when.getAsJsonArray("OR")) {
+                if (matches(alt.getAsJsonObject(), state)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (when.has("AND")) {
+            for (JsonElement all : when.getAsJsonArray("AND")) {
+                if (!matches(all.getAsJsonObject(), state)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        Map<String, String> props = propertiesOf(state);
+        for (Map.Entry<String, JsonElement> entry : when.entrySet()) {
+            String actual = props.get(entry.getKey());
+            String[] allowed = entry.getValue().getAsString().split("\\|");
+            boolean any = false;
+            for (String option : allowed) {
+                if (propertyMatches(option, actual)) {
+                    any = true;
+                    break;
+                }
+            }
+            if (!any) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    Map<String, String> propertiesOf(BlockState state) {
+        Map<String, String> out = new TreeMap<>();
+        for (Map.Entry<Property<?>, Comparable<?>> entry : state.getValues().entrySet()) {
+            out.put(entry.getKey().getName(), nameOf(entry.getKey(), entry.getValue()));
+        }
+        return out;
+    }
+
+    private static boolean propertyMatches(String expected, String actual) {
+        if (actual == null) return false;
+        if (expected.equals(actual)) return true;
+        if ("true".equals(actual) && "low".equals(expected)) return true;
+        if ("false".equals(actual) && "none".equals(expected)) return true;
+        return false;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Comparable<T>> String nameOf(
+            Property<?> property, Comparable<?> value) {
+        return ((Property<T>) property).getName((T) value);
     }
 
     JsonObject resolveTexturesOnly(String modelRef, Map<String, String> overrides) {

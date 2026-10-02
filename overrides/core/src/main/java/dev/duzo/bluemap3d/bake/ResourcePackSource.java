@@ -6,7 +6,6 @@ import com.google.gson.JsonObject;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.Property;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,7 +17,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 /**
  * Reads real Minecraft block models and textures out of an {@link AssetIndex}.
@@ -122,7 +120,7 @@ public final class ResourcePackSource implements BlockModelSource {
         try {
             if (blockstate.has("variants")) {
                 JsonObject variants = blockstate.getAsJsonObject("variants");
-                JsonElement chosen = selectVariant(variants, state);
+                JsonElement chosen = models.selectVariant(variants, state);
                 if (chosen != null) {
                     appendVariant(out, firstOf(chosen), state, tintOverride);
                 }
@@ -130,7 +128,7 @@ public final class ResourcePackSource implements BlockModelSource {
                 JsonArray multipart = blockstate.getAsJsonArray("multipart");
                 for (JsonElement partEl : multipart) {
                     JsonObject part = partEl.getAsJsonObject();
-                    if (!part.has("when") || matches(part.getAsJsonObject("when"), state)) {
+                    if (!part.has("when") || models.matches(part.getAsJsonObject("when"), state)) {
                         appendVariant(out, firstOf(part.get("apply")), state, tintOverride);
                     }
                 }
@@ -170,11 +168,11 @@ public final class ResourcePackSource implements BlockModelSource {
         try {
             JsonObject variant = null;
             if (blockstate.has("variants")) {
-                variant = firstOf(selectVariant(blockstate.getAsJsonObject("variants"), state));
+                variant = firstOf(models.selectVariant(blockstate.getAsJsonObject("variants"), state));
             } else if (blockstate.has("multipart")) {
                 for (JsonElement partEl : blockstate.getAsJsonArray("multipart")) {
                     JsonObject part = partEl.getAsJsonObject();
-                    if (!part.has("when") || matches(part.getAsJsonObject("when"), state)) {
+                    if (!part.has("when") || models.matches(part.getAsJsonObject("when"), state)) {
                         variant = firstOf(part.get("apply"));
                         break;
                     }
@@ -189,94 +187,6 @@ public final class ResourcePackSource implements BlockModelSource {
             LOGGER.debug("Could not find a particle texture for {}: {}", state, e.toString());
             return null;
         }
-    }
-
-    /**
-     * Picks the variant whose key matches the state's properties.
-     *
-     * <p>Keys are comma-separated {@code name=value} pairs; a blockstate file only lists
-     * the properties that actually change the model, so a key matches when every pair it
-     * names agrees with the state. {@code ""} is the catch-all single-variant key.
-     */
-    private static JsonElement selectVariant(JsonObject variants, BlockState state) {
-        Map<String, String> props = propertiesOf(state);
-
-        JsonElement fallback = null;
-        for (Map.Entry<String, JsonElement> entry : variants.entrySet()) {
-            String key = entry.getKey();
-            if (key.isEmpty()) {
-                fallback = entry.getValue();
-                continue;
-            }
-            boolean ok = true;
-            for (String pair : key.split(",")) {
-                int eq = pair.indexOf('=');
-                if (eq < 0) {
-                    continue;
-                }
-                String name = pair.substring(0, eq).trim();
-                String want = pair.substring(eq + 1).trim();
-                if (!propertyMatches(want, props.get(name))) {
-                    ok = false;
-                    break;
-                }
-            }
-            if (ok) {
-                return entry.getValue();
-            }
-        }
-        return fallback;
-    }
-
-    /** Evaluates a multipart {@code when} clause, including {@code OR} and {@code AND}. */
-    private static boolean matches(JsonObject when, BlockState state) {
-        if (when.has("OR")) {
-            for (JsonElement alt : when.getAsJsonArray("OR")) {
-                if (matches(alt.getAsJsonObject(), state)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        if (when.has("AND")) {
-            for (JsonElement all : when.getAsJsonArray("AND")) {
-                if (!matches(all.getAsJsonObject(), state)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        Map<String, String> props = propertiesOf(state);
-        for (Map.Entry<String, JsonElement> entry : when.entrySet()) {
-            String actual = props.get(entry.getKey());
-            // A condition value may list alternatives: "north|east".
-            String[] allowed = entry.getValue().getAsString().split("\\|");
-            boolean any = false;
-            for (String option : allowed) {
-                if (propertyMatches(option, actual)) {
-                    any = true;
-                    break;
-                }
-            }
-            if (!any) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Diagonal Walls replaces vanilla WallSide values with booleans to keep the state
-     * count manageable. The resource-pack models still test for low/none, exactly as
-     * Diagonal Blocks' own client-side WallMultiPartTranslator converts them.
-     */
-    private static boolean propertyMatches(String expected, String actual) {
-        if (actual == null) return false;
-        if (expected.equals(actual)) return true;
-        if ("true".equals(actual) && "low".equals(expected)) return true;
-        if ("false".equals(actual) && "none".equals(expected)) return true;
-        return false;
     }
 
     /**
@@ -312,7 +222,7 @@ public final class ResourcePackSource implements BlockModelSource {
             JsonArray multipart,
             BlockState state,
             Integer tintOverride) {
-        Map<String, String> properties = propertiesOf(state);
+        Map<String, String> properties = models.propertiesOf(state);
 
         for (JsonElement partEl : multipart) {
             JsonObject part = partEl.getAsJsonObject();
@@ -388,20 +298,6 @@ public final class ResourcePackSource implements BlockModelSource {
             }
         }
         return null;
-    }
-
-    /** The state's properties as the strings a blockstate file would use. */
-    private static Map<String, String> propertiesOf(BlockState state) {
-        Map<String, String> out = new TreeMap<>();
-        for (Map.Entry<Property<?>, Comparable<?>> entry : state.getValues().entrySet()) {
-            out.put(entry.getKey().getName(), nameOf(entry.getKey(), entry.getValue()));
-        }
-        return out;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T extends Comparable<T>> String nameOf(Property<?> property, Comparable<?> value) {
-        return ((Property<T>) property).getName((T) value);
     }
 
     // ---------------------------------------------------------------------------------
