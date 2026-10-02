@@ -23,12 +23,17 @@ class ReleaseMetadataTest(unittest.TestCase):
         self.assertTrue(release["minecraftVersion"])
 
     def test_build_metadata_defaults_to_commit_qualified_version(self) -> None:
-        release = build_release()
-        source = load_release()
-        self.assertRegex(
-            release["version"],
-            rf"^{re.escape(source['version'])}-dev\.[0-9a-f]+$",
-        )
+        previous = os.environ.pop("BLUEMAP3D_VERSION", None)
+        try:
+            release = build_release()
+            source = load_release()
+            self.assertRegex(
+                release["version"],
+                rf"^{re.escape(source['version'])}-dev\.[0-9a-f]+$",
+            )
+        finally:
+            if previous is not None:
+                os.environ["BLUEMAP3D_VERSION"] = previous
 
     def test_exact_release_version_can_be_injected(self) -> None:
         previous = os.environ.get("BLUEMAP3D_VERSION")
