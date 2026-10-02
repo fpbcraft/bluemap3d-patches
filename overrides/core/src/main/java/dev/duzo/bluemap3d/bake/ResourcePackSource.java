@@ -1,6 +1,5 @@
 package dev.duzo.bluemap3d.bake;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -15,7 +14,6 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -55,17 +53,16 @@ import java.util.TreeMap;
 public final class ResourcePackSource implements BlockModelSource {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/Models");
-    private static final Gson GSON = new Gson();
-    private static final int MAX_PARENT_DEPTH = 16;
 
     private final AssetIndex assets;
+    private final ResourcePackModelResolver models;
     private final Map<BlockState, List<ModelQuad>> quadCache = new HashMap<>();
     private final Map<String, List<ModelQuad>> attachmentCache = new HashMap<>();
     private final Map<String, BufferedImage> textureCache = new HashMap<>();
-    private final Map<String, JsonObject> jsonCache = new HashMap<>();
 
     public ResourcePackSource(AssetIndex assets) {
         this.assets = assets;
+        this.models = new ResourcePackModelResolver(assets, LOGGER);
     }
 
     @Override
@@ -85,7 +82,7 @@ public final class ResourcePackSource implements BlockModelSource {
     @Override
     public BufferedImage texture(String texture) {
         return textureCache.computeIfAbsent(texture, id -> {
-            ResourceLocation loc = parse(id);
+            ResourceLocation loc = models.parse(id);
             if (loc == null) {
                 return null;
             }
@@ -116,7 +113,7 @@ public final class ResourcePackSource implements BlockModelSource {
 
     private List<ModelQuad> buildQuads(BlockState state, Integer tintOverride) {
         ResourceLocation block = assetBlockId(state);
-        JsonObject blockstate = json("assets/" + block.getNamespace() + "/blockstates/" + block.getPath() + ".json");
+        JsonObject blockstate = models.json("assets/" + block.getNamespace() + "/blockstates/" + block.getPath() + ".json");
         if (blockstate == null) {
             return List.of();
         }
@@ -166,7 +163,7 @@ public final class ResourcePackSource implements BlockModelSource {
      */
     String particleTexture(BlockState state) {
         ResourceLocation block = assetBlockId(state);
-        JsonObject blockstate = json("assets/" + block.getNamespace() + "/blockstates/" + block.getPath() + ".json");
+        JsonObject blockstate = models.json("assets/" + block.getNamespace() + "/blockstates/" + block.getPath() + ".json");
         if (blockstate == null) {
             return null;
         }
@@ -186,8 +183,8 @@ public final class ResourcePackSource implements BlockModelSource {
             if (variant == null || !variant.has("model")) {
                 return null;
             }
-            JsonObject textures = resolveTexturesOnly(variant.get("model").getAsString(), Map.of());
-            return textures == null ? null : resolveTextureRef(textures, "#particle");
+            JsonObject textures = models.resolveTexturesOnly(variant.get("model").getAsString(), Map.of());
+            return textures == null ? null : models.resolveTextureRef(textures, "#particle");
         } catch (RuntimeException e) {
             LOGGER.debug("Could not find a particle texture for {}: {}", state, e.toString());
             return null;
@@ -452,11 +449,11 @@ public final class ResourcePackSource implements BlockModelSource {
      * both {@code item/generated} and {@code item/handheld} put it.
      */
     private List<ModelQuad> extrudeItem(ResourceLocation model, Map<String, String> overrides) {
-        JsonObject resolved = resolveTexturesOnly(model.toString(), overrides);
+        JsonObject resolved = models.resolveTexturesOnly(model.toString(), overrides);
         if (resolved == null) {
             return List.of();
         }
-        String layer0 = resolveTextureRef(resolved, "#layer0");
+        String layer0 = models.resolveTextureRef(resolved, "#layer0");
         if (layer0 == null) {
             return List.of();
         }
@@ -468,42 +465,6 @@ public final class ResourcePackSource implements BlockModelSource {
         List<ModelQuad> quads = ItemSpriteMesher.extrude(sprite, layer0);
         LOGGER.debug("Extruded {} into {} quads from {}", model, quads.size(), layer0);
         return quads;
-    }
-
-    /**
-     * The merged texture map of a model chain, for models that have no elements at all.
-     *
-     * <p>{@link #resolveModel} gives up and returns null when it finds no geometry, which is
-     * exactly the case an item model hits.
-     */
-    private JsonObject resolveTexturesOnly(String modelRef, Map<String, String> overrides) {
-        JsonObject textures = new JsonObject();
-        overrides.forEach(textures::addProperty);
-
-        String ref = modelRef;
-        for (int depth = 0; depth < MAX_PARENT_DEPTH && ref != null; depth++) {
-            ResourceLocation loc = parse(ref);
-            if (loc == null) {
-                return textures;
-            }
-            String path = loc.getPath();
-            if (!path.contains("/")) {
-                path = "item/" + path;
-            }
-            JsonObject model = json("assets/" + loc.getNamespace() + "/models/" + path + ".json");
-            if (model == null) {
-                return textures;
-            }
-            if (model.has("textures")) {
-                for (Map.Entry<String, JsonElement> e : model.getAsJsonObject("textures").entrySet()) {
-                    if (!textures.has(e.getKey())) {
-                        textures.add(e.getKey(), e.getValue());
-                    }
-                }
-            }
-            ref = model.has("parent") ? model.get("parent").getAsString() : null;
-        }
-        return textures;
     }
 
     private void appendVariant(List<ModelQuad> out, JsonObject variant, BlockState state) {
@@ -549,10 +510,9 @@ public final class ResourcePackSource implements BlockModelSource {
     private void appendModel(List<ModelQuad> out, String modelRef, int rotX, int rotY,
                              Map<String, String> overrides, BlockState state,
                              Integer tintOverride) {
-        JsonObject objStub = findObjStub(modelRef);
+        JsonObject objStub = models.findObjStub(modelRef);
         if (objStub != null) {
-            List<ModelQuad> obj = new ArrayList<>();
-            appendObjModel(obj, modelRef, objStub, overrides);
+            List<ModelQuad> obj = models.objQuads(modelRef, objStub, overrides);
             if (rotX == 0 && rotY == 0) {
                 out.addAll(obj);
             } else {
@@ -573,7 +533,7 @@ public final class ResourcePackSource implements BlockModelSource {
             }
             return;
         }
-        JsonObject model = resolveModel(modelRef, overrides);
+        JsonObject model = models.resolveModel(modelRef, overrides);
         if (model == null) {
             return;
         }
@@ -603,7 +563,7 @@ public final class ResourcePackSource implements BlockModelSource {
                 }
                 JsonObject faceDef = faceEntry.getValue().getAsJsonObject();
 
-                String texture = resolveTextureRef(textures,
+                String texture = models.resolveTextureRef(textures,
                         faceDef.has("texture") ? faceDef.get("texture").getAsString() : null);
                 if (texture == null) {
                     continue;
@@ -661,218 +621,6 @@ public final class ResourcePackSource implements BlockModelSource {
                 out.add(new ModelQuad(cull, face, corners, uvCorners(uv, uvRotation), texture, tint));
             }
         }
-    }
-
-    /**
-     * The resource-pack path of a model's json file. A bare name with no namespaced
-     * folder defaults to {@code block/}, since that is what every plain block-model
-     * reference in a blockstate variant means; a ref that already names {@code block/}
-     * or {@code item/} is left alone.
-     */
-    private static String modelJsonPath(ResourceLocation loc) {
-        String path = loc.getPath();
-        if (!path.startsWith("block/") && !path.startsWith("item/") && !path.contains("/")) {
-            path = "block/" + path;
-        }
-        return "assets/" + loc.getNamespace() + "/models/" + path + ".json";
-    }
-
-    private static boolean isObjLoader(JsonObject model) {
-        if (!model.has("loader")) {
-            return false;
-        }
-        String loader = model.get("loader").getAsString();
-        return "neoforge:obj".equals(loader)
-                || "forge:obj".equals(loader)
-                || "porting_lib:obj".equals(loader);
-    }
-
-    /**
-     * The nearest model in {@code modelRef}'s parent chain that wraps an OBJ mesh, or
-     * {@code null} if the chain reaches ordinary {@code elements} geometry first (or has
-     * neither).
-     *
-     * <p>The chain has to be walked, not just the leaf inspected. A mod that reskins
-     * another mod's OBJ track, machine or decoration ships a leaf model that is nothing
-     * but {@code parent} plus a {@code textures} block - Steam 'n' Rails' 150-odd track
-     * materials are all exactly that on top of Create's {@code create:block/track/diag},
-     * {@code tie} and {@code segment_*}. Checking only the leaf finds no {@code loader}
-     * there, falls through to the elements path, finds no {@code elements} anywhere in
-     * the chain either, and hands the block to {@link MapColorSource} - so every one of
-     * those blocks and attachments draws as a flat grey lump instead of track.
-     *
-     * <p>Stops at the first {@code elements} it meets so that whichever kind of geometry
-     * is <em>nearer</em> the leaf wins, which is the same precedence a child overriding
-     * its parent's geometry has everywhere else. Textures are deliberately not read here:
-     * {@link #appendObjModel} resolves those from the original leaf, so the child's
-     * overrides still beat the parent's defaults.
-     */
-    private JsonObject findObjStub(String modelRef) {
-        String ref = modelRef;
-        for (int depth = 0; depth < MAX_PARENT_DEPTH && ref != null; depth++) {
-            ResourceLocation loc = parse(ref);
-            if (loc == null) {
-                return null;
-            }
-            JsonObject model = json(modelJsonPath(loc));
-            if (model == null) {
-                return null;
-            }
-            if (isObjLoader(model) && model.has("model")) {
-                return model;
-            }
-            if (model.has("elements")) {
-                return null;
-            }
-            ref = model.has("parent") ? model.get("parent").getAsString() : null;
-        }
-        return null;
-    }
-
-    /**
-     * A model wrapping an OBJ mesh instead of {@code elements} - some mods ship those for
-     * parts that do not decompose into cuboids. Reads the mesh and its material file
-     * through the same {@link AssetIndex} as everything else, resolves the wrapper's
-     * texture map exactly like an element model would, and hands both to
-     * {@link ObjModelReader}, which knows nothing about resource packs or blocks.
-     */
-    private void appendObjModel(List<ModelQuad> out, String modelRef, JsonObject stub, Map<String, String> overrides) {
-        if (!stub.has("model")) {
-            return;
-        }
-        ResourceLocation objLoc = parse(stub.get("model").getAsString());
-        if (objLoc == null) {
-            return;
-        }
-        String objPath = "assets/" + objLoc.getNamespace() + "/" + objLoc.getPath();
-        byte[] objBytes = assets.read(objPath);
-        if (objBytes == null) {
-            LOGGER.debug("Obj model {} names mesh {} which is not available", modelRef, objPath);
-            return;
-        }
-        String objText = new String(objBytes, StandardCharsets.UTF_8);
-
-        String mtlText = null;
-
-        // NeoForge supports mtl_override on the wrapper JSON. Prefer it when present,
-        // then fall back to the OBJ's local mtllib declaration.
-        if (stub.has("mtl_override")) {
-            ResourceLocation mtlLoc = parse(stub.get("mtl_override").getAsString());
-            if (mtlLoc != null) {
-                String mtlPath = "assets/" + mtlLoc.getNamespace() + "/" + mtlLoc.getPath();
-                byte[] mtlBytes = assets.read(mtlPath);
-                if (mtlBytes != null) {
-                    mtlText = new String(mtlBytes, StandardCharsets.UTF_8);
-                } else {
-                    LOGGER.debug("Obj model {} overrides material with {} which is not available",
-                            modelRef, mtlPath);
-                }
-            }
-        }
-
-        if (mtlText == null) {
-            String mtlName = findMtllib(objText);
-            if (mtlName != null) {
-                int slash = objPath.lastIndexOf('/');
-                String mtlPath = (slash >= 0 ? objPath.substring(0, slash + 1) : "") + mtlName;
-                byte[] mtlBytes = assets.read(mtlPath);
-                if (mtlBytes != null) {
-                    mtlText = new String(mtlBytes, StandardCharsets.UTF_8);
-                } else {
-                    LOGGER.debug("Obj model {} names material {} which is not available",
-                            modelRef, mtlPath);
-                }
-            }
-        }
-
-        // The stub itself carries no elements, but resolveTexturesOnly already walks a
-        // chain like this for item models - it is exactly what an obj wrapper's "parent"
-        // is for, and its materials only ever point at a #ref into this same map.
-        JsonObject textures = resolveTexturesOnly(modelRef, overrides);
-        Map<String, String> resolvedTextures = new HashMap<>();
-        for (String key : textures.keySet()) {
-            String resolved = resolveTextureRef(textures, "#" + key);
-            if (resolved != null) {
-                resolvedTextures.put(key, resolved);
-            }
-        }
-
-        boolean flipV = stub.has("flip_v") && stub.get("flip_v").getAsBoolean();
-        out.addAll(ObjModelReader.read(objText, mtlText, resolvedTextures, flipV));
-    }
-
-    private static String findMtllib(String objText) {
-        for (String rawLine : objText.split("\n")) {
-            String line = rawLine.trim();
-            if (line.startsWith("mtllib ")) {
-                return line.substring("mtllib ".length()).trim();
-            }
-        }
-        return null;
-    }
-
-    /**
-     * The model's merged form: {@code textures} accumulated down the parent chain with
-     * the child winning, and the first {@code elements} found.
-     */
-    private JsonObject resolveModel(String modelRef, Map<String, String> overrides) {
-        JsonObject merged = new JsonObject();
-        JsonObject mergedTextures = new JsonObject();
-        JsonArray elements = null;
-
-        // Seeded first, and the merge below only fills gaps, so these beat the whole chain.
-        overrides.forEach(mergedTextures::addProperty);
-
-        String ref = modelRef;
-        for (int depth = 0; depth < MAX_PARENT_DEPTH && ref != null; depth++) {
-            ResourceLocation loc = parse(ref);
-            if (loc == null) {
-                break;
-            }
-            JsonObject model = json(modelJsonPath(loc));
-            if (model == null) {
-                break;
-            }
-
-            if (model.has("textures")) {
-                for (Map.Entry<String, JsonElement> e : model.getAsJsonObject("textures").entrySet()) {
-                    // Child wins: only fill gaps as we walk up.
-                    if (!mergedTextures.has(e.getKey())) {
-                        mergedTextures.add(e.getKey(), e.getValue());
-                    }
-                }
-            }
-            if (elements == null && model.has("elements")) {
-                elements = model.getAsJsonArray("elements");
-            }
-            ref = model.has("parent") ? model.get("parent").getAsString() : null;
-        }
-
-        if (elements == null) {
-            return null;
-        }
-        merged.add("textures", mergedTextures);
-        merged.add("elements", elements);
-        return merged;
-    }
-
-    /** Follows {@code #ref} indirection in a model's texture map. */
-    private static String resolveTextureRef(JsonObject textures, String ref) {
-        String current = ref;
-        for (int depth = 0; depth < 8; depth++) {
-            if (current == null) {
-                return null;
-            }
-            if (!current.startsWith("#")) {
-                return current;
-            }
-            JsonElement next = textures.get(current.substring(1));
-            if (next == null) {
-                return null;
-            }
-            current = next.getAsString();
-        }
-        return null;
     }
 
     // ---------------------------------------------------------------------------------
@@ -1047,21 +795,6 @@ public final class ResourcePackSource implements BlockModelSource {
     // Plumbing
     // ---------------------------------------------------------------------------------
 
-    private JsonObject json(String path) {
-        return jsonCache.computeIfAbsent(path, p -> {
-            byte[] bytes = assets.read(p);
-            if (bytes == null) {
-                return null;
-            }
-            try {
-                return GSON.fromJson(new String(bytes, StandardCharsets.UTF_8), JsonObject.class);
-            } catch (RuntimeException e) {
-                LOGGER.debug("Malformed json at {}: {}", p, e.toString());
-                return null;
-            }
-        });
-    }
-
     private static JsonObject firstOf(JsonElement element) {
         if (element == null) {
             return null;
@@ -1086,18 +819,6 @@ public final class ResourcePackSource implements BlockModelSource {
             case "east" -> Direction.EAST;
             default -> null;
         };
-    }
-
-    private static ResourceLocation parse(String id) {
-        String value = id;
-        if (value.startsWith("#")) {
-            return null;
-        }
-        int hash = value.indexOf('#');
-        if (hash >= 0) {
-            value = value.substring(0, hash);
-        }
-        return ResourceLocation.tryParse(value.contains(":") ? value : "minecraft:" + value);
     }
 
     private static float[] vec3(JsonArray array) {
