@@ -11,12 +11,9 @@ The repository is intentionally split between **declarative compatibility rules*
 
 ## Supported baseline
 
-- Minecraft 1.21.1
-- NeoForge
-- BlueMap **5.7**
-- BlueMap3D upstream commit `f9a027de06f49384b86867b5c58b3630d29b1c9f`
-
-Do not assume compatibility with the later BlueMap 5.23 experiments.
+The authoritative release version and compatibility targets live in [`release.json`](release.json).
+The current release targets Minecraft 1.21.1, BlueMap 5.7, and a pinned BlueMap3D upstream
+commit. Do not assume compatibility with other targets unless `release.json` says so.
 
 ## Artifacts
 
@@ -160,13 +157,16 @@ build.sh                      orchestration only
 
 ## Build
 
-Requires Java 21, Git, Bash and Python 3.
+Requires Java 21, Git, Bash and Python 3. The build runs the stdlib Python test suite and
+compatibility-rule validation before patching upstream.
 
 ```bash
 ./build.sh
 ```
 
-Artifacts are written to `dist/`.
+Artifacts are written to `dist/`. `BUILD_INFO.json` records the release metadata and
+patch-repository commit, while `MANIFEST.json` records SHA-256 hashes. The distribution
+also includes the pinned upstream LGPL license.
 
 The build always clones the pinned upstream BlueMap3D commit, applies the base patch,
 copies maintained overrides and shared compatibility rules, runs the deterministic patch
@@ -251,7 +251,7 @@ The goal is to avoid an addon-per-mod architecture.
 
 ## Migrating from 1.0.28
 
-Remove the old native addon JARs before installing 1.1.11:
+Remove the old native addon JARs before installing the current release:
 
 ```text
 config/bluemap/packs/bluemap-copycats-compat-1.0.28.jar
@@ -259,7 +259,7 @@ config/bluemap/packs/bluemap-trafficcraft-compat-1.0.28.jar
 config/bluemap/packs/bluemap-foliage-compat-1.0.28.jar
 ```
 
-Replace them with the single `bluemap-compat-1.1.11.jar`. Keeping the old addons installed
+Replace them with the single `bluemap-compat-<version>.jar`. Keeping the old addons installed
 would register duplicate renderer/block-entity hooks.
 
 
