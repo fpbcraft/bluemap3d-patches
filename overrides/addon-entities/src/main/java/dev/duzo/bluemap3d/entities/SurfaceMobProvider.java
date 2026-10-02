@@ -7,6 +7,9 @@ import dev.duzo.bluemap3d.api.SceneObjectLifecycle;
 import dev.duzo.bluemap3d.api.SceneObjectProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.util.StringRepresentable;
+import net.minecraft.world.entity.AgeableMob;
+import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -20,6 +23,8 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Locale;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -59,11 +64,10 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
             float width = Math.max(0.1F, mob.getBbWidth());
             float height = Math.max(0.1F, mob.getBbHeight());
 
-            // Reserved values are consumed only by EntityModelSource's final fallback.
-            // A normal resource-pack or Geo model ignores them.
-            Map<String, String> metadata = Map.of(
-                    "__bm3d_width", Float.toString(width),
-                    "__bm3d_height", Float.toString(height));
+            // Reserved values are consumed by EntityModelSource. Appearance tokens are
+            // intentionally generic so modded mobs exposing a conventional getVariant(),
+            // getColor(), etc. automatically participate in asset selection.
+            Map<String, String> metadata = appearanceMetadata(mob, width, height);
 
             BlockVolume geometry = BlockVolume.attachments(
                     BlockPos.ZERO,
@@ -84,7 +88,8 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
                     mob.getUUID().toString(),
                     label,
                     level.dimension(),
-                    "surface-mob:" + typeId + ":" + width16 + "x" + height16,
+                    "surface-mob:" + typeId + ":" + width16 + "x" + height16
+                            + ":" + Integer.toUnsignedString(metadata.hashCode(), 36),
                     geometry,
                     mob.position(),
                     rotation,
@@ -92,6 +97,77 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
         }
 
         return List.copyOf(out);
+    }
+
+    private static final List<String> APPEARANCE_GETTERS = List.of(
+            "getVariant",
+            "getColor",
+            "getMarkings",
+            "getPattern",
+            "getStyle",
+            "getSkin",
+            "getTexture",
+            "getPuffState");
+
+    private static Map<String, String> appearanceMetadata(Mob mob, float width, float height) {
+        Map<String, String> metadata = new HashMap<>();
+        metadata.put("__bm3d_width", Float.toString(width));
+        metadata.put("__bm3d_height", Float.toString(height));
+
+        if (mob instanceof AgeableMob ageable && ageable.isBaby()) {
+            metadata.put("__bm3d_visual_age", "baby");
+        }
+
+        // Sheep wool is a runtime tint over a separate model layer, not a texture variant.
+        if (mob instanceof Sheep sheep) {
+            int rgb = sheep.getColor().getTextureDiffuseColor() & 0xFFFFFF;
+            metadata.put("__bm3d_tint", String.format(Locale.ROOT, "%06x", rgb));
+            metadata.put("__bm3d_visual_color", sheep.getColor().getSerializedName());
+        }
+
+        int visual = 0;
+        for (String getter : APPEARANCE_GETTERS) {
+            try {
+                java.lang.reflect.Method method = mob.getClass().getMethod(getter);
+                if (method.getParameterCount() != 0
+                        || java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
+                    continue;
+                }
+
+                String token = appearanceToken(method.invoke(mob));
+                if (token == null || token.isBlank()) continue;
+                metadata.put("__bm3d_visual_" + visual++, token);
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                // Optional convention: absence or a mod-specific getter failure is harmless.
+            }
+        }
+
+        return Map.copyOf(metadata);
+    }
+
+    private static String appearanceToken(Object value) {
+        if (value == null) return null;
+        if (value instanceof StringRepresentable serializable) {
+            return serializable.getSerializedName();
+        }
+        if (value instanceof ResourceLocation location) {
+            return location.getPath();
+        }
+        if (value instanceof Enum<?> enumeration) {
+            return enumeration.name().toLowerCase(Locale.ROOT);
+        }
+        if (value instanceof CharSequence text) {
+            return text.toString();
+        }
+        if (value instanceof Number number) {
+            return number.toString();
+        }
+
+        // Registry holders and small mod value objects often expose a useful identifier
+        // only through toString(). Reject default Object.toString()-style identities.
+        String text = String.valueOf(value);
+        if (text.length() > 96 || text.matches(".*@[0-9a-fA-F]+$")) return null;
+        return text;
     }
 
     static ResourceLocation modelLocation(ResourceLocation typeId) {
