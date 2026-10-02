@@ -926,7 +926,7 @@ index e8199bf..f2a3e33 100644
  import dev.duzo.bluemap3d.bake.MapColorSource;
  import dev.duzo.bluemap3d.bake.ResourcePackSource;
  import dev.duzo.bluemap3d.bake.ShapeSource;
-@@ -72,7 +76,17 @@ public final class BlueMap3DMod {
+@@ -72,7 +76,18 @@ public final class BlueMap3DMod {
              if (Config.USE_RESOURCE_PACKS.get()) {
                  assets = AssetIndex.open(configuredSources(), blueMapRoot);
                  ResourcePackSource packs = new ResourcePackSource(assets);
@@ -938,6 +938,7 @@ index e8199bf..f2a3e33 100644
 +                // block-entity NBT, so they must be resolved before the ordinary pack path.
 +                sources.add(new CopycatsBoardSource(packs));
                  sources.add(packs);
++                sources.add(new dev.duzo.bluemap3d.bake.EntityModelSource(assets));
 +                // Copycats+ emits many models entirely in client code. If no real JSON
 +                // model exists, preserve its server VoxelShape and copied material.
 +                sources.add(new CopycatsShapeSource(packs));
