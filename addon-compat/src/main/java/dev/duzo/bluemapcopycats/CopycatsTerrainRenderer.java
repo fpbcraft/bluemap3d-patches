@@ -2,14 +2,12 @@ package dev.duzo.bluemapcopycats;
 
 import de.bluecolored.bluemap.core.map.TextureGallery;
 import de.bluecolored.bluemap.core.map.hires.RenderSettings;
-import de.bluecolored.bluemap.core.map.hires.TileModel;
 import de.bluecolored.bluemap.core.map.hires.TileModelView;
 import de.bluecolored.bluemap.core.map.hires.block.BlockRenderer;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.Variant;
 import de.bluecolored.bluemap.core.util.Direction;
 import de.bluecolored.bluemap.core.util.math.Color;
-import de.bluecolored.bluemap.core.world.LightData;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 import de.bluecolored.bluemap.core.logger.Logger;
 
@@ -31,17 +29,17 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     private static final Set<String> TRACED = ConcurrentHashMap.newKeySet();
 
     private final CopycatsTemplateGeometry templateGeometry;
-    private final CopycatsAppearanceResolver appearanceResolver;
+    private final CopycatsQuadEmitter quadEmitter;
 
     private BlockNeighborhood block;
-    private TileModelView tileModel;
 
     public CopycatsTerrainRenderer(
             ResourcePack resourcePack,
             TextureGallery textureGallery,
             RenderSettings renderSettings) {
         this.templateGeometry = new CopycatsTemplateGeometry(resourcePack);
-        this.appearanceResolver = new CopycatsAppearanceResolver(resourcePack, textureGallery);
+        this.quadEmitter = new CopycatsQuadEmitter(
+                new CopycatsAppearanceResolver(resourcePack, textureGallery));
     }
 
     @Override
@@ -51,7 +49,6 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             TileModelView tileModel,
             Color blockColor) {
         this.block = block;
-        this.tileModel = tileModel;
 
         String id = block.getBlockState().getFormatted();
         if (!(block.getBlockEntity() instanceof CopycatsTerrainBlockEntity entity)) {
@@ -94,7 +91,14 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         int renderStart = tileModel.getStart();
         int emitted = 0;
         for (Quad quad : quads) {
-            if (emit(quad)) emitted++;
+            if (quadEmitter.emit(
+                    quad.positions(),
+                    quad.face(),
+                    quad.material(),
+                    block,
+                    tileModel)) {
+                emitted++;
+            }
         }
         tileModel.initialize(renderStart);
 
@@ -135,7 +139,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (!propertyBool(key)) return;
         CopycatsMaterial material = materialFor(entity, key);
         if (!usable(material)) return;
-        cuboid(out, new Transform(), x, y, z, x + 8, y + 8, z + 8, material);
+        cuboid(out, new CopycatsTransform(), x, y, z, x + 8, y + 8, z + 8, material);
     }
 
     private List<Quad> verticalHalfLayer(CopycatsTerrainBlockEntity entity) {
@@ -147,14 +151,14 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (positive > 0) {
             CopycatsMaterial material = materialFor(entity, "positive_layers");
             if (usable(material)) {
-                addHalfLayer(out, material, positive, new Transform().rotateY(rot + 180));
+                addHalfLayer(out, material, positive, new CopycatsTransform().rotateY(rot + 180));
             }
         }
         if (negative > 0) {
             CopycatsMaterial material = materialFor(entity, "negative_layers");
             if (usable(material)) {
                 addHalfLayer(out, material, negative,
-                        new Transform().flipX(true).rotateY(rot + 180));
+                        new CopycatsTransform().flipX(true).rotateY(rot + 180));
             }
         }
         return out;
@@ -164,7 +168,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             List<Quad> out,
             CopycatsMaterial material,
             int layer,
-            Transform transform) {
+            CopycatsTransform transform) {
         float l = Math.max(0, Math.min(8, layer));
         if (l <= 0) return;
         piece(out, transform, 0, 0, 0, 0, 0, 0, 4, 16, l, material);
@@ -177,7 +181,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
 
-        Transform transform = new Transform();
+        CopycatsTransform transform = new CopycatsTransform();
         String axis = property("axis");
         if ("z".equals(axis)) transform.rotateX(90);
         if ("x".equals(axis)) transform.rotateZ(90);
@@ -196,7 +200,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         boolean right = "right".equals(property("side"));
         String shape = property("vertical_stair_shape");
 
-        Transform transform = new Transform().rotateX(90).rotateZ(90).flipX(right);
+        CopycatsTransform transform = new CopycatsTransform().rotateX(90).rotateZ(90).flipX(right);
         if (shape.endsWith("_top")) transform.flipY(true);
         transform.rotateY(facing);
 
@@ -211,7 +215,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         return out;
     }
 
-    private void stairStraight(List<Quad> out, Transform t, CopycatsMaterial m) {
+    private void stairStraight(List<Quad> out, CopycatsTransform t, CopycatsMaterial m) {
         piece(out,t,0,0,0,  0,0,0,   16,4,8,m);
         piece(out,t,0,4,0,  0,12,0,  16,16,8,m);
         piece(out,t,0,0,8,  0,0,8,   16,8,16,m);
@@ -219,7 +223,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         piece(out,t,0,8,12, 0,8,12,  16,16,16,m);
     }
 
-    private void stairInner(List<Quad> out, Transform t, CopycatsMaterial m) {
+    private void stairInner(List<Quad> out, CopycatsTransform t, CopycatsMaterial m) {
         piece(out,t,0,0,0,   0,0,0,   8,4,8,m);
         piece(out,t,0,4,0,   0,12,0,  8,16,8,m);
         piece(out,t,0,0,8,   0,0,8,   16,8,16,m);
@@ -231,7 +235,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         piece(out,t,8,0,0,   8,0,0,   16,8,8,m);
     }
 
-    private void stairOuter(List<Quad> out, Transform t, CopycatsMaterial m) {
+    private void stairOuter(List<Quad> out, CopycatsTransform t, CopycatsMaterial m) {
         piece(out,t,0,0,0,   0,0,0,   8,4,16,m);
         piece(out,t,0,4,0,   0,12,0,  8,16,16,m);
         piece(out,t,8,0,0,   8,0,0,   16,4,8,m);
@@ -277,7 +281,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             boolean bottomPart,
             CopycatsMaterial material) {
         if ("y".equals(axis)) {
-            Transform t = new Transform().flipY(!bottomPart);
+            CopycatsTransform t = new CopycatsTransform().flipY(!bottomPart);
             cuboid(out, t, 0, 0, 0, 16, 4, 16, material);
             cuboid(out, t, 0, 4, 0, 16, 8, 16, material);
             return;
@@ -289,7 +293,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         } else {
             facing = bottomPart ? "south" : "north";
         }
-        Transform t = new Transform().rotateY(yRotation(facing));
+        CopycatsTransform t = new CopycatsTransform().rotateY(yRotation(facing));
         cuboid(out, t, 0, 0, 0, 16, 16, 4, material);
         cuboid(out, t, 0, 0, 4, 16, 16, 8, material);
     }
@@ -303,7 +307,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         float minHeight = layer <= 4 ? 0 : (layer - 4) * 4f;
         float maxHeight = layer <= 4 ? layer * 4f : 16f;
 
-        Transform transform = new Transform()
+        CopycatsTransform transform = new CopycatsTransform()
                 .rotateY(yRotation(property("facing")))
                 .flipY("top".equals(property("half")));
 
@@ -334,12 +338,12 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             if (!usable(material)) continue;
 
             switch (face) {
-                case DOWN -> cuboid(out, new Transform(), 0, 0, 0, 16, 1, 16, material);
-                case UP -> cuboid(out, new Transform(), 0, 15, 0, 16, 16, 16, material);
-                case NORTH -> cuboid(out, new Transform(), 0, 0, 0, 16, 16, 1, material);
-                case SOUTH -> cuboid(out, new Transform(), 0, 0, 15, 16, 16, 16, material);
-                case WEST -> cuboid(out, new Transform(), 0, 0, 0, 1, 16, 16, material);
-                case EAST -> cuboid(out, new Transform(), 15, 0, 0, 16, 16, 16, material);
+                case DOWN -> cuboid(out, new CopycatsTransform(), 0, 0, 0, 16, 1, 16, material);
+                case UP -> cuboid(out, new CopycatsTransform(), 0, 15, 0, 16, 16, 16, material);
+                case NORTH -> cuboid(out, new CopycatsTransform(), 0, 0, 0, 16, 16, 1, material);
+                case SOUTH -> cuboid(out, new CopycatsTransform(), 0, 0, 15, 16, 16, 16, material);
+                case WEST -> cuboid(out, new CopycatsTransform(), 0, 0, 0, 1, 16, 16, material);
+                case EAST -> cuboid(out, new CopycatsTransform(), 15, 0, 0, 16, 16, 16, material);
             }
         }
         return out;
@@ -350,7 +354,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (!usable(material)) return List.of();
         float layers = Math.max(1, Math.min(8, propertyInt("layers")));
         float size = layers * 2f;
-        Transform t = new Transform().rotateY(yRotation(property("facing")));
+        CopycatsTransform t = new CopycatsTransform().rotateY(yRotation(property("facing")));
         List<Quad> out = new ArrayList<>();
         cuboid(out, t, 16 - size, 0, 16 - size, 16, 16, 16, material);
         return out;
@@ -361,7 +365,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (!usable(material)) return List.of();
         float layers = Math.max(1, Math.min(8, propertyInt("layers")));
         float size = layers * 2f;
-        Transform t = new Transform()
+        CopycatsTransform t = new CopycatsTransform()
                 .rotateY(yRotation(property("facing")))
                 .flipY("top".equals(property("half")));
         List<Quad> out = new ArrayList<>();
@@ -374,7 +378,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (!usable(material)) return List.of();
         float layers = Math.max(1, Math.min(8, propertyInt("layers")));
         float size = layers * 2f;
-        Transform t = new Transform()
+        CopycatsTransform t = new CopycatsTransform()
                 .rotateY(yRotation(property("facing")))
                 .flipY("top".equals(property("half")));
         List<Quad> out = new ArrayList<>();
@@ -391,10 +395,10 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         List<Quad> out = new ArrayList<>();
 
         if ("up".equals(facing) || "down".equals(facing)) {
-            Transform t = new Transform().flipY("down".equals(facing));
+            CopycatsTransform t = new CopycatsTransform().flipY("down".equals(facing));
             cuboid(out, t, 0, 0, 0, 16, size, 16, material);
         } else {
-            Transform t = new Transform().rotateY(yRotation(facing));
+            CopycatsTransform t = new CopycatsTransform().rotateY(yRotation(facing));
             cuboid(out, t, 0, 0, 0, 16, 16, size, material);
         }
         return out;
@@ -411,7 +415,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             CopycatsMaterial material = materialFor(entity, "negative_layers");
             if (usable(material)) {
                 float size = Math.min(8, negative) * 2f;
-                Transform t = new Transform().rotateY(rot).flipY(top);
+                CopycatsTransform t = new CopycatsTransform().rotateY(rot).flipY(top);
                 cuboid(out, t, 0, 0, 0, 8, size, 16, material);
             }
         }
@@ -419,7 +423,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             CopycatsMaterial material = materialFor(entity, "positive_layers");
             if (usable(material)) {
                 float size = Math.min(8, positive) * 2f;
-                Transform t = new Transform().rotateY(rot + 180).flipY(top);
+                CopycatsTransform t = new CopycatsTransform().rotateY(rot + 180).flipY(top);
                 cuboid(out, t, 0, 0, 0, 8, size, 16, material);
             }
         }
@@ -436,7 +440,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             CopycatsMaterial material = materialFor(entity, "negative_layers");
             if (usable(material)) {
                 float size = Math.min(8, negative) * 2f;
-                cuboid(out, new Transform().rotateY(rot),
+                cuboid(out, new CopycatsTransform().rotateY(rot),
                         0, 0, 0, 16, 8, size, material);
             }
         }
@@ -444,7 +448,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             CopycatsMaterial material = materialFor(entity, "positive_layers");
             if (usable(material)) {
                 float size = Math.min(8, positive) * 2f;
-                cuboid(out, new Transform().flipY(true).rotateY(rot),
+                cuboid(out, new CopycatsTransform().flipY(true).rotateY(rot),
                         0, 0, 0, 16, 8, size, material);
             }
         }
@@ -460,7 +464,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         List<Quad> out = new ArrayList<>();
 
         if ("up".equals(facing) || "down".equals(facing)) {
-            Transform t = new Transform()
+            CopycatsTransform t = new CopycatsTransform()
                     .rotateY(yRotation(offset))
                     .flipY("up".equals(facing));
             cuboid(out, t, 0, 0, 8, 16, 3, 16, material);
@@ -472,7 +476,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
                 || (("east".equals(facing) || "west".equals(facing))
                 && ("east".equals(offset) || "west".equals(offset)));
 
-        Transform t = new Transform().rotateY(yRotation(facing));
+        CopycatsTransform t = new CopycatsTransform().rotateY(yRotation(facing));
         if (sameAxis) {
             boolean positive = "south".equals(offset) || "east".equals(offset);
             t.flipY(positive);
@@ -490,7 +494,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (!usable(material)) return List.of();
         List<Quad> out = new ArrayList<>();
         cuboid(out,
-                new Transform().rotateY(yRotation(property("facing"))),
+                new CopycatsTransform().rotateY(yRotation(property("facing"))),
                 8, 0, 8, 16, 16, 16, material);
         return out;
     }
@@ -498,7 +502,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     private List<Quad> beam(CopycatsTerrainBlockEntity entity) {
         CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
-        Transform t = new Transform();
+        CopycatsTransform t = new CopycatsTransform();
         String axis = property("axis");
         if ("y".equals(axis)) t.rotateX(90);
         if ("x".equals(axis)) t.rotateY(90);
@@ -528,17 +532,17 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
 
         String facing = property("facing");
         if ("up".equals(facing)) {
-            cuboid(out, new Transform(),
+            cuboid(out, new CopycatsTransform(),
                     i * 8f, 13, 8 - j * 8f,
                     i * 8f + 8, 16, 16 - j * 8f,
                     material);
         } else if ("down".equals(facing)) {
-            cuboid(out, new Transform(),
+            cuboid(out, new CopycatsTransform(),
                     i * 8f, 0, j * 8f,
                     i * 8f + 8, 3, j * 8f + 8,
                     material);
         } else {
-            cuboid(out, new Transform().rotateY(yRotation(facing)),
+            cuboid(out, new CopycatsTransform().rotateY(yRotation(facing)),
                     i * 8f, j * 8f, 13,
                     i * 8f + 8, j * 8f + 8, 16,
                     material);
@@ -551,7 +555,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         boolean powered = propertyBool("powered") || propertyInt("power") > 0;
         float height = powered ? 0.5f : 1f;
         List<Quad> out = new ArrayList<>();
-        cuboid(out, new Transform(), 1, 0, 1, 15, height, 15, material);
+        cuboid(out, new CopycatsTransform(), 1, 0, 1, 15, height, 15, material);
         return out;
     }
 
@@ -582,7 +586,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
 
     private void piece(
             List<Quad> out,
-            Transform transform,
+            CopycatsTransform transform,
             float dx, float dy, float dz,
             float sx1, float sy1, float sz1,
             float sx2, float sy2, float sz2,
@@ -597,7 +601,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
 
     private void cuboid(
             List<Quad> out,
-            Transform transform,
+            CopycatsTransform transform,
             float minX, float minY, float minZ,
             float maxX, float maxY, float maxZ,
             CopycatsMaterial material) {
@@ -617,7 +621,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
 
     private void quad(
             List<Quad> out,
-            Transform transform,
+            CopycatsTransform transform,
             Direction materialFace,
             CopycatsMaterial material,
             float[] a, float[] b, float[] c, float[] d) {
@@ -627,49 +631,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
                 c[0],c[1],c[2],
                 d[0],d[1],d[2]
         };
-        transform.apply(positions);
-        if (transform.mirrored()) reverseWinding(positions);
+        transform.applyQuad(positions);
         out.add(new Quad(positions, materialFace, material));
-    }
-
-    private boolean emit(Quad quad) {
-        CopycatsAppearanceResolver.Appearance appearance =
-                appearanceResolver.resolve(quad.material(), quad.face(), block);
-        if (appearance == null) return false;
-
-        float[] p = quad.positions();
-        tileModel.initialize();
-        tileModel.add(2);
-        TileModel target = tileModel.getTileModel();
-        int f1 = tileModel.getStart();
-        int f2 = f1 + 1;
-
-        target.setPositions(f1,
-                p[0]/16f,p[1]/16f,p[2]/16f,
-                p[3]/16f,p[4]/16f,p[5]/16f,
-                p[6]/16f,p[7]/16f,p[8]/16f);
-        target.setPositions(f2,
-                p[0]/16f,p[1]/16f,p[2]/16f,
-                p[6]/16f,p[7]/16f,p[8]/16f,
-                p[9]/16f,p[10]/16f,p[11]/16f);
-
-        target.setUvs(f1, 0f,1f, 1f,1f, 1f,0f);
-        target.setUvs(f2, 0f,1f, 1f,0f, 0f,0f);
-        target.setMaterialIndex(f1, appearance.textureIndex());
-        target.setMaterialIndex(f2, appearance.textureIndex());
-
-        Color tint = appearance.tint();
-        target.setColor(f1, tint.r, tint.g, tint.b);
-        target.setColor(f2, tint.r, tint.g, tint.b);
-
-        LightData light = block.getLightData();
-        target.setSunlight(f1, light.getSkyLight());
-        target.setSunlight(f2, light.getSkyLight());
-        target.setBlocklight(f1, light.getBlockLight());
-        target.setBlocklight(f2, light.getBlockLight());
-        target.setAOs(f1, 1f,1f,1f);
-        target.setAOs(f2, 1f,1f,1f);
-        return true;
     }
 
     private CopycatsMaterial materialFor(CopycatsTerrainBlockEntity entity, String part) {
@@ -710,57 +673,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         return new float[]{x,y,z};
     }
 
-    private static void reverseWinding(float[] p) {
-        for (int i = 0; i < 3; i++) {
-            float tmp = p[3 + i];
-            p[3 + i] = p[9 + i];
-            p[9 + i] = tmp;
-        }
-    }
-
     private record Quad(float[] positions, Direction face, CopycatsMaterial material) {
     }
 
-    private static final class Transform {
-        private static final int RX = 1, RY = 2, RZ = 3, FX = 4, FY = 5, FZ = 6;
-        private final List<Integer> ops = new ArrayList<>();
-        private boolean mirrored;
 
-        Transform rotateX(int degrees) { addRot(RX, degrees); return this; }
-        Transform rotateY(int degrees) { addRot(RY, degrees); return this; }
-        Transform rotateZ(int degrees) { addRot(RZ, degrees); return this; }
-        Transform flipX(boolean yes) { if (yes) { ops.add(FX); mirrored = !mirrored; } return this; }
-        Transform flipY(boolean yes) { if (yes) { ops.add(FY); mirrored = !mirrored; } return this; }
-        Transform flipZ(boolean yes) { if (yes) { ops.add(FZ); mirrored = !mirrored; } return this; }
-        boolean mirrored() { return mirrored; }
-
-        private void addRot(int op, int degrees) {
-            int turns = Math.floorMod(degrees / 90, 4);
-            for (int i = 0; i < turns; i++) ops.add(op);
-        }
-
-        void apply(float[] positions) {
-            for (int i = 0; i < positions.length; i += 3) {
-                float x = positions[i];
-                float y = positions[i + 1];
-                float z = positions[i + 2];
-                for (int op : ops) {
-                    float nx = x, ny = y, nz = z;
-                    switch (op) {
-                        case FX -> nx = 16 - x;
-                        case FY -> ny = 16 - y;
-                        case FZ -> nz = 16 - z;
-                        case RX -> { ny = 16 - z; nz = y; }
-                        case RY -> { nx = 16 - z; nz = x; }
-                        case RZ -> { nx = 16 - y; ny = x; }
-                        default -> { }
-                    }
-                    x = nx; y = ny; z = nz;
-                }
-                positions[i] = x;
-                positions[i + 1] = y;
-                positions[i + 2] = z;
-            }
-        }
-    }
 }
