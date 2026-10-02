@@ -51,6 +51,7 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
     private static final Path FILE =
             Path.of("config", "bluemap3d", "cache", "scene-objects.json");
     private static final long SAVE_INTERVAL_NANOS = 5_000_000_000L;
+    private static final int CACHE_FORMAT_VERSION = 2;
 
     private static final Object LOCK = new Object();
     private static final Map<String, SavedObject> SAVED = new ConcurrentHashMap<>();
@@ -220,15 +221,45 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
             if (Files.isRegularFile(FILE)) {
                 try (var reader = Files.newBufferedReader(FILE)) {
                     JsonElement parsed = JsonParser.parseReader(reader);
+                    JsonArray entries = null;
+                    boolean legacyFormat = false;
+
                     if (parsed.isJsonArray()) {
-                        for (JsonElement element : parsed.getAsJsonArray()) {
-                            SavedObject saved = GSON.fromJson(element, SavedObject.class);
-                            if (saved != null && saved.valid()) {
-                                SAVED.put(key(saved.provider, saved.id), saved);
-                                // The cache is only written after mesh publication.
-                                PUBLISHED.put(key(saved.provider, saved.id), saved.version);
-                            }
+                        // v1 was a bare array. It could contain stale Create child entity
+                        // UUIDs from before providers emitted positive deletion evidence.
+                        // Drop those once during migration; the live Create provider, train
+                        // registry and Sable child cache immediately repopulate the valid
+                        // current objects.
+                        entries = parsed.getAsJsonArray();
+                        legacyFormat = true;
+                    } else if (parsed.isJsonObject()) {
+                        JsonObject root = parsed.getAsJsonObject();
+                        if (root.has("objects") && root.get("objects").isJsonArray()) {
+                            entries = root.getAsJsonArray("objects");
                         }
+                    }
+
+                    if (entries != null) {
+                        int droppedLegacyCreate = 0;
+                        for (JsonElement element : entries) {
+                            SavedObject saved = GSON.fromJson(element, SavedObject.class);
+                            if (saved == null || !saved.valid()) continue;
+                            if (legacyFormat && "create_contraptions".equals(saved.provider)) {
+                                droppedLegacyCreate++;
+                                dirty = true;
+                                continue;
+                            }
+                            SAVED.put(key(saved.provider, saved.id), saved);
+                            // The cache is only written after mesh publication.
+                            PUBLISHED.put(key(saved.provider, saved.id), saved.version);
+                        }
+                        if (droppedLegacyCreate > 0) {
+                            LOGGER.info(
+                                    "Dropped {} legacy Create scene snapshot(s) while migrating "
+                                            + "generic persistence; current objects will repopulate",
+                                    droppedLegacyCreate);
+                        }
+                        if (legacyFormat) dirty = true;
                     }
                 } catch (IOException | RuntimeException error) {
                     LOGGER.warn("Could not read generic scene-object cache {}", FILE, error);
@@ -346,7 +377,10 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
             Files.createDirectories(FILE.getParent());
             Path tmp = FILE.resolveSibling(FILE.getFileName() + ".tmp");
             try (var writer = Files.newBufferedWriter(tmp)) {
-                GSON.toJson(new ArrayList<>(SAVED.values()), writer);
+                JsonObject root = new JsonObject();
+                root.addProperty("formatVersion", CACHE_FORMAT_VERSION);
+                root.add("objects", GSON.toJsonTree(new ArrayList<>(SAVED.values())));
+                GSON.toJson(root, writer);
             }
             try {
                 Files.move(tmp, FILE, StandardCopyOption.REPLACE_EXISTING,
