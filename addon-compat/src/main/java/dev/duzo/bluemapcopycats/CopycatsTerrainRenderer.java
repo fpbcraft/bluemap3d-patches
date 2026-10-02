@@ -42,6 +42,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     private final ResourcePack resourcePack;
     private final TextureGallery textureGallery;
     private final BlockColorCalculatorFactory.BlockColorCalculator blockColorCalculator;
+    private final CopycatsTemplateGeometry templateGeometry;
 
     private BlockNeighborhood block;
     private TileModelView tileModel;
@@ -53,6 +54,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         this.resourcePack = resourcePack;
         this.textureGallery = textureGallery;
         this.blockColorCalculator = resourcePack.getColorCalculatorFactory().createCalculator();
+        this.templateGeometry = new CopycatsTemplateGeometry(resourcePack);
     }
 
     @Override
@@ -580,163 +582,15 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         Material material = materialFor(entity, null);
         if (!usable(material)) return List.of();
 
-        String modelId = templateModelId(id);
-        if (modelId == null) return List.of();
+        List<CopycatsTemplateGeometry.TemplateQuad> templateQuads =
+                templateGeometry.quads(id, block.getBlockState());
+        if (templateQuads.isEmpty()) return List.of();
 
-        Model model = resourcePack.getModel(new ResourcePath<>(modelId));
-        if (model == null) {
-            return List.of();
-        }
-        model.applyParent(resourcePack);
-        Element[] elements = model.getElements();
-        if (elements == null || elements.length == 0) return List.of();
-
-        Transform blockTransform = templateStateTransform(id);
-        List<Quad> out = new ArrayList<>();
-        for (Element element : elements) {
-            if (element == null) continue;
-
-            var from = element.getFrom();
-            var to = element.getTo();
-            float minX = Math.min(from.getX(), to.getX());
-            float minY = Math.min(from.getY(), to.getY());
-            float minZ = Math.min(from.getZ(), to.getZ());
-            float maxX = Math.max(from.getX(), to.getX());
-            float maxY = Math.max(from.getY(), to.getY());
-            float maxZ = Math.max(from.getZ(), to.getZ());
-
-            float[][] c = {
-                    p(minX,minY,minZ), p(minX,minY,maxZ),
-                    p(maxX,minY,minZ), p(maxX,minY,maxZ),
-                    p(minX,maxY,minZ), p(minX,maxY,maxZ),
-                    p(maxX,maxY,minZ), p(maxX,maxY,maxZ)
-            };
-
-            templateFace(out, element, Direction.DOWN, material, blockTransform, c[0],c[2],c[3],c[1]);
-            templateFace(out, element, Direction.UP, material, blockTransform, c[5],c[7],c[6],c[4]);
-            templateFace(out, element, Direction.NORTH, material, blockTransform, c[2],c[0],c[4],c[6]);
-            templateFace(out, element, Direction.SOUTH, material, blockTransform, c[1],c[3],c[7],c[5]);
-            templateFace(out, element, Direction.WEST, material, blockTransform, c[0],c[1],c[5],c[4]);
-            templateFace(out, element, Direction.EAST, material, blockTransform, c[3],c[2],c[6],c[7]);
+        List<Quad> out = new ArrayList<>(templateQuads.size());
+        for (CopycatsTemplateGeometry.TemplateQuad quad : templateQuads) {
+            out.add(new Quad(quad.positions(), quad.face(), material));
         }
         return out;
-    }
-
-    private void templateFace(
-            List<Quad> out,
-            Element element,
-            Direction direction,
-            Material material,
-            Transform blockTransform,
-            float[] a, float[] b, float[] c, float[] d) {
-        if (!element.getFaces().containsKey(direction)) return;
-
-        float[] positions = {
-                a[0],a[1],a[2],
-                b[0],b[1],b[2],
-                c[0],c[1],c[2],
-                d[0],d[1],d[2]
-        };
-        applyElementRotation(positions, element);
-        blockTransform.apply(positions);
-        if (blockTransform.mirrored()) reverseWinding(positions);
-        out.add(new Quad(positions, direction, material));
-    }
-
-    private static void applyElementRotation(float[] positions, Element element) {
-        var rotation = element.getRotation();
-        float angle = rotation.getAngle();
-        if (Math.abs(angle) < 0.0001f) return;
-
-        var origin = rotation.getOrigin();
-        var axis = rotation.getAxis().toVector();
-        double rad = Math.toRadians(angle);
-        double cos = Math.cos(rad);
-        double sin = Math.sin(rad);
-        double ax = axis.getX();
-        double ay = axis.getY();
-        double az = axis.getZ();
-
-        for (int i = 0; i < positions.length; i += 3) {
-            double x = positions[i] - origin.getX();
-            double y = positions[i + 1] - origin.getY();
-            double z = positions[i + 2] - origin.getZ();
-
-            double dot = ax * x + ay * y + az * z;
-            double rx = x * cos + (ay * z - az * y) * sin + ax * dot * (1 - cos);
-            double ry = y * cos + (az * x - ax * z) * sin + ay * dot * (1 - cos);
-            double rz = z * cos + (ax * y - ay * x) * sin + az * dot * (1 - cos);
-
-            positions[i] = (float) (rx + origin.getX());
-            positions[i + 1] = (float) (ry + origin.getY());
-            positions[i + 2] = (float) (rz + origin.getZ());
-        }
-    }
-
-    private Transform templateStateTransform(String id) {
-        Transform transform = new Transform();
-
-        String axis = property("axis");
-        if ("x".equals(axis)) transform.rotateZ(90);
-        if ("z".equals(axis)) transform.rotateX(90);
-
-        String facing = property("facing");
-        if (!facing.isEmpty()) {
-            switch (facing) {
-                case "north", "south", "east", "west" -> transform.rotateY(yRotation(facing));
-                case "up" -> { }
-                case "down" -> transform.rotateX(180);
-                default -> { }
-            }
-        }
-
-        if ("top".equals(property("half"))) transform.flipY(true);
-        if ("ceiling".equals(property("face"))) transform.flipY(true);
-
-        return transform;
-    }
-
-    private static String templateModelId(String id) {
-        int colon = id.indexOf(':');
-        if (colon < 0) return null;
-
-        String namespace = id.substring(0, colon);
-        String path = id.substring(colon + 1);
-        String model;
-
-        if ("copycats".equals(namespace)) {
-            if ("wrapped_copycat".equals(path)) {
-                model = "block";
-            } else if (path.startsWith("copycat_")) {
-                model = path.substring("copycat_".length());
-            } else {
-                return null;
-            }
-
-            model = switch (model) {
-                case "wooden_button", "stone_button" -> "button";
-                case "wooden_pressure_plate", "stone_pressure_plate",
-                     "heavy_weighted_pressure_plate", "light_weighted_pressure_plate" -> "pressure_plate";
-                case "iron_trapdoor" -> "trapdoor";
-                case "iron_door" -> "door";
-                case "glass_fluid_pipe" -> "fluid_pipe";
-                default -> model;
-            };
-            return "copycats:block/copycat_base/" + model;
-        }
-
-        if ("create_connected".equals(namespace)) {
-            if (path.startsWith("wrapped_copycat_")) {
-                model = path.substring("wrapped_copycat_".length());
-            } else if (path.startsWith("copycat_")) {
-                model = path.substring("copycat_".length());
-            } else {
-                return null;
-            }
-            return "create_connected:block/copycat_base/" + model;
-        }
-
-        return null;
     }
 
     private void piece(
