@@ -296,7 +296,8 @@ final class SceneObjectPersistenceStore {
                         rot.get(3).getAsFloat(),
                         scale != null && scale.size() == 3 ? scale.get(0).getAsFloat() : 1f,
                         scale != null && scale.size() == 3 ? scale.get(1).getAsFloat() : 1f,
-                        scale != null && scale.size() == 3 ? scale.get(2).getAsFloat() : 1f);
+                        scale != null && scale.size() == 3 ? scale.get(2).getAsFloat() : 1f,
+                        List.of());
                 if (!saved.valid()) continue;
                 SAVED.put(key(provider, id), saved);
                 PUBLISHED.put(key(provider, id), version);
