@@ -1,0 +1,11 @@
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java b/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
+--- a/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
+@@ -74,6 +74,7 @@
+                 assets = AssetIndex.open(configuredSources(), blueMapRoot);
+                 ResourcePackSource packs = new ResourcePackSource(assets);
+                 sources.add(packs);
++                sources.add(new dev.duzo.bluemap3d.bake.EntityModelSource(assets));
+                 // Between the real models and the coloured cube: a block whose model has
+                 // no geometry still has a voxel shape and a particle sprite.
+                 if (Config.SHAPE_FALLBACK.get()) {

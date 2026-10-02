@@ -42,6 +42,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSou
    core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/EntityModelSource.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/EntityModelSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometry.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometry.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryMath.java" \

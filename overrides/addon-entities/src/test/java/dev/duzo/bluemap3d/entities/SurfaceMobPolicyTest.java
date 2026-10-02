@@ -1,6 +1,7 @@
 package dev.duzo.bluemap3d.entities;
 
 import dev.duzo.bluemap3d.api.SceneObjectLifecycle;
+import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,5 +32,13 @@ class SurfaceMobPolicyTest {
     @Test
     void providerNeverPersistsOrRecordsMobs() {
         assertEquals(SceneObjectLifecycle.LIVE_ONLY, new SurfaceMobProvider().lifecycle());
+    }
+
+    @Test
+    void modelLocationPreservesModNamespaceWithoutRegistration() {
+        ResourceLocation ostrich = ResourceLocation.fromNamespaceAndPath("examplemod", "ostrich");
+        assertEquals(
+                ResourceLocation.fromNamespaceAndPath("examplemod", "entity/ostrich/main"),
+                SurfaceMobProvider.modelLocation(ostrich));
     }
 }

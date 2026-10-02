@@ -1,9 +1,11 @@
 package dev.duzo.bluemap3d.entities;
 
 import dev.duzo.bluemap3d.api.BlockVolume;
+import dev.duzo.bluemap3d.api.ModelAttachment;
 import dev.duzo.bluemap3d.api.SceneObject;
 import dev.duzo.bluemap3d.api.SceneObjectLifecycle;
 import dev.duzo.bluemap3d.api.SceneObjectProvider;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -20,13 +22,11 @@ import org.joml.Vector3f;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Publishes loaded vanilla mobs whose feet are at or above the visible world surface.
- *
- * <p>One SceneObject is retained per mob UUID so interpolation never reassigns one mob's
- * transform to another when entities spawn or despawn. Geometry is still shared by
- * appearance through geometryKey(), so a herd only bakes one cow mesh.
+ * Publishes every loaded surface mob. Model resolution is intentionally not done here:
+ * core resolves the entity's real resource/model assets, including mod namespaces.
  */
 public final class SurfaceMobProvider implements SceneObjectProvider {
     @Override
@@ -47,8 +47,7 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
             if (!(entity instanceof Mob mob) || !mob.isAlive() || mob.isRemoved()) continue;
 
             ResourceLocation typeId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
-            MobAppearance appearance = MobAppearanceRegistry.resolve(typeId);
-            if (appearance == null) continue;
+            if (typeId == null) continue;
 
             int surfaceY = level.getHeight(
                     Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
@@ -56,28 +55,49 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
                     Mth.floor(mob.getZ()));
             if (!SurfaceMobPolicy.isAtOrAboveSurface(mob.getY(), surfaceY)) continue;
 
-            float width = Math.max(0.1f, mob.getBbWidth());
-            float height = Math.max(0.1f, mob.getBbHeight());
+            ResourceLocation model = modelLocation(typeId);
+            float width = Math.max(0.1F, mob.getBbWidth());
+            float height = Math.max(0.1F, mob.getBbHeight());
+
+            // Reserved values are consumed only by EntityModelSource's final fallback.
+            // A normal resource-pack or Geo model ignores them.
+            Map<String, String> metadata = Map.of(
+                    "__bm3d_width", Float.toString(width),
+                    "__bm3d_height", Float.toString(height));
+
+            BlockVolume geometry = BlockVolume.attachments(
+                    BlockPos.ZERO,
+                    BlockPos.ZERO,
+                    Vec3.ZERO,
+                    List.of(new ModelAttachment(BlockPos.ZERO, model, metadata)));
+
             Quaternionf rotation =
                     new Quaternionf().rotationY((float) Math.toRadians(-mob.getYRot()));
-            Vector3f scale = new Vector3f(width, height, width);
-
             String label = mob.hasCustomName() && mob.getCustomName() != null
                     ? mob.getCustomName().getString()
                     : typeId.toString();
+
+            int width16 = Math.max(1, Math.round(width * 16F));
+            int height16 = Math.max(1, Math.round(height * 16F));
 
             out.add(new MobSceneObject(
                     mob.getUUID().toString(),
                     label,
                     level.dimension(),
-                    "surface-mob-" + appearance.id(),
-                    appearance.geometry(),
+                    "surface-mob:" + typeId + ":" + width16 + "x" + height16,
+                    geometry,
                     mob.position(),
                     rotation,
-                    scale));
+                    new Vector3f(1F, 1F, 1F)));
         }
 
         return List.copyOf(out);
+    }
+
+    static ResourceLocation modelLocation(ResourceLocation typeId) {
+        return ResourceLocation.fromNamespaceAndPath(
+                typeId.getNamespace(),
+                "entity/" + typeId.getPath() + "/main");
     }
 
     private record MobSceneObject(
@@ -98,7 +118,7 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
 
         @Override
         public long geometryVersion() {
-            return 1L;
+            return 2L;
         }
     }
 }
