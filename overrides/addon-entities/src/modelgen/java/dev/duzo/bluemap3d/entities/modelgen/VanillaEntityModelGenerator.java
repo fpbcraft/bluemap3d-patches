@@ -58,6 +58,7 @@ public final class VanillaEntityModelGenerator {
         }
 
         SharedConstants.tryDetectVersion();
+        installEmptyNeoForgeLoadingContext();
         Bootstrap.bootStrap();
 
         Map<String, JsonObject> generated = new TreeMap<>();
