@@ -328,6 +328,13 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
                         || !row.has("mesh")) continue;
 
                 String provider = row.get("provider").getAsString();
+
+                // Sable has its own snapshot restore path and, more importantly, its
+                // provider receives authoritative REMOVED vs UNLOADED lifecycle events.
+                // Importing Sable rows from an old live feed can resurrect an orphaned
+                // sub-level whose deletion happened before generic persistence learned it.
+                if ("sable_ships".equals(provider)) continue;
+
                 String fullId = row.get("id").getAsString();
                 String id = fullId.startsWith(provider + "/")
                         ? fullId.substring(provider.length() + 1)
