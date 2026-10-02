@@ -62,7 +62,7 @@ jobs:
               exit 1
             fi
 
-            fallback="$(python3 scripts/release_metadata.py --lines | sed -n '1p')"
+            fallback="$(python3 -c 'import json; print(json.load(open("release.json"))["version"])')"
             mapfile -t resolved < <(
               python3 scripts/release_version.py                 --bump "${{ inputs.bump }}"                 --fallback "$fallback"                 --exact "${{ inputs.exact_version }}"
             )
@@ -74,22 +74,20 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "create_tag=$create_tag" >> "$GITHUB_OUTPUT"
+          echo "BLUEMAP3D_VERSION=$version" >> "$GITHUB_ENV"
           echo "Releasing $tag"
 
-      - name: Apply release version to checkout
+      - name: Verify release is unused
         env:
-          VERSION: ${{ steps.release.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          path = Path("release.json")
-          data = json.loads(path.read_text())
-          data["version"] = os.environ["VERSION"]
-          path.write_text(json.dumps(data, indent=2) + "\n")
-          PY
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GitHub release $TAG already exists; releases are immutable." >&2
+            exit 1
+          fi
 
       - name: Build BlueMap compatibility artifacts
         run: ./build.sh
@@ -130,18 +128,14 @@ jobs:
           git tag -a "$TAG" "$GITHUB_SHA" -m "Release $TAG"
           git push origin "$TAG"
 
-      - name: Publish GitHub release
+      - name: Publish immutable GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" release-assets/* --clobber
-          else
-            gh release create "$TAG" release-assets/*               --verify-tag               --title "$TAG"               --generate-notes
-          fi
+          gh release create "$TAG" release-assets/*             --verify-tag             --title "$TAG"             --generate-notes
 
       - name: Upload release build
         uses: actions/upload-artifact@v7
