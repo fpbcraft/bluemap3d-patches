@@ -4,6 +4,7 @@ import json
 import re
 import sys
 import tempfile
+from unittest.mock import patch
 import unittest
 from pathlib import Path
 
@@ -36,6 +37,16 @@ class ReleaseMetadataTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(ValueError, "invalid release version"):
                 load_release(path)
+
+    def test_release_version_can_be_overridden_for_tagged_builds(self) -> None:
+        with patch.dict("os.environ", {"RELEASE_VERSION": "2.4.0-rc.1"}):
+            release = load_release()
+        self.assertEqual("2.4.0-rc.1", release["version"])
+
+    def test_invalid_release_version_override_is_rejected(self) -> None:
+        with patch.dict("os.environ", {"RELEASE_VERSION": "latest"}):
+            with self.assertRaisesRegex(ValueError, "invalid release version"):
+                load_release()
 
 
 if __name__ == "__main__":
