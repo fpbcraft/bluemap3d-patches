@@ -46,6 +46,15 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertNotIn("BlueMap3DMod procedural import insertion point", script)
         self.assertNotIn("BlueMap3DMod procedural source insertion point", script)
 
+    def test_patch_driver_stays_small_and_delegates_create_transform(self) -> None:
+        script = (ROOT / "scripts" / "patch-upstream.py").read_text()
+        transform = (ROOT / "scripts" / "transforms" / "contraption_provider.py").read_text()
+
+        self.assertLess(len(script.splitlines()), 100)
+        self.assertIn("patch_contraption_provider()", script)
+        self.assertNotIn("ContraptionProvider.java", script)
+        self.assertIn("ContraptionProvider.java", transform)
+
 
 if __name__ == "__main__":
     unittest.main()
