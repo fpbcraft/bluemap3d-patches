@@ -95,7 +95,7 @@ final class ConfiguredModelAliasHook {
         int modelAliases = 0;
 
         for (String blockId : originalPaths.keySet()) {
-            CompatRuleSet.ModelMatch match =
+            SharedCompatRules.ModelMatch match =
                     CompatManager.rules().model(blockId, Map.of(), "terrain");
             if (match == null) continue;
 
@@ -144,7 +144,7 @@ final class ConfiguredModelAliasHook {
 
         for (ResourcePath<Model> targetPath : originalModels.keySet()) {
             String targetId = targetPath.getFormatted();
-            CompatRuleSet.ResourceModelMatch match =
+            SharedCompatRules.ResourceModelMatch match =
                     CompatManager.rules().resourceModel(targetId, "terrain");
             if (match == null) continue;
 

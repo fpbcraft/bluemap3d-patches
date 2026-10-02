@@ -1,0 +1,2 @@
+addon-compat/src/main/java/dev/duzo/bluemapcompat/SharedCompatRules.java linguist-generated=true
+overrides/core/src/main/java/dev/duzo/bluemap3d/compat/SharedCompatRules.java linguist-generated=true
