@@ -303,5 +303,5 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
 
             return new RopeSnapshot(uuid, copy);
         }
-
+    }
 }
