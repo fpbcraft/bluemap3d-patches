@@ -58,6 +58,30 @@ class ReleaseVersionTest(unittest.TestCase):
                 ["v1.2.3"], bump="exact", fallback="0.1.0", exact="1.2.3"
             )
 
+    def test_development_build_uses_next_patch_and_short_sha(self) -> None:
+        self.assertEqual(
+            "1.4.1-dev.gabcdef12",
+            release_version.development_version(
+                ["v1.2.3", "v1.4.0"],
+                fallback="0.1.0",
+                sha="ABCDEF1234567890ABCDEF1234567890ABCDEF12",
+            ),
+        )
+
+    def test_development_build_uses_fallback_before_first_tag(self) -> None:
+        self.assertEqual(
+            "0.8.27-dev.g12345678",
+            release_version.development_version(
+                [],
+                fallback="0.8.27",
+                sha="1234567890abcdef1234567890abcdef12345678",
+            ),
+        )
+
+    def test_development_build_rejects_non_commit_sha(self) -> None:
+        with self.assertRaises(ValueError):
+            release_version.development_version([], fallback="1.0.0", sha="dirty")
+
 
 if __name__ == "__main__":
     unittest.main()
