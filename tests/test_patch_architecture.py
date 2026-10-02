@@ -33,10 +33,15 @@ class PatchArchitectureTest(unittest.TestCase):
             'Path("addon-sable/src/main/resources/META-INF/neoforge.mods.toml")',
             'Path("addon-create/src/main/java/dev/duzo/bluemap3d/create/CreateAddon.java")',
             'Path("core/build.gradle")',
+            'Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")',
+            'Path("core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java")',
         )
         for path in migrated_paths:
             with self.subTest(path=path):
                 self.assertNotIn(path, script)
+
+        self.assertNotIn("BlueMap3DMod procedural import insertion point", script)
+        self.assertNotIn("BlueMap3DMod procedural source insertion point", script)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,8 @@ Current ownership:
 - `0015-base.patch`: historical base integration patch.
 - `0020-build-and-provider-wiring.patch`: module inclusion, Create/Sable compile and mixin
   wiring, Create provider registration, and core test wiring.
+- `0030-core-runtime-wiring.patch`: generic persistent-provider lifecycle hooks, static
+  model-source registration, and dynamic model attachment translation.
 
 ## Remaining Python transformations
 
@@ -27,9 +29,7 @@ regression coverage around each migration:
 
 - `ShipProvider.java`: Sable persistence/deletion/geometry lifecycle.
 - `ContraptionProvider.java`: Sable projection, dynamic topology and compatibility behavior.
-- `VolumeMesher.java`: dynamic model attachment translation.
-- `BlueMap3D.java`: generic persistent-provider lifecycle hooks.
-- `BlueMap3DMod.java`: FPB model-source registration and startup integration.
+- `BlueMap3DMod.java`: release-version startup marker only.
 - `SceneObjectTracker.java`: geometry-version/live-scale publication semantics.
 - `bluemap3d.core.js`: live/replay dynamic-node runtime.
 - release-version/build-marker substitutions that depend on `release.json`.
