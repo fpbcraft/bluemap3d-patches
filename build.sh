@@ -42,6 +42,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSou
    core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometry.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometry.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackModelResolver.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackModelResolver.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ProceduralBlockSource.java" \
@@ -79,6 +81,9 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegmen
 mkdir -p core/src/test/java/dev/duzo/bluemap3d/api
 cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/api/ScenePersistencePolicyTest.java" \
    core/src/test/java/dev/duzo/bluemap3d/api/ScenePersistencePolicyTest.java
+mkdir -p core/src/test/java/dev/duzo/bluemap3d/bake
+cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryTest.java" \
+   core/src/test/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryTest.java
 mkdir -p core/src/main/resources/assets/bluemap3d/models/block
 cp "$ROOT/overrides/core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json" \
    core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json

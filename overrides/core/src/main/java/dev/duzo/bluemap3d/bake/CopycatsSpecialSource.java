@@ -374,10 +374,10 @@ public final class CopycatsSpecialSource implements BlockModelSource {
             BlockState material) {
         for (Direction face : Direction.values()) {
             Appearance appearance = appearance(material, face);
-            float[] positions = ResourcePackSource.faceCorners(destFrom, destTo, face);
+            float[] positions = ResourcePackGeometry.faceCorners(destFrom, destTo, face);
             transform.apply(positions);
-            float[] uvs = ResourcePackSource.uvCorners(
-                    ResourcePackSource.autoUv(sourceFrom, sourceTo, face), 0);
+            float[] uvs = ResourcePackGeometry.uvCorners(
+                    ResourcePackGeometry.autoUv(sourceFrom, sourceTo, face), 0);
             if (transform.mirrored()) reverseWinding(positions, uvs);
             out.add(new ModelQuad(null, null, positions, uvs,
                     appearance.texture(), appearance.tint()));

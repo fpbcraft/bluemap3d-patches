@@ -32,7 +32,7 @@ import java.util.Map;
  *   <li><b>Automatic uvs.</b> A face with no {@code uv} does not get the whole texture;
  *       Minecraft derives the window from the element's own footprint. Skipping this
  *       stretches one sprite over every face and mangles any multi-cuboid model - a
- *       Create cogwheel becomes a smeared box. See {@link #autoUv}.</li>
+ *       Create cogwheel becomes a smeared box. See {@link ResourcePackGeometry#autoUv}.</li>
  *   <li><b>Element rotation.</b> {@code {"angle":45,"axis":"y"}} has to be applied to
  *       the corners before anything else, or angled geometry collapses flat.</li>
  *   <li><b>Variant rotation and cull faces.</b> A variant's {@code x}/{@code y} rotates
@@ -415,12 +415,12 @@ public final class ResourcePackSource implements BlockModelSource {
                 boolean cardinalRotation = Math.floorMod(rotY, 90) == 0;
                 for (ModelQuad quad : obj) {
                     float[] positions = quad.positions().clone();
-                    applyVariantRotation(positions, rotX, rotY);
+                    ResourcePackGeometry.applyVariantRotation(positions, rotX, rotY);
                     Direction cull = cardinalRotation
-                            ? rotateDirection(quad.cullFace(), rotX, rotY)
+                            ? ResourcePackGeometry.rotateDirection(quad.cullFace(), rotX, rotY)
                             : null;
                     Direction shade = cardinalRotation
-                            ? rotateDirection(quad.shadeFace(), rotX, rotY)
+                            ? ResourcePackGeometry.rotateDirection(quad.shadeFace(), rotX, rotY)
                             : quad.shadeFace();
                     out.add(new ModelQuad(
                             cull, shade, positions, quad.uvs().clone(),
@@ -469,26 +469,26 @@ public final class ResourcePackSource implements BlockModelSource {
                 // sheet and multi-cuboid models come out smeared.
                 float[] uv = faceDef.has("uv")
                         ? vec4(faceDef.getAsJsonArray("uv"))
-                        : autoUv(from, to, face);
+                        : ResourcePackGeometry.autoUv(from, to, face);
                 int uvRotation = faceDef.has("rotation") ? faceDef.get("rotation").getAsInt() : 0;
 
                 Direction cull = faceDef.has("cullface")
                         ? directionOf(faceDef.get("cullface").getAsString())
                         : null;
 
-                float[] corners = faceCorners(from, to, face);
+                float[] corners = ResourcePackGeometry.faceCorners(from, to, face);
                 if (elementRotation != null) {
-                    applyElementRotation(corners, elementRotation);
+                    ResourcePackGeometry.applyElementRotation(corners, elementRotation);
                 }
                 // The variant's own x/y rotation, about the block centre.
                 if (rotX != 0 || rotY != 0) {
-                    applyVariantRotation(corners, rotX, rotY);
+                    ResourcePackGeometry.applyVariantRotation(corners, rotX, rotY);
 
                     // Cull faces are cardinal. A 45-degree diagonal arm has no single
                     // neighbouring block that can safely cull it, so keep every face.
                     if (Math.floorMod(rotY, 90) == 0) {
-                        cull = rotateDirection(cull, rotX, rotY);
-                        face = rotateDirection(face, rotX, rotY);
+                        cull = ResourcePackGeometry.rotateDirection(cull, rotX, rotY);
+                        face = ResourcePackGeometry.rotateDirection(face, rotX, rotY);
                     } else {
                         cull = null;
                     }
@@ -514,177 +514,9 @@ public final class ResourcePackSource implements BlockModelSource {
                     }
                 }
 
-                out.add(new ModelQuad(cull, face, corners, uvCorners(uv, uvRotation), texture, tint));
+                out.add(new ModelQuad(cull, face, corners, ResourcePackGeometry.uvCorners(uv, uvRotation), texture, tint));
             }
         }
-    }
-
-    // ---------------------------------------------------------------------------------
-    // Geometry helpers. Ported from the reference renderer in the pack's quest tools,
-    // which had these semantics already debugged against real Create models.
-    // ---------------------------------------------------------------------------------
-
-    /**
-     * Minecraft's default uv when a face declares none: the texture is sampled from the
-     * element's own footprint on that axis pair, with v measured from the top.
-     */
-    static float[] autoUv(float[] f, float[] t, Direction face) {
-        float x0 = f[0], y0 = f[1], z0 = f[2];
-        float x1 = t[0], y1 = t[1], z1 = t[2];
-        return switch (face) {
-            case DOWN -> new float[]{x0, z0, x1, z1};
-            case UP -> new float[]{x0, 16 - z1, x1, 16 - z0};
-            case NORTH -> new float[]{16 - x1, 16 - y1, 16 - x0, 16 - y0};
-            case SOUTH -> new float[]{x0, 16 - y1, x1, 16 - y0};
-            case WEST -> new float[]{z0, 16 - y1, z1, 16 - y0};
-            case EAST -> new float[]{16 - z1, 16 - y1, 16 - z0, 16 - y0};
-        };
-    }
-
-    /**
-     * Four corners of a face of the box {@code from..to}, in the order
-     * {@code (u0,v0) (u1,v0) (u1,v1) (u0,v1)} so they line up with the uv window.
-     */
-    static float[] faceCorners(float[] f, float[] t, Direction face) {
-        float x0 = f[0], y0 = f[1], z0 = f[2];
-        float x1 = t[0], y1 = t[1], z1 = t[2];
-        return switch (face) {
-            case UP -> new float[]{x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1};
-            case DOWN -> new float[]{x0, y0, z1, x1, y0, z1, x1, y0, z0, x0, y0, z0};
-            case NORTH -> new float[]{x1, y1, z0, x0, y1, z0, x0, y0, z0, x1, y0, z0};
-            case SOUTH -> new float[]{x0, y1, z1, x1, y1, z1, x1, y0, z1, x0, y0, z1};
-            case WEST -> new float[]{x0, y1, z0, x0, y1, z1, x0, y0, z1, x0, y0, z0};
-            case EAST -> new float[]{x1, y1, z1, x1, y1, z0, x1, y0, z0, x1, y0, z1};
-        };
-    }
-
-    /** Expands a {@code [u0,v0,u1,v1]} window to four corners, with face rotation. */
-    static float[] uvCorners(float[] uv, int rotation) {
-        float u0 = uv[0], v0 = uv[1], u1 = uv[2], v1 = uv[3];
-        float[][] corners = {{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}};
-
-        int steps = ((rotation % 360) + 360) % 360 / 90;
-        float[] out = new float[8];
-        for (int i = 0; i < 4; i++) {
-            float[] c = corners[(i + steps) % 4];
-            out[i * 2] = c[0];
-            out[i * 2 + 1] = c[1];
-        }
-        return out;
-    }
-
-    /** An element's own rotation: {@code {origin, axis, angle}}. */
-    private static void applyElementRotation(float[] corners, JsonObject rotation) {
-        float angle = rotation.has("angle") ? rotation.get("angle").getAsFloat() : 0f;
-        if (Math.abs(angle) < 1e-6f) {
-            return;
-        }
-        float[] origin = rotation.has("origin")
-                ? vec3(rotation.getAsJsonArray("origin"))
-                : new float[]{8, 8, 8};
-        String axis = rotation.has("axis") ? rotation.get("axis").getAsString() : "y";
-
-        double rad = Math.toRadians(angle);
-        float cos = (float) Math.cos(rad);
-        float sin = (float) Math.sin(rad);
-
-        for (int i = 0; i < 4; i++) {
-            float x = corners[i * 3] - origin[0];
-            float y = corners[i * 3 + 1] - origin[1];
-            float z = corners[i * 3 + 2] - origin[2];
-            float nx = x, ny = y, nz = z;
-            switch (axis) {
-                case "x" -> {
-                    ny = y * cos - z * sin;
-                    nz = y * sin + z * cos;
-                }
-                case "z" -> {
-                    nx = x * cos - y * sin;
-                    ny = x * sin + y * cos;
-                }
-                default -> {
-                    nx = x * cos + z * sin;
-                    nz = -x * sin + z * cos;
-                }
-            }
-            corners[i * 3] = nx + origin[0];
-            corners[i * 3 + 1] = ny + origin[1];
-            corners[i * 3 + 2] = nz + origin[2];
-        }
-    }
-
-    /**
-     * A variant's whole-model rotation, in 90 degree steps about the block centre.
-     *
-     * <p>Both steps turn the <em>negative</em> way, which is what a blockstate's {@code x}
-     * and {@code y} mean: vanilla builds them as {@code rotationXYZ(-x, -y, 0)}. Written
-     * the positive way round every rotated model comes out mirrored through the axis - a
-     * {@code facing=south} stair points north - and, worse, disagrees with
-     * {@link #rotateDirection}, which is correct. A face then carries a cull direction
-     * belonging to the face on the opposite side, so it is tested against the wrong
-     * neighbour: a barrel on the ground loses its lid, because the quad that ended up on
-     * top is asking whether the block <em>below</em> hides it.
-     *
-     * <p>Nothing caught this for a long time because nothing exercised it. A turtle has
-     * its facing baked out of the model and streamed as a quaternion instead, and a ship
-     * made of planks looks the same whichever way its blocks are turned.
-     */
-    private static void applyVariantRotation(float[] corners, int rotX, int rotY) {
-        int stepsX = normaliseSteps(rotX);
-        double radiansY = Math.toRadians(rotY);
-        double cosY = Math.cos(radiansY);
-        double sinY = Math.sin(radiansY);
-
-        for (int i = 0; i < 4; i++) {
-            float x = corners[i * 3] - 8f;
-            float y = corners[i * 3 + 1] - 8f;
-            float z = corners[i * 3 + 2] - 8f;
-
-            for (int step = 0; step < stepsX; step++) {
-                // up -> north, matching rotateAroundX.
-                float ny = z, nz = -y;
-                y = ny;
-                z = nz;
-            }
-
-            double nx = x * cosY - z * sinY;
-            double nz = x * sinY + z * cosY;
-            corners[i * 3] = (float) nx + 8f;
-            corners[i * 3 + 1] = y + 8f;
-            corners[i * 3 + 2] = (float) nz + 8f;
-        }
-    }
-
-    /**
-     * Rotates a cull face with its model. Missing this makes a rotated stair or door
-     * cull against the wrong neighbour, which shows up as a hole only from one side.
-     */
-    private static Direction rotateDirection(Direction direction, int rotX, int rotY) {
-        if (direction == null) {
-            return null;
-        }
-        Direction out = direction;
-        for (int s = 0; s < normaliseSteps(rotX); s++) {
-            out = rotateAroundX(out);
-        }
-        for (int s = 0; s < normaliseSteps(rotY); s++) {
-            out = out.getClockWise(Direction.Axis.Y);
-        }
-        return out;
-    }
-
-    private static Direction rotateAroundX(Direction direction) {
-        return switch (direction) {
-            case NORTH -> Direction.DOWN;
-            case DOWN -> Direction.SOUTH;
-            case SOUTH -> Direction.UP;
-            case UP -> Direction.NORTH;
-            default -> direction;
-        };
-    }
-
-    private static int normaliseSteps(int degrees) {
-        return ((degrees % 360) + 360) % 360 / 90;
     }
 
     // ---------------------------------------------------------------------------------
