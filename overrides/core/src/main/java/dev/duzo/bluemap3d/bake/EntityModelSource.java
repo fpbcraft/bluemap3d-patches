@@ -647,8 +647,7 @@ public final class EntityModelSource implements BlockModelSource {
                 "assets/" + namespace + "/textures",
                 candidate -> candidate.toLowerCase(Locale.ROOT).endsWith(".png"),
                 2048)) {
-            if (assetMatchScore(path, discovered, layer) > 0
-                    || appearanceScore(metadata, discovered) > 0) {
+            if (assetMatchScore(path, discovered, layer) > 0) {
                 available.add(discovered);
             }
         }
@@ -792,6 +791,10 @@ public final class EntityModelSource implements BlockModelSource {
         else if (stem.startsWith(entity) || stem.endsWith(entity)) score = 850;
         else if (stem.contains(entity)) score = 700;
         else if (whole.contains(entity)) score = 450;
+
+        // Layer names and appearance tokens may rank candidates for the same entity,
+        // but must never turn an unrelated model into a match (e.g. cow -> sheep#fur).
+        if (score == 0) return 0;
 
         String normalizedLayer = compactName(layer);
         if (!"main".equals(layer) && !normalizedLayer.isEmpty()) {
