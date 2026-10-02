@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.1.5"
+VERSION="1.1.10"
 
 python3 "$ROOT/scripts/validate-compat.py"
 
@@ -67,6 +67,21 @@ cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/Simulat
    addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeProvider.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringProvider.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringProvider.java
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringRegistry.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringRegistry.java
+mkdir -p addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedSpringBlockEntityMixin.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedSpringBlockEntityMixin.java
+cp "$ROOT/overrides/addon-create/src/main/resources/bluemap3d_create.mixins.json" \
+   addon-create/src/main/resources/bluemap3d_create.mixins.json
+
+mkdir -p addon-sable/src/main/java/dev/duzo/bluemap3d/sable/mixin
+cp "$ROOT/overrides/addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipGeometryRevisionTracker.java" \
+   addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipGeometryRevisionTracker.java
+cp "$ROOT/overrides/addon-sable/src/main/java/dev/duzo/bluemap3d/sable/mixin/SableBlockChangeMixin.java" \
+   addon-sable/src/main/java/dev/duzo/bluemap3d/sable/mixin/SableBlockChangeMixin.java
+cp "$ROOT/overrides/addon-sable/src/main/resources/bluemap3d_sable.mixins.json" \
+   addon-sable/src/main/resources/bluemap3d_sable.mixins.json
 
 # Single native BlueMap 5.7 compatibility addon. Specialized adapters (Copycats,
 # TrafficCraft dynamic textures) and generic rule capabilities share this artifact.

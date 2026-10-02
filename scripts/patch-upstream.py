@@ -41,16 +41,120 @@ replace(
     "GEOMETRY_REVISION + 15",
     "GEOMETRY_REVISION + 33",
 )
-replace(
-    "addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java",
-    "mix(mix(hash, sections), 15L)",
-    "mix(mix(hash, sections), 33L)",
-)
+# ShipProvider's old geometry version is a cheap heuristic (bounds + mass + section
+# serialized sizes) and can miss real block removal/re-addition. Replace the complete
+# method after the base patch with an exact structural hash cached behind Sable's
+# authoritative block-change signal.
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
     'if (!"copycats".equals(namespace)) {',
     'if (!CompatRegistry.get().preserveMovingNamespace(namespace)) {',
 )
+
+p = Path("addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java")
+ship_source = p.read_text()
+
+# Generic scene persistence needs positive destruction evidence for Sable sub-levels.
+# ShipProvider already observes REMOVED vs UNLOADED for its legacy/private cache; retain
+# those UUIDs until core's persistence wrapper consumes them.
+deleted_field_needle = '    private final Map<String, SceneObject> lastObjects = new ConcurrentHashMap<>();'
+if deleted_field_needle not in ship_source:
+    raise SystemExit("ShipProvider deleted-id field insertion point not found")
+ship_source = ship_source.replace(
+    deleted_field_needle,
+    deleted_field_needle
+        + '\n    private final Map<ServerLevel, Set<String>> deletedShipIds = new ConcurrentHashMap<>();',
+    1,
+)
+
+ship_start = ship_source.index(
+    "    private static long geometryVersion(ServerSubLevel ship, BoundingBox3ic bounds) {")
+ship_end = ship_source.index(
+    "    /** FNV-1a, sixty-four bits of it. */",
+    ship_start)
+ship_source = (
+    ship_source[:ship_start]
+    + '''    private static long geometryVersion(ServerSubLevel ship, BoundingBox3ic bounds) {
+        // Exact hash is computed once on initial observation and again only after Sable
+        // reports a real plot block change. Ship movement never dirties it.
+        // Revision 36 invalidates meshes produced before the stale-topology/lifecycle fixes.
+        // Subsequent publishes return to hash-based reuse and only structural changes rebake.
+        return mix(ShipGeometryRevisionTracker.structureHash(ship), 36L);
+    }
+
+'''
+    + ship_source[ship_end:]
+)
+# Drop tracker state when the ship is genuinely removed (not distance-unloaded).
+remove_needle = '''                lastObjects.remove(key);
+                pendingSnapshots.remove(objectId);
+                publishedVersions.remove(objectId);
+                removePersisted(cacheFile(level), key);
+'''
+if remove_needle not in ship_source:
+    raise SystemExit("ShipProvider revision tracker removal insertion point not found")
+ship_source = ship_source.replace(
+    remove_needle,
+    '''                lastObjects.remove(key);
+                pendingSnapshots.remove(objectId);
+                publishedVersions.remove(objectId);
+                ShipGeometryRevisionTracker.clear(uuid);
+                deletedShipIds
+                        .computeIfAbsent(level, ignored -> ConcurrentHashMap.newKeySet())
+                        .add(objectId);
+                removePersisted(cacheFile(level), key);
+''',
+    1,
+)
+# Sable snapshot cache format 4 intentionally refuses pre-fix cached ship snapshots.
+# Those snapshots may contain child blocks that were assembled away while the old dirty
+# hook missed the removal. Current ships repopulate the cache after their corrected mesh
+# is published; unloaded ships stay hidden rather than showing a known-stale hull.
+ship_source = ship_source.replace(
+    "if (state != null && state.ships() != null) {",
+    "if (state != null && state.format() >= 4 && state.ships() != null) {",
+    1,
+)
+ship_source = ship_source.replace(
+    "new SnapshotFile(1, List.copyOf(saved.values()))",
+    "new SnapshotFile(4, List.copyOf(saved.values()))",
+    1,
+)
+deleted_method_needle = '    private void observeContainer(ServerLevel level, ServerSubLevelContainer container) {'
+if deleted_method_needle not in ship_source:
+    raise SystemExit("ShipProvider deletedObjectIds insertion point not found")
+ship_source = ship_source.replace(
+    deleted_method_needle,
+    '''    @Override
+    public Collection<String> deletedObjectIds(ServerLevel level) {
+        Set<String> deleted = deletedShipIds.get(level);
+        if (deleted == null || deleted.isEmpty()) return List.of();
+
+        List<String> result = List.copyOf(deleted);
+        deleted.removeAll(result);
+        if (deleted.isEmpty()) deletedShipIds.remove(level, deleted);
+        return result;
+    }
+
+''' + deleted_method_needle,
+    1,
+)
+
+p.write_text(ship_source)
+
+# Register the optional Create: Simulated spring lifecycle mixin.
+p = Path("addon-create/src/main/resources/META-INF/neoforge.mods.toml")
+create_toml = p.read_text()
+if 'config="bluemap3d_create.mixins.json"' not in create_toml:
+    create_toml += '\n[[mixins]]\nconfig="bluemap3d_create.mixins.json"\n'
+p.write_text(create_toml)
+
+# Register the addon-sable mixin that receives Sable's authoritative server block changes.
+p = Path("addon-sable/src/main/resources/META-INF/neoforge.mods.toml")
+sable_toml = p.read_text()
+if 'config="bluemap3d_sable.mixins.json"' not in sable_toml:
+    sable_toml += '\n[[mixins]]\nconfig="bluemap3d_sable.mixins.json"\n'
+p.write_text(sable_toml)
 
 p = Path("addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java")
 s = p.read_text()
@@ -92,6 +196,8 @@ s = s.replace(
         + '\n    private final Set<String> sableProjected = ConcurrentHashMap.newKeySet();'
         + '\n\n    /** Last known child contraptions for Sable ships, retained when their live entity unloads. */'
         + '\n    private final Map<ServerLevel, Map<String, SableContraptionCache>> sableContraptionCaches = new ConcurrentHashMap<>();'
+        + '\n\n    /** Positive deletion evidence consumed by generic scene persistence. */'
+        + '\n    private final Map<ServerLevel, Set<String>> deletedContraptionIds = new ConcurrentHashMap<>();'
         + '\n\n    /** ControlledContraptionEntity controller position, used only to invalidate disassembled cached rotors. */'
         + '\n    private static final Field CONTROLLER_POS_FIELD = controllerPosField();'
         + '\n\n    /** Persistent last-known Sable child snapshots, separate from user-editable compatibility config. */'
@@ -210,7 +316,16 @@ cache_methods = '''    private void rememberSableContraption(
                 .computeIfAbsent(level, ignored -> new ConcurrentHashMap<>())
                 .put(cacheKey, next);
 
-        if (previous == null || previous.version() != next.version()) {
+        if (previous != null && !previous.objectId().equals(next.objectId())) {
+            // Reassembly creates a new Create entity UUID for the same logical bearing.
+            // Generic persistence otherwise keeps the previous UUID forever because a
+            // missing object is intentionally treated as possibly unloaded.
+            markContraptionDeleted(level, previous.objectId());
+        }
+
+        if (previous == null
+                || previous.version() != next.version()
+                || !previous.objectId().equals(next.objectId())) {
             savePersistentSableCaches();
         }
     }
@@ -221,6 +336,15 @@ cache_methods = '''    private void rememberSableContraption(
 
         try (InputStream input = Files.newInputStream(SABLE_CACHE_FILE)) {
             CompoundTag root = NbtIo.readCompressed(input, NbtAccounter.unlimitedHeap());
+            if (root.getInt("Version") < 2) {
+                // v1 predates positive deletion/reassembly semantics and may contain
+                // ghost Create entity UUIDs. Do not restore it; current live children
+                // repopulate a clean v2 cache.
+                LOGGER.info(
+                        "Ignoring legacy Sable child cache v{}; current children will repopulate",
+                        root.getInt("Version"));
+                return;
+            }
             ListTag entries = root.getList("Entries", Tag.TAG_COMPOUND);
             String dimensionId = level.dimension().location().toString();
             Map<String, SableContraptionCache> levelCache = sableContraptionCaches
@@ -299,12 +423,16 @@ cache_methods = '''    private void rememberSableContraption(
                 try (InputStream input = Files.newInputStream(SABLE_CACHE_FILE)) {
                     CompoundTag previousRoot =
                             NbtIo.readCompressed(input, NbtAccounter.unlimitedHeap());
-                    ListTag previousEntries =
-                            previousRoot.getList("Entries", Tag.TAG_COMPOUND);
-                    for (int i = 0; i < previousEntries.size(); i++) {
-                        CompoundTag previous = previousEntries.getCompound(i);
-                        if (!replacedDimensions.contains(previous.getString("Dimension"))) {
-                            entries.add(previous.copy());
+                    // Never carry v1 entries forward: they are exactly the snapshots that
+                    // can contain now-invalid child UUIDs.
+                    if (previousRoot.getInt("Version") >= 2) {
+                        ListTag previousEntries =
+                                previousRoot.getList("Entries", Tag.TAG_COMPOUND);
+                        for (int i = 0; i < previousEntries.size(); i++) {
+                            CompoundTag previous = previousEntries.getCompound(i);
+                            if (!replacedDimensions.contains(previous.getString("Dimension"))) {
+                                entries.add(previous.copy());
+                            }
                         }
                     }
                 } catch (IOException | RuntimeException error) {
@@ -345,7 +473,7 @@ cache_methods = '''    private void rememberSableContraption(
             }
 
             CompoundTag root = new CompoundTag();
-            root.putInt("Version", 1);
+            root.putInt("Version", 2);
             root.put("Entries", entries);
 
             Path temporary = SABLE_CACHE_FILE.resolveSibling(
@@ -385,6 +513,7 @@ cache_methods = '''    private void rememberSableContraption(
             SubLevel subLevel = container.getSubLevel(cached.subLevelId());
             if (subLevel == null || subLevel.isRemoved()) {
                 cache.remove(entry.getKey());
+                markContraptionDeleted(level, cached.objectId());
                 savePersistentSableCaches();
                 continue;
             }
@@ -396,6 +525,7 @@ cache_methods = '''    private void rememberSableContraption(
                 if (controller instanceof MechanicalBearingBlockEntity bearing
                         && !bearing.isRunning()) {
                     cache.remove(entry.getKey());
+                    markContraptionDeleted(level, cached.objectId());
                     savePersistentSableCaches();
                     continue;
                 }
@@ -475,10 +605,28 @@ if clear_needle not in s:
     raise SystemExit("ContraptionProvider clear() insertion point not found")
 s = s.replace(
     clear_needle,
-    '''    public void clear() {
+    '''    @Override
+    public Collection<String> deletedObjectIds(ServerLevel level) {
+        Set<String> deleted = deletedContraptionIds.get(level);
+        if (deleted == null || deleted.isEmpty()) return List.of();
+
+        List<String> result = List.copyOf(deleted);
+        deleted.removeAll(result);
+        return result;
+    }
+
+    private void markContraptionDeleted(ServerLevel level, String objectId) {
+        if (objectId == null || objectId.isBlank()) return;
+        deletedContraptionIds
+                .computeIfAbsent(level, ignored -> ConcurrentHashMap.newKeySet())
+                .add(objectId);
+    }
+
+    public void clear() {
         savePersistentSableCaches();
         carriageCaches.clear();
         sableContraptionCaches.clear();
+        deletedContraptionIds.clear();
         sablePersistentLoaded.clear();
         terrainFootprints.clear();
     }''',
@@ -864,9 +1012,9 @@ p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-37-replay-stable-topology";',
+    'var BUILD = "core-history-42-sable-removal";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.5")
+replace("gradle.properties", "version=1.0.9", "version=1.1.10")
 
 # Make restore/history lifecycle generic at the provider registry boundary.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")
@@ -1004,7 +1152,7 @@ if needle not in s:
 s = s.replace(
     needle,
     'CompatRegistry.get();\n\n        ' + needle
-        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.5 active; BlueMap target is 5.7.");',
+        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.10 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
@@ -1013,6 +1161,55 @@ p.write_text(s)
 # rope/spring segments so their length can change without rebuilding their mesh.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java")
 ts = p.read_text()
+
+# A changed geometryVersion means the previous mesh has stale topology. Keeping it in the
+# feed while the replacement bakes creates a deterministic duplicate window when a Sable
+# child contraption appears before the parent hull rebake finishes. Resolve an already
+# published target-version mesh first; otherwise hide the object until that version is ready.
+stale_needle = '''            if (current == null) {
+                String existing = publisher.existingMeshUrl(providerId, object.id(), version);
+                if (existing != null) {
+                    current = new Ready(version, existing);
+                    ready.put(key, current);
+                    // Keep mesh-archive consumers in sync even though no bake happened.
+                    BlueMap3D.meshPublished(providerId, object.id(), version, existing);
+                }
+            }
+
+            if ((current == null || current.version() != version)
+                    && object.canBakeGeometry()) {
+                requestBake(providerId, object, key, version);
+            }
+            if (current != null) {
+'''
+if stale_needle not in ts:
+    raise SystemExit("SceneObjectTracker stale topology insertion point not found")
+ts = ts.replace(
+    stale_needle,
+    '''            if (current == null || current.version() != version) {
+                String existing = publisher.existingMeshUrl(providerId, object.id(), version);
+                if (existing != null) {
+                    current = new Ready(version, existing);
+                    ready.put(key, current);
+                    BlueMap3D.meshPublished(providerId, object.id(), version, existing);
+                }
+            }
+
+            if ((current == null || current.version() != version)
+                    && object.canBakeGeometry()) {
+                requestBake(providerId, object, key, version);
+            }
+
+            // Never publish known-stale topology. The browser drops the old object now
+            // and it reappears only once the requested geometry version is actually ready.
+            if (current != null && current.version() != version) {
+                current = null;
+            }
+            if (current != null) {
+''',
+    1,
+)
+
 row_needle = '''                rows.add(new Row(providerId, object.id(), object.label(),
                         object.dimension().location().toString(),
                         current.meshUrl(), object.position(), object.rotation()));

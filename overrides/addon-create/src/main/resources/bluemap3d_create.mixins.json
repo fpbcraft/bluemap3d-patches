@@ -1,0 +1,13 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "dev.duzo.bluemap3d.create.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "SimulatedSpringBlockEntityMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
