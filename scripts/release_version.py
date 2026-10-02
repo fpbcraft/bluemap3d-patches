@@ -7,6 +7,7 @@ import subprocess
 from collections.abc import Iterable
 
 SEMVER = re.compile(r"^(?:v)?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+SHA = re.compile(r"^[0-9a-fA-F]{7,40}$")
 
 
 def parse_version(value: str) -> tuple[int, int, int]:
@@ -71,6 +72,15 @@ def resolve_manual(
     return version, tag
 
 
+def development_version(tags: Iterable[str], *, fallback: str, sha: str) -> str:
+    if not SHA.fullmatch(sha.strip()):
+        raise ValueError(f"expected git commit sha, got {sha!r}")
+
+    latest = latest_version(tags)
+    target = next_version(latest, "patch") if latest is not None else parse_version(fallback)
+    return f"{format_version(target)}-dev.g{sha.strip().lower()[:8]}"
+
+
 def git_tags() -> list[str]:
     result = subprocess.run(
         ["git", "tag", "--list", "v*"],
@@ -87,12 +97,20 @@ def main() -> None:
     parser.add_argument("--bump", choices=("patch", "minor", "major", "exact"))
     parser.add_argument("--fallback")
     parser.add_argument("--exact")
+    parser.add_argument("--development", action="store_true")
+    parser.add_argument("--sha")
     args = parser.parse_args()
 
     if args.tag:
         version = format_version(parse_version(args.tag))
         print(version)
         print(f"v{version}")
+        return
+
+    if args.development:
+        if not args.fallback or not args.sha:
+            parser.error("development resolution requires --fallback and --sha")
+        print(development_version(git_tags(), fallback=args.fallback, sha=args.sha))
         return
 
     if not args.bump or not args.fallback:
