@@ -1,0 +1,137 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      increment:
+        description: Semantic version increment
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - custom
+      version:
+        description: Explicit semantic version when increment=custom (for example 2.0.0-beta.1)
+        required: false
+        type: string
+
+concurrency:
+  group: bluemap3d-patches-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Resolve semantic release version
+        id: version
+        shell: bash
+        env:
+          RELEASE_INCREMENT: ${{ inputs.increment }}
+          RELEASE_CUSTOM_VERSION: ${{ inputs.version }}
+        run: |
+          BASE="$(python3 -c 'import json; print(json.load(open("release.json"))["version"])')"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            python3 .github/scripts/release_version.py next \
+              --increment "${RELEASE_INCREMENT}" \
+              --custom "${RELEASE_CUSTOM_VERSION}" \
+              --fallback "${BASE}" \
+              --github-output "${GITHUB_OUTPUT}"
+          else
+            python3 .github/scripts/release_version.py validate \
+              --tag "${GITHUB_REF_NAME}" \
+              --github-output "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Verify release commit is on main
+        shell: bash
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main || {
+            echo "Release commits must be reachable from main." >&2
+            exit 1
+          }
+
+      - name: Create immutable release tag
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+
+      - name: Refuse an existing release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "GitHub Release ${TAG} already exists; releases are immutable." >&2
+            exit 1
+          fi
+
+      - name: Build exact release artifacts
+        env:
+          BLUEMAP3D_VERSION: ${{ steps.version.outputs.version }}
+        run: ./build.sh
+
+      - name: Verify release artifact version
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          info = json.loads(Path("dist/BUILD_INFO.json").read_text())
+          expected = os.environ["VERSION"]
+          actual = info["version"]
+          if actual != expected:
+              raise SystemExit(f"release artifact version mismatch: {actual!r} != {expected!r}")
+          PY
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          mapfile -t assets < <(find dist -maxdepth 1 -type f -print | sort)
+          if [[ "${#assets[@]}" -eq 0 ]]; then
+            echo "No release artifacts found." >&2
+            exit 1
+          fi
+          args=(release create "${TAG}" "${assets[@]}" --verify-tag --generate-notes --title "${TAG}")
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh "${args[@]}"
