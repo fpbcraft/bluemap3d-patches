@@ -51,7 +51,7 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
     private static final Path FILE =
             Path.of("config", "bluemap3d", "cache", "scene-objects.json");
     private static final long SAVE_INTERVAL_NANOS = 5_000_000_000L;
-    private static final int CACHE_FORMAT_VERSION = 3;
+    private static final int CACHE_FORMAT_VERSION = 4;
 
     private static final Object LOCK = new Object();
     private static final Map<String, SavedObject> SAVED = new ConcurrentHashMap<>();
@@ -240,27 +240,29 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
                         int droppedCreate = 0;
                         int droppedSable = 0;
                         int droppedSprings = 0;
-                        boolean migrate = sourceFormat < CACHE_FORMAT_VERSION;
+
+                        // v3 introduced deletion/topology cleanup for Create and Simulated
+                        // springs. v4 adds the missing positive-deletion path for Sable
+                        // sub-levels themselves. Keep the migrations provider-specific so
+                        // upgrading v3 -> v4 does not discard unrelated corrected snapshots.
+                        boolean preV3 = sourceFormat < 3;
+                        boolean preV4 = sourceFormat < 4;
 
                         for (JsonElement element : entries) {
                             SavedObject saved = GSON.fromJson(element, SavedObject.class);
                             if (saved == null || !saved.valid()) continue;
 
-                            // v1/v2 could retain ghosts because Create/Sable/Spring providers
-                            // did not yet provide complete positive deletion semantics.
-                            // Purge only while crossing into v3; current authoritative state
-                            // repopulates immediately and v3 snapshots persist normally.
-                            if (migrate && "create_contraptions".equals(saved.provider)) {
+                            if (preV3 && "create_contraptions".equals(saved.provider)) {
                                 droppedCreate++;
                                 dirty = true;
                                 continue;
                             }
-                            if (migrate && "sable_ships".equals(saved.provider)) {
+                            if (preV4 && "sable_ships".equals(saved.provider)) {
                                 droppedSable++;
                                 dirty = true;
                                 continue;
                             }
-                            if (migrate && "simulated_springs".equals(saved.provider)) {
+                            if (preV3 && "simulated_springs".equals(saved.provider)) {
                                 droppedSprings++;
                                 dirty = true;
                                 continue;
@@ -281,7 +283,7 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
                                     droppedSable,
                                     droppedSprings);
                         }
-                        if (migrate) dirty = true;
+                        if (sourceFormat < CACHE_FORMAT_VERSION) dirty = true;
                     }
                 } catch (IOException | RuntimeException error) {
                     LOGGER.warn("Could not read generic scene-object cache {}", FILE, error);
