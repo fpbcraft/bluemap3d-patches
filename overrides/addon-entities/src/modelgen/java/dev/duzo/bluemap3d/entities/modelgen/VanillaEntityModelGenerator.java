@@ -9,6 +9,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.model.geom.LayerDefinitions;
 import net.minecraft.client.model.geom.ModelLayerLocation;
+import net.minecraft.server.Bootstrap;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -84,6 +85,91 @@ public final class VanillaEntityModelGenerator {
         Files.writeString(output, GSON.toJson(root), StandardCharsets.UTF_8);
         System.out.printf("Generated %,d vanilla entity model layers at %s%n",
                 generated.size(), output);
+    }
+
+    /**
+     * NeoForge extends vanilla bootstrap by asking the loading-time mod list for custom
+     * feature flags. A normal game launch has populated that list already; this tiny
+     * build-only JavaExec has not. Install an empty list through the loader's own factory
+     * before bootstrapping. Reflection keeps this helper compatible with the small API
+     * shape changes between FML releases and is confined to the generator source set.
+     */
+    private static void installEmptyNeoForgeLoadingContext() {
+        try {
+            Class<?> type = Class.forName("net.neoforged.fml.loading.LoadingModList");
+            java.lang.reflect.Method get = type.getDeclaredMethod("get");
+            get.setAccessible(true);
+            if (get.invoke(null) != null) return;
+
+            for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
+                if (!method.getName().equals("of")
+                        || !java.lang.reflect.Modifier.isStatic(method.getModifiers())
+                        || !type.isAssignableFrom(method.getReturnType())) {
+                    continue;
+                }
+
+                try {
+                    method.setAccessible(true);
+                    Object[] arguments = emptyArguments(method.getParameterTypes());
+                    method.invoke(null, arguments);
+                    if (get.invoke(null) != null) return;
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                    // Try another overload or the constructor fallback below.
+                }
+            }
+
+            for (java.lang.reflect.Constructor<?> constructor : type.getDeclaredConstructors()) {
+                try {
+                    constructor.setAccessible(true);
+                    Object instance = constructor.newInstance(emptyArguments(constructor.getParameterTypes()));
+                    for (java.lang.reflect.Field field : type.getDeclaredFields()) {
+                        if (java.lang.reflect.Modifier.isStatic(field.getModifiers())
+                                && field.getType() == type) {
+                            field.setAccessible(true);
+                            field.set(null, instance);
+                            if (get.invoke(null) != null) return;
+                        }
+                    }
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                    // Try the next constructor.
+                }
+            }
+
+            throw new IllegalStateException("Could not initialize NeoForge LoadingModList");
+        } catch (ClassNotFoundException ignored) {
+            // Vanilla/Fabric generator classpath: no loader hook exists.
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Could not initialize NeoForge loading context", e);
+        }
+    }
+
+    private static Object[] emptyArguments(Class<?>[] parameterTypes) {
+        Object[] arguments = new Object[parameterTypes.length];
+        for (int i = 0; i < parameterTypes.length; i++) {
+            Class<?> parameter = parameterTypes[i];
+            if (java.util.List.class.isAssignableFrom(parameter)
+                    || java.util.Collection.class.isAssignableFrom(parameter)) {
+                arguments[i] = java.util.List.of();
+            } else if (java.util.Map.class.isAssignableFrom(parameter)) {
+                arguments[i] = java.util.Map.of();
+            } else if (java.util.Set.class.isAssignableFrom(parameter)) {
+                arguments[i] = java.util.Set.of();
+            } else if (java.util.Optional.class.isAssignableFrom(parameter)) {
+                arguments[i] = java.util.Optional.empty();
+            } else if (parameter == boolean.class) {
+                arguments[i] = false;
+            } else if (parameter == int.class || parameter == short.class
+                    || parameter == byte.class || parameter == long.class) {
+                arguments[i] = 0;
+            } else if (parameter == float.class || parameter == double.class) {
+                arguments[i] = 0D;
+            } else if (parameter == char.class) {
+                arguments[i] = '\0';
+            } else {
+                arguments[i] = null;
+            }
+        }
+        return arguments;
     }
 
     /**
