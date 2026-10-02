@@ -9,6 +9,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.model.geom.LayerDefinitions;
 import net.minecraft.client.model.geom.ModelLayerLocation;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.server.Bootstrap;
 
@@ -184,6 +185,21 @@ public final class VanillaEntityModelGenerator {
             }
         }
         return arguments;
+    }
+
+    private static void bootstrapRegistries() {
+        try {
+            Bootstrap.bootStrap();
+        } catch (ExceptionInInitializerError error) {
+            // NeoForge's standalone userdev classpath contains the mapped game classes
+            // but not the client language resources. Bootstrap can therefore fail late
+            // while validating creative-tab translations, after all built-in registries
+            // required by LayerDefinitions are already initialized. Only tolerate that
+            // late failure; an actually empty registry is still fatal.
+            if (BuiltInRegistries.REGISTRY.keySet().isEmpty()) {
+                throw error;
+            }
+        }
     }
 
     /**
