@@ -3,6 +3,7 @@ package dev.duzo.bluemap3d.bake;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import net.neoforged.fml.ModList;
+import net.neoforged.fml.jarcontents.JarContents;
 
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
@@ -74,14 +75,20 @@ public final class AssetIndex implements Closeable {
 
     private final List<Path> roots;
     private final List<FileSystem> ownedFileSystems;
+    private final List<JarContents> modContents;
     private final ClassLoader modLoader;
     private final Map<String, byte[]> cache = new HashMap<>();
     private final Map<String, List<String>> pathCache = new HashMap<>();
     private static final byte[] MISSING = new byte[0];
 
-    private AssetIndex(List<Path> roots, List<FileSystem> ownedFileSystems, ClassLoader modLoader) {
+    private AssetIndex(
+            List<Path> roots,
+            List<FileSystem> ownedFileSystems,
+            List<JarContents> modContents,
+            ClassLoader modLoader) {
         this.roots = roots;
         this.ownedFileSystems = ownedFileSystems;
+        this.modContents = modContents;
         this.modLoader = modLoader;
     }
 
@@ -95,6 +102,7 @@ public final class AssetIndex implements Closeable {
     public static AssetIndex open(List<Path> configured, Path blueMapRoot) {
         List<Path> roots = new ArrayList<>();
         List<FileSystem> owned = new ArrayList<>();
+        List<JarContents> mods = new ArrayList<>();
 
         List<Path> candidates = new ArrayList<>(configured);
 
@@ -116,15 +124,13 @@ public final class AssetIndex implements Closeable {
             candidates.addAll(listIfDirectory(blueMapRoot.resolve("resources")));
         }
 
-        // Finally, index every loaded mod file as an enumerable asset root. The class
-        // loader is still retained as the exact-path fallback, but it cannot list files;
-        // entity model discovery needs to inspect arbitrary geo/texture names in mod jars.
+        // Finally retain NeoForge's already-open mod contents. Opening every mod jar a
+        // second time through zipfs is expensive on large packs and unnecessary:
+        // JarContents supports both exact reads and recursive visitation.
         try {
             for (var modFileInfo : ModList.get().getModFiles()) {
-                Path modPath = modFileInfo.getFile().getFilePath();
-                if (modPath != null) {
-                    candidates.add(modPath);
-                }
+                JarContents contents = modFileInfo.getFile().getContents();
+                if (contents != null) mods.add(contents);
             }
         } catch (RuntimeException e) {
             LOGGER.debug("Could not enumerate loaded mod files for asset discovery: {}", e.toString());
@@ -144,12 +150,13 @@ public final class AssetIndex implements Closeable {
             }
         }
 
-        if (!roots.isEmpty()) {
-            LOGGER.info("Indexed {} asset source(s) for block models", roots.size());
+        if (!roots.isEmpty() || !mods.isEmpty()) {
+            LOGGER.info("Indexed {} external asset source(s) and {} loaded mod file(s)",
+                    roots.size(), mods.size());
         } else {
-            LOGGER.info("No asset sources found; textured meshing will rely on mod jars only");
+            LOGGER.info("No asset sources found; textured meshing will rely on classpath lookup only");
         }
-        return new AssetIndex(roots, owned, AssetIndex.class.getClassLoader());
+        return new AssetIndex(roots, owned, List.copyOf(mods), AssetIndex.class.getClassLoader());
     }
 
     /**
@@ -192,7 +199,7 @@ public final class AssetIndex implements Closeable {
         for (Path root : roots) {
             if (found.size() >= limit) break;
             try {
-                Path base = root.resolve(normalized);
+                Path base = normalized.isEmpty() ? root : root.resolve(normalized);
                 if (!Files.exists(base)) continue;
 
                 try (var stream = Files.walk(base)) {
@@ -204,7 +211,18 @@ public final class AssetIndex implements Closeable {
                     }
                 }
             } catch (IOException | RuntimeException ignored) {
-                // Broken/closed zip root or malformed entry. Continue with lower priority roots.
+                // Broken/closed source or malformed entry. Continue with lower priority roots.
+            }
+        }
+
+        for (JarContents contents : modContents) {
+            if (found.size() >= limit) break;
+            try {
+                contents.visitContent(normalized, (relativePath, resource) -> {
+                    if (found.size() < limit) found.add(relativePath.replace('\\', '/'));
+                });
+            } catch (RuntimeException ignored) {
+                // One malformed mod must not disable discovery for every other mod.
             }
         }
 
@@ -216,11 +234,38 @@ public final class AssetIndex implements Closeable {
     /** Convenience filtered listing with the same stable source order. */
     public List<String> findPaths(String prefix, Predicate<String> filter, int limit) {
         if (filter == null) return pathsUnder(prefix, limit);
-        List<String> out = new ArrayList<>();
-        for (String path : pathsUnder(prefix, Math.max(limit, 1) * 4)) {
-            if (filter.test(path)) {
-                out.add(path);
-                if (out.size() >= limit) break;
+        if (limit <= 0) return List.of();
+
+        String normalized = prefix.replace('\\', '/');
+        while (normalized.startsWith("/")) normalized = normalized.substring(1);
+        while (normalized.endsWith("/")) normalized = normalized.substring(0, normalized.length() - 1);
+
+        LinkedHashSet<String> out = new LinkedHashSet<>();
+        for (Path root : roots) {
+            if (out.size() >= limit) break;
+            try {
+                Path base = normalized.isEmpty() ? root : root.resolve(normalized);
+                if (!Files.exists(base)) continue;
+                try (var stream = Files.walk(base)) {
+                    var iterator = stream.filter(Files::isRegularFile).iterator();
+                    while (iterator.hasNext() && out.size() < limit) {
+                        String relative =
+                                root.relativize(iterator.next()).toString().replace('\\', '/');
+                        if (filter.test(relative)) out.add(relative);
+                    }
+                }
+            } catch (IOException | RuntimeException ignored) {
+            }
+        }
+
+        for (JarContents contents : modContents) {
+            if (out.size() >= limit) break;
+            try {
+                contents.visitContent(normalized, (relativePath, resource) -> {
+                    String path = relativePath.replace('\\', '/');
+                    if (out.size() < limit && filter.test(path)) out.add(path);
+                });
+            } catch (RuntimeException ignored) {
             }
         }
         return List.copyOf(out);
@@ -237,7 +282,16 @@ public final class AssetIndex implements Closeable {
                 // A malformed zip entry name, or a root that went away. Try the next.
             }
         }
-        // Mod jars, via the loader that can see all of them.
+        for (JarContents contents : modContents) {
+            try {
+                byte[] bytes = contents.readFile(path);
+                if (bytes != null) return bytes;
+            } catch (IOException | RuntimeException ignored) {
+            }
+        }
+
+        // Final fallback for resources contributed through classpath mechanisms that do
+        // not correspond to a normal loaded mod file.
         try (InputStream in = modLoader.getResourceAsStream(path)) {
             if (in != null) {
                 return readAll(in);
@@ -250,7 +304,7 @@ public final class AssetIndex implements Closeable {
 
     /** Whether anything at all is available beyond the mod class loader. */
     public boolean hasExternalRoots() {
-        return !roots.isEmpty();
+        return !roots.isEmpty() || !modContents.isEmpty();
     }
 
     @Override
@@ -264,6 +318,7 @@ public final class AssetIndex implements Closeable {
         }
         ownedFileSystems.clear();
         roots.clear();
+        modContents.clear();
         cache.clear();
         pathCache.clear();
     }
