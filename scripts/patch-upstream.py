@@ -77,9 +77,8 @@ ship_source = (
     + '''    private static long geometryVersion(ServerSubLevel ship, BoundingBox3ic bounds) {
         // Exact hash is computed once on initial observation and again only after Sable
         // reports a real plot block change. Ship movement never dirties it.
-        // Revision 35 intentionally invalidates every previously published Sable hull once.
-        // That cleans stale meshes created by the old post-change dirty hook; subsequent
-        // publishes return to hash-based reuse and only structural changes rebake.
+        // Revision 36 invalidates meshes produced before the stale-topology/lifecycle fixes.
+        // Subsequent publishes return to hash-based reuse and only structural changes rebake.
         return mix(ShipGeometryRevisionTracker.structureHash(ship), 36L);
     }
 
