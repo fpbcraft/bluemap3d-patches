@@ -123,6 +123,9 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
             int rgb = sheep.getColor().getTextureDiffuseColor() & 0xFFFFFF;
             metadata.put("__bm3d_tint", String.format(Locale.ROOT, "%06x", rgb));
             metadata.put("__bm3d_visual_color", sheep.getColor().getSerializedName());
+            if (sheep.isSheared()) {
+                metadata.put("__bm3d_hide_wool", "true");
+            }
         }
 
         int visual = 0;
