@@ -90,6 +90,20 @@ ship_source = ship_source.replace(
 ''',
     1,
 )
+# Sable snapshot cache format 2 intentionally refuses pre-fix cached hull meshes.
+# Those snapshots may contain child blocks that were assembled away while the old dirty
+# hook missed the removal. Current ships repopulate the cache after their corrected mesh
+# is published; unloaded ships stay hidden rather than showing a known-stale hull.
+ship_source = ship_source.replace(
+    "if (state != null && state.ships() != null) {",
+    "if (state != null && state.format() >= 2 && state.ships() != null) {",
+    1,
+)
+ship_source = ship_source.replace(
+    "new SnapshotFile(1, List.copyOf(saved.values()))",
+    "new SnapshotFile(2, List.copyOf(saved.values()))",
+    1,
+)
 p.write_text(ship_source)
 
 # Register the addon-sable mixin that receives Sable's authoritative server block changes.
