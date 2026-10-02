@@ -25,6 +25,8 @@ Current ownership:
   structure-based geometry revisioning.
 - `0050-scene-object-publication.patch`: mesh-version suppression and live object scale
   publication.
+- `0060-browser-dynamic-runtime.patch`: live/replay scale interpolation, loop motion, and
+  UV-scroll runtime behavior.
 
 ## Remaining Python transformations
 
@@ -33,7 +35,6 @@ regression coverage around each migration:
 
 - `ContraptionProvider.java`: Sable projection, dynamic topology and compatibility behavior.
 - `BlueMap3DMod.java`: release-version startup marker only.
-- `bluemap3d.core.js`: live/replay dynamic-node runtime.
 - release-version/build-marker substitutions that depend on `release.json`.
 
 The next migrations should favor cohesive behavior slices rather than mechanically converting

@@ -1,0 +1,190 @@
+diff --git a/core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js b/core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js
+--- a/core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js
++++ b/core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js
+@@ -80,6 +80,8 @@
+     var KIND_OSCILLATE = 1;
+     var KIND_ORBIT = 2;
+     var KIND_RATE = 3;
++    var KIND_LOOP = 4;
++    var KIND_UV_SCROLL = 5;
+ 
+     /* A frame gap longer than this is a tab coming back from the background, a minimised
+      * window, or a stall - not a real frame - so KIND_RATE resets rather than integrating
+@@ -316,7 +318,8 @@
+             var sample = {
+                 t: now,
+                 pos: row.pos,
+-                rot: row.rot
++                rot: row.rot,
++                scale: row.scale || [1, 1, 1]
+             };
+             /* The segment we've been interpolating through is now entirely behind us -
+              * fold its full travel into the odometer before starting the next one.
+@@ -535,6 +538,14 @@
+                 alpha
+             );
+ 
++        var fromScale = from.scale || [1, 1, 1];
++        var toScale = to.scale || [1, 1, 1];
++        mesh.scale.set(
++            fromScale[0] + (toScale[0] - fromScale[0]) * alpha,
++            fromScale[1] + (toScale[1] - fromScale[1]) * alpha,
++            fromScale[2] + (toScale[2] - fromScale[2]) * alpha
++        );
++
+         if (entry.nodeGroups) {
+             /* One travel for the whole object, in blocks, signed along entry.roll. Each
+              * node then flips it into its own frame with its own sign and divides by its
+@@ -574,6 +585,32 @@
+                      * point beside its axle rather than the axle. */
+                     var theta = node.period > 0 ? value / node.period : 0;
+                     group.position.copy(node.pivot).applyAxisAngle(node.axis, theta);
++                } else if (node.kind === KIND_UV_SCROLL) {
++                    group.position.set(0, 0, 0);
++                    group.quaternion.set(0, 0, 0, 1);
++                    var uvMesh = group.children[0];
++                    if (uvMesh && uvMesh.geometry) {
++                        scrollNodeUvs(
++                            node,
++                            uvMesh.geometry,
++                            node.period + node.rate * performance.now() / 1000);
++                    }
++                } else if (node.kind === KIND_LOOP) {
++                    var loopNow = performance.now();
++                    var loopLast = entry.rateLastTime[i];
++                    var loopDt = loopLast === null ? 0 : (loopNow - loopLast) / 1000;
++                    if (loopDt < 0 || loopDt > MAX_RATE_DT_SECONDS) {
++                        loopDt = 0;
++                    }
++                    entry.rateLastTime[i] = loopNow;
++                    entry.rateAngles[i] += node.rate * loopDt;
++                    var loopPhase = node.period > 0
++                        ? entry.rateAngles[i] % node.period : 0;
++                    group.position.set(
++                        node.axis.x * loopPhase,
++                        node.axis.y * loopPhase,
++                        node.axis.z * loopPhase);
++                    group.quaternion.set(0, 0, 0, 1);
+                 } else if (node.kind === KIND_RATE) {
+                     /* Driven by wall-clock time, not by "value" (the odometer) - a
+                      * KIND_RATE part turns even while its object stands still, so travel
+@@ -645,7 +682,7 @@
+      */
+     function entryRoll(nodes) {
+         for (var i = 0; i < nodes.length; i++) {
+-            if (nodes[i].kind === KIND_RATE) {
++            if (nodes[i].kind === KIND_RATE || nodes[i].kind === KIND_LOOP) {
+                 /* Driven by wall-clock time, never by travel, so its axis says nothing
+                  * about which way the object goes. */
+                 continue;
+@@ -936,7 +973,7 @@
+             throw new Error("not a .bm3d file");
+         }
+         var version = view.getUint32(4, true);
+-        if (version < 1 || version > 5) {
++        if (version < 1 || version > 7) {
+             throw new Error("unsupported .bm3d version " + version);
+         }
+ 
+@@ -1054,7 +1091,39 @@
+             var node = nodes[i];
+             var nodeGeometry = new THREE.BufferGeometry();
+             nodeGeometry.setAttribute("position", position);
+-            nodeGeometry.setAttribute("uv", geometry.attributes.uv);
++            if (node.kind === KIND_UV_SCROLL) {
++                var sourceUv = geometry.attributes.uv;
++                var uvCopy = new Float32Array(sourceUv.array);
++                nodeGeometry.setAttribute("uv", new THREE.BufferAttribute(uvCopy, 2));
++
++                var seenUv = Object.create(null);
++                var uvVertices = [];
++                var uvBase = [];
++                var minU = Infinity, maxU = -Infinity;
++                var minV = Infinity, maxV = -Infinity;
++                var uvEnd = node.indexStart + node.indexCount;
++                for (var uvIndex = node.indexStart; uvIndex < uvEnd; uvIndex++) {
++                    var vertexIndex = index.array[uvIndex];
++                    if (seenUv[vertexIndex] === true) {
++                        continue;
++                    }
++                    seenUv[vertexIndex] = true;
++                    var baseU = sourceUv.array[vertexIndex * 2];
++                    var baseV = sourceUv.array[vertexIndex * 2 + 1];
++                    uvVertices.push(vertexIndex);
++                    uvBase.push(baseU, baseV);
++                    minU = Math.min(minU, baseU);
++                    maxU = Math.max(maxU, baseU);
++                    minV = Math.min(minV, baseV);
++                    maxV = Math.max(maxV, baseV);
++                }
++                node.uvVertices = uvVertices;
++                node.uvBase = uvBase;
++                node.uvSpanU = isFinite(minU) ? maxU - minU : 0;
++                node.uvSpanV = isFinite(minV) ? maxV - minV : 0;
++            } else {
++                nodeGeometry.setAttribute("uv", geometry.attributes.uv);
++            }
+             nodeGeometry.setAttribute("color", geometry.attributes.color);
+             nodeGeometry.setIndex(index);
+             nodeGeometry.setDrawRange(node.indexStart, node.indexCount);
+@@ -1081,7 +1150,11 @@
+                     maxDistSq = distSq;
+                 }
+             }
+-            nodeGeometry.boundingSphere = new THREE.Sphere(node.pivot.clone(), Math.sqrt(maxDistSq));
++            var nodeRadius = Math.sqrt(maxDistSq);
++            if (node.kind === KIND_LOOP && node.period > 0) {
++                nodeRadius += node.period;
++            }
++            nodeGeometry.boundingSphere = new THREE.Sphere(node.pivot.clone(), nodeRadius);
+ 
+             result.push(nodeGeometry);
+         }
+@@ -1089,6 +1162,25 @@
+         return result;
+     }
+ 
++    function scrollNodeUvs(node, geometry, phase) {
++        if (!node.uvVertices || !geometry.attributes.uv) {
++            return;
++        }
++
++        phase = phase - Math.floor(phase);
++        var du = node.axis.x * node.uvSpanU * phase;
++        var dv = node.axis.y * node.uvSpanV * phase;
++        var array = geometry.attributes.uv.array;
++
++        for (var i = 0; i < node.uvVertices.length; i++) {
++            var vertexIndex = node.uvVertices[i];
++            array[vertexIndex * 2] = node.uvBase[i * 2] + du;
++            array[vertexIndex * 2 + 1] = node.uvBase[i * 2 + 1] + dv;
++        }
++
++        geometry.attributes.uv.needsUpdate = true;
++    }
++
+     var materialCache = Object.create(null);
+ 
+     function material(atlasUrl) {
+@@ -1203,6 +1295,21 @@
+                 var theta = node.period > 0 ? value / node.period : 0;
+                 group.position.copy(node.pivot).applyAxisAngle(node.axis, theta);
+                 group.quaternion.set(0, 0, 0, 1);
++            } else if (node.kind === KIND_UV_SCROLL) {
++                group.position.set(0, 0, 0);
++                group.quaternion.set(0, 0, 0, 1);
++                var uvMesh = group.children[0];
++                if (uvMesh && uvMesh.geometry) {
++                    scrollNodeUvs(node, uvMesh.geometry, node.period + node.rate * timeSeconds);
++                }
++            } else if (node.kind === KIND_LOOP) {
++                var loopPhase = node.period > 0
++                    ? (node.rate * timeSeconds) % node.period : 0;
++                group.position.set(
++                    node.axis.x * loopPhase,
++                    node.axis.y * loopPhase,
++                    node.axis.z * loopPhase);
++                group.quaternion.set(0, 0, 0, 1);
+             } else if (node.kind === KIND_RATE) {
+                 var angle = node.rate * timeSeconds;
+                 /* Keep huge epoch-based angles numerically tame while preserving phase. */
