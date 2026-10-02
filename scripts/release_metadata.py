@@ -14,14 +14,18 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 REQUIRED = ("version", "upstreamCommit", "blueMapVersion", "minecraftVersion")
 
 
-def load_release(path: Path | None = None) -> dict[str, str]:
+def load_release(
+    path: Path | None = None,
+    *,
+    apply_version_override: bool = True,
+) -> dict[str, str]:
     source = path or DEFAULT_FILE
     data = json.loads(source.read_text())
     if not isinstance(data, dict):
         raise ValueError("release metadata must be a JSON object")
 
     override = os.environ.get("RELEASE_VERSION", "").strip()
-    if override:
+    if apply_version_override and override:
         data["version"] = override
 
     missing = [key for key in REQUIRED if not isinstance(data.get(key), str) or not data[key].strip()]
@@ -36,6 +40,10 @@ def load_release(path: Path | None = None) -> dict[str, str]:
 
 
 def main() -> None:
+    if sys.argv[1:] == ["--base-version"]:
+        print(load_release(apply_version_override=False)["version"])
+        return
+
     data = load_release()
     if sys.argv[1:] == ["--lines"]:
         for key in REQUIRED:
@@ -44,7 +52,7 @@ def main() -> None:
     if sys.argv[1:] == ["--json"]:
         print(json.dumps(data, sort_keys=True))
         return
-    raise SystemExit("usage: release_metadata.py --lines | --json")
+    raise SystemExit("usage: release_metadata.py --base-version | --lines | --json")
 
 
 if __name__ == "__main__":
