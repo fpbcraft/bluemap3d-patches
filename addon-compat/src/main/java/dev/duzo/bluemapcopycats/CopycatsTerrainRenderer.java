@@ -2,14 +2,12 @@ package dev.duzo.bluemapcopycats;
 
 import de.bluecolored.bluemap.core.map.TextureGallery;
 import de.bluecolored.bluemap.core.map.hires.RenderSettings;
-import de.bluecolored.bluemap.core.map.hires.TileModel;
 import de.bluecolored.bluemap.core.map.hires.TileModelView;
 import de.bluecolored.bluemap.core.map.hires.block.BlockRenderer;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.Variant;
 import de.bluecolored.bluemap.core.util.Direction;
 import de.bluecolored.bluemap.core.util.math.Color;
-import de.bluecolored.bluemap.core.world.LightData;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 import de.bluecolored.bluemap.core.logger.Logger;
 
@@ -31,17 +29,17 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     private static final Set<String> TRACED = ConcurrentHashMap.newKeySet();
 
     private final CopycatsTemplateGeometry templateGeometry;
-    private final CopycatsAppearanceResolver appearanceResolver;
+    private final CopycatsQuadEmitter quadEmitter;
 
     private BlockNeighborhood block;
-    private TileModelView tileModel;
 
     public CopycatsTerrainRenderer(
             ResourcePack resourcePack,
             TextureGallery textureGallery,
             RenderSettings renderSettings) {
         this.templateGeometry = new CopycatsTemplateGeometry(resourcePack);
-        this.appearanceResolver = new CopycatsAppearanceResolver(resourcePack, textureGallery);
+        this.quadEmitter = new CopycatsQuadEmitter(
+                new CopycatsAppearanceResolver(resourcePack, textureGallery));
     }
 
     @Override
@@ -51,7 +49,6 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             TileModelView tileModel,
             Color blockColor) {
         this.block = block;
-        this.tileModel = tileModel;
 
         String id = block.getBlockState().getFormatted();
         if (!(block.getBlockEntity() instanceof CopycatsTerrainBlockEntity entity)) {
@@ -94,7 +91,14 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         int renderStart = tileModel.getStart();
         int emitted = 0;
         for (Quad quad : quads) {
-            if (emit(quad)) emitted++;
+            if (quadEmitter.emit(
+                    quad.positions(),
+                    quad.face(),
+                    quad.material(),
+                    block,
+                    tileModel)) {
+                emitted++;
+            }
         }
         tileModel.initialize(renderStart);
 
@@ -630,46 +634,6 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         transform.apply(positions);
         if (transform.mirrored()) reverseWinding(positions);
         out.add(new Quad(positions, materialFace, material));
-    }
-
-    private boolean emit(Quad quad) {
-        CopycatsAppearanceResolver.Appearance appearance =
-                appearanceResolver.resolve(quad.material(), quad.face(), block);
-        if (appearance == null) return false;
-
-        float[] p = quad.positions();
-        tileModel.initialize();
-        tileModel.add(2);
-        TileModel target = tileModel.getTileModel();
-        int f1 = tileModel.getStart();
-        int f2 = f1 + 1;
-
-        target.setPositions(f1,
-                p[0]/16f,p[1]/16f,p[2]/16f,
-                p[3]/16f,p[4]/16f,p[5]/16f,
-                p[6]/16f,p[7]/16f,p[8]/16f);
-        target.setPositions(f2,
-                p[0]/16f,p[1]/16f,p[2]/16f,
-                p[6]/16f,p[7]/16f,p[8]/16f,
-                p[9]/16f,p[10]/16f,p[11]/16f);
-
-        target.setUvs(f1, 0f,1f, 1f,1f, 1f,0f);
-        target.setUvs(f2, 0f,1f, 1f,0f, 0f,0f);
-        target.setMaterialIndex(f1, appearance.textureIndex());
-        target.setMaterialIndex(f2, appearance.textureIndex());
-
-        Color tint = appearance.tint();
-        target.setColor(f1, tint.r, tint.g, tint.b);
-        target.setColor(f2, tint.r, tint.g, tint.b);
-
-        LightData light = block.getLightData();
-        target.setSunlight(f1, light.getSkyLight());
-        target.setSunlight(f2, light.getSkyLight());
-        target.setBlocklight(f1, light.getBlockLight());
-        target.setBlocklight(f2, light.getBlockLight());
-        target.setAOs(f1, 1f,1f,1f);
-        target.setAOs(f2, 1f,1f,1f);
-        return true;
     }
 
     private CopycatsMaterial materialFor(CopycatsTerrainBlockEntity entity, String part) {
