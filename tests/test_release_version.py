@@ -7,7 +7,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from release_version import next_version, normalize_version, version_from_tag  # noqa: E402
+from release_version import (  # noqa: E402
+    development_version,
+    next_version,
+    normalize_version,
+    version_from_tag,
+)
 
 
 class ReleaseVersionTest(unittest.TestCase):
@@ -21,6 +26,16 @@ class ReleaseVersionTest(unittest.TestCase):
         self.assertEqual("1.2.3", version_from_tag("v1.2.3"))
         with self.assertRaisesRegex(ValueError, "must start with 'v'"):
             version_from_tag("1.2.3")
+
+    def test_development_version_uses_short_commit_sha(self) -> None:
+        self.assertEqual(
+            "1.2.3-dev.a1b2c3d4",
+            development_version("1.2.3", "a1b2c3d4e5f67890"),
+        )
+        with self.assertRaisesRegex(ValueError, "stable semantic version"):
+            development_version("1.2.3-rc.1", "a1b2c3d4")
+        with self.assertRaisesRegex(ValueError, "invalid git SHA"):
+            development_version("1.2.3", "not-a-sha")
 
     def test_patch_minor_and_major_bumps_use_highest_stable_baseline(self) -> None:
         tags = ["v1.2.2", "v1.3.0-beta.1", "not-a-release", "v1.1.9"]
