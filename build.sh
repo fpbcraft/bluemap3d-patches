@@ -96,6 +96,8 @@ cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/api/ScenePersistencePo
 mkdir -p core/src/test/java/dev/duzo/bluemap3d/bake
 cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryTest.java" \
    core/src/test/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryTest.java
+cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/EntityModelSourceTest.java" \
+   core/src/test/java/dev/duzo/bluemap3d/bake/EntityModelSourceTest.java
 mkdir -p core/src/main/resources/assets/bluemap3d/models/block
 cp "$ROOT/overrides/core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json" \
    core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json
