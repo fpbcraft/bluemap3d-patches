@@ -51,6 +51,7 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
     private static final Path FILE =
             Path.of("config", "bluemap3d", "cache", "scene-objects.json");
     private static final long SAVE_INTERVAL_NANOS = 5_000_000_000L;
+    private static final int CACHE_FORMAT_VERSION = 5;
 
     private static final Object LOCK = new Object();
     private static final Map<String, SavedObject> SAVED = new ConcurrentHashMap<>();
@@ -126,16 +127,23 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
     }
 
     @Override
+    public Collection<String> authoritativeObjectPrefixes(ServerLevel level) {
+        return delegate.authoritativeObjectPrefixes(level);
+    }
+
+    @Override
     public Collection<? extends SceneObject> objects(ServerLevel level) {
         ensureLoaded();
 
         Collection<? extends SceneObject> live = delegate.objects(level);
         Map<String, SceneObject> merged = new LinkedHashMap<>();
+        Set<String> liveIds = new HashSet<>();
 
         if (live != null) {
             for (SceneObject object : live) {
                 if (object == null) continue;
                 merged.put(object.id(), object);
+                liveIds.add(object.id());
 
                 SavedObject snapshot = SavedObject.from(id(), object);
                 String key = key(id(), object.id());
@@ -158,6 +166,26 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
         }
 
         String dimension = level.dimension().location().toString();
+
+        // A provider can positively declare a logical-child scope complete. Remove saved
+        // children that no longer exist inside that scope while preserving every other
+        // missing object as merely unloaded.
+        Collection<String> authoritative = delegate.authoritativeObjectPrefixes(level);
+        if (authoritative != null && !authoritative.isEmpty()) {
+            for (String prefix : authoritative) {
+                if (prefix == null || prefix.isBlank()) continue;
+                for (SavedObject saved : List.copyOf(SAVED.values())) {
+                    if (!id().equals(saved.provider)
+                            || !dimension.equals(saved.dimension)
+                            || !saved.id.startsWith(prefix)
+                            || liveIds.contains(saved.id)) {
+                        continue;
+                    }
+                    removeSnapshot(id(), saved.id);
+                }
+            }
+        }
+
         for (SavedObject saved : SAVED.values()) {
             if (!id().equals(saved.provider) || !dimension.equals(saved.dimension)) continue;
             if (merged.containsKey(saved.id)) continue;
@@ -193,15 +221,78 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
             if (Files.isRegularFile(FILE)) {
                 try (var reader = Files.newBufferedReader(FILE)) {
                     JsonElement parsed = JsonParser.parseReader(reader);
+                    JsonArray entries = null;
+                    int sourceFormat = 1;
+
                     if (parsed.isJsonArray()) {
-                        for (JsonElement element : parsed.getAsJsonArray()) {
-                            SavedObject saved = GSON.fromJson(element, SavedObject.class);
-                            if (saved != null && saved.valid()) {
-                                SAVED.put(key(saved.provider, saved.id), saved);
-                                // The cache is only written after mesh publication.
-                                PUBLISHED.put(key(saved.provider, saved.id), saved.version);
-                            }
+                        entries = parsed.getAsJsonArray();
+                    } else if (parsed.isJsonObject()) {
+                        JsonObject root = parsed.getAsJsonObject();
+                        if (root.has("formatVersion")) {
+                            sourceFormat = root.get("formatVersion").getAsInt();
                         }
+                        if (root.has("objects") && root.get("objects").isJsonArray()) {
+                            entries = root.getAsJsonArray("objects");
+                        }
+                    }
+
+                    if (entries != null) {
+                        int droppedCreate = 0;
+                        int droppedSable = 0;
+                        int droppedSprings = 0;
+                        int droppedRopes = 0;
+
+                        // v3 introduced deletion/topology cleanup for Create and Simulated
+                        // springs. v4 added Sable sub-level deletion. v5 adds real rope
+                        // destruction, distinct from ordinary chunk unload. Keep migrations
+                        // provider-specific so later upgrades do not discard corrected data.
+                        boolean preV3 = sourceFormat < 3;
+                        boolean preV4 = sourceFormat < 4;
+                        boolean preV5 = sourceFormat < 5;
+
+                        for (JsonElement element : entries) {
+                            SavedObject saved = GSON.fromJson(element, SavedObject.class);
+                            if (saved == null || !saved.valid()) continue;
+
+                            if (preV3 && "create_contraptions".equals(saved.provider)) {
+                                droppedCreate++;
+                                dirty = true;
+                                continue;
+                            }
+                            if (preV4 && "sable_ships".equals(saved.provider)) {
+                                droppedSable++;
+                                dirty = true;
+                                continue;
+                            }
+                            if (preV3 && "simulated_springs".equals(saved.provider)) {
+                                droppedSprings++;
+                                dirty = true;
+                                continue;
+                            }
+                            if (preV5 && "simulated_ropes".equals(saved.provider)) {
+                                droppedRopes++;
+                                dirty = true;
+                                continue;
+                            }
+
+                            SAVED.put(key(saved.provider, saved.id), saved);
+                            PUBLISHED.put(key(saved.provider, saved.id), saved.version);
+                        }
+
+                        if (droppedCreate > 0 || droppedSable > 0
+                                || droppedSprings > 0 || droppedRopes > 0) {
+                            LOGGER.info(
+                                    "Migrated scene cache v{} -> v{}: dropped {} Create, {} Sable, "
+                                            + "{} spring and {} rope snapshot(s); authoritative "
+                                            + "providers will repopulate current objects",
+                                    sourceFormat,
+                                    CACHE_FORMAT_VERSION,
+                                    droppedCreate,
+                                    droppedSable,
+                                    droppedSprings,
+                                    droppedRopes);
+                        }
+                        if (sourceFormat < CACHE_FORMAT_VERSION) dirty = true;
                     }
                 } catch (IOException | RuntimeException error) {
                     LOGGER.warn("Could not read generic scene-object cache {}", FILE, error);
@@ -246,6 +337,14 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
                         || !row.has("mesh")) continue;
 
                 String provider = row.get("provider").getAsString();
+
+                // Sable has its own snapshot restore path and, more importantly, its
+                // provider receives authoritative REMOVED vs UNLOADED lifecycle events.
+                // Importing Sable rows from an old live feed can resurrect an orphaned
+                // sub-level whose deletion happened before generic persistence learned it.
+                if ("sable_ships".equals(provider)
+                        || "simulated_ropes".equals(provider)) continue;
+
                 String fullId = row.get("id").getAsString();
                 String id = fullId.startsWith(provider + "/")
                         ? fullId.substring(provider.length() + 1)
@@ -319,7 +418,10 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
             Files.createDirectories(FILE.getParent());
             Path tmp = FILE.resolveSibling(FILE.getFileName() + ".tmp");
             try (var writer = Files.newBufferedWriter(tmp)) {
-                GSON.toJson(new ArrayList<>(SAVED.values()), writer);
+                JsonObject root = new JsonObject();
+                root.addProperty("formatVersion", CACHE_FORMAT_VERSION);
+                root.add("objects", GSON.toJsonTree(new ArrayList<>(SAVED.values())));
+                GSON.toJson(root, writer);
             }
             try {
                 Files.move(tmp, FILE, StandardCopyOption.REPLACE_EXISTING,

@@ -217,6 +217,19 @@ Providers report positive destruction/disassembly through `deletedObjectIds()`. 
 that are intentionally transient can opt into `LIVE_ONLY`; the Create belt and conveyor
 animation overlays do this.
 
+Sable sub-level removal is one such positive lifecycle event. A sub-level removed with
+`SubLevelRemovalReason.REMOVED` is deleted from both the Sable snapshot cache and generic
+scene persistence; `UNLOADED` remains restorable. Generic scene cache format v4 performs
+a one-time purge of older `sable_ships` snapshots so orphan ghosts created by previous
+builds are removed automatically on upgrade.
+
+Create: Simulated ropes use the same distinction. `ServerLevelRopeManager.removeStrand()`
+is used for both chunk unload and destruction, so BlueMap3D deliberately does not treat it
+as deletion. Instead, `RopeStrandHolderBehavior.destroyRope()` queues positive destruction
+of that rope UUID. The next provider publish declares the rope's `<uuid>/` child family
+authoritatively empty, removing every persisted segment and knot. Scene cache format v5
+purges pre-fix rope snapshots once so existing rope ghosts are cleaned automatically.
+
 On the first upgrade from an older build, core can seed the generic cache from the previous
 `entities3d.json` feed. The older Sable-child cache is retained temporarily as a migration
 source, not as the primary persistence architecture.
@@ -238,7 +251,7 @@ The goal is to avoid an addon-per-mod architecture.
 
 ## Migrating from 1.0.28
 
-Remove the old native addon JARs before installing 1.1.5:
+Remove the old native addon JARs before installing 1.1.11:
 
 ```text
 config/bluemap/packs/bluemap-copycats-compat-1.0.28.jar
@@ -246,7 +259,7 @@ config/bluemap/packs/bluemap-trafficcraft-compat-1.0.28.jar
 config/bluemap/packs/bluemap-foliage-compat-1.0.28.jar
 ```
 
-Replace them with the single `bluemap-compat-1.1.5.jar`. Keeping the old addons installed
+Replace them with the single `bluemap-compat-1.1.11.jar`. Keeping the old addons installed
 would register duplicate renderer/block-entity hooks.
 
 

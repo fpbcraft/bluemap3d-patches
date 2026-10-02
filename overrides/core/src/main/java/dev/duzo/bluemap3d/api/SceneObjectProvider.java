@@ -41,6 +41,19 @@ public interface SceneObjectProvider {
         return List.of();
     }
 
+    /**
+     * Prefixes whose child topology is known to be complete for this publish.
+     *
+     * <p>This is for logical objects represented by a variable number of scene children,
+     * such as a rope made of segment/knot objects. Persistent core may remove saved child
+     * ids under one of these prefixes when the provider no longer reports them. An
+     * unloaded logical object must not return its prefix, so its last-known children stay
+     * restorable.
+     */
+    default Collection<String> authoritativeObjectPrefixes(ServerLevel level) {
+        return List.of();
+    }
+
     default Collection<ResourceLocation> hiddenBlocks() {
         return List.of();
     }
