@@ -57,7 +57,10 @@ final class CopycatsAppearanceResolver {
         for (Element element : model.getElements()) {
             if (element != null) faces.add(element.getFaces());
         }
-        Face selected = selectPreferredFace(faces, wantedFace);
+        Face selected = CopycatsFaceSelector.selectPreferredFace(
+                faces,
+                wantedFace,
+                List.of(Direction.values()));
         if (selected == null) return null;
 
         ResourcePath<Texture> texture =
@@ -73,24 +76,6 @@ final class CopycatsAppearanceResolver {
             if (tint.a < 0) tint.set(1f, 1f, 1f, 1f, true);
         }
         return new Appearance(textureIndex, tint);
-    }
-
-    static <T> T selectPreferredFace(
-            List<? extends Map<Direction, T>> faceSets,
-            Direction wantedFace) {
-        for (Map<Direction, T> faces : faceSets) {
-            T face = faces.get(wantedFace);
-            if (face != null) return face;
-        }
-
-        for (Map<Direction, T> faces : faceSets) {
-            for (Direction direction : Direction.values()) {
-                T face = faces.get(direction);
-                if (face != null) return face;
-            }
-        }
-
-        return null;
     }
 
     record Appearance(int textureIndex, Color tint) {
