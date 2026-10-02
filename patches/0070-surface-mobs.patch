@@ -1,7 +1,7 @@
 diff --git a/settings.gradle b/settings.gradle
 --- a/settings.gradle
 +++ b/settings.gradle
-@@ -24,6 +24,7 @@ include("addon-turtles")
+@@ -25,6 +25,7 @@
  include("addon-sable")
  include("addon-create")
  include("addon-compat")
@@ -12,7 +12,8 @@ diff --git a/settings.gradle b/settings.gradle
 diff --git a/build.gradle b/build.gradle
 --- a/build.gradle
 +++ b/build.gradle
-@@ -8,7 +8,7 @@ evaluationDependsOnChildren()
+@@ -9,7 +9,7 @@
+ // ---------------------------------------------------------------------------------
  // Bundle jar
  //
 -// Interim distribution is ONE jar: core, with the three addons jar-in-jar'd. NeoForge
@@ -20,7 +21,7 @@ diff --git a/build.gradle b/build.gradle
  // loads nested jars from META-INF/jarjar/ using metadata.json, so this is pure
  // packaging - no source changes, and no extra mod id. Publishing the four artifacts
  // separately later means not running this task, nothing more.
-@@ -17,7 +17,7 @@ evaluationDependsOnChildren()
+@@ -18,7 +18,7 @@
  // dev.eriksonn.aeronautics.aeronautics-neoforge.
  // ---------------------------------------------------------------------------------
  
@@ -29,10 +30,19 @@ diff --git a/build.gradle b/build.gradle
  
  def bundleMetadata = tasks.register('bundleMetadata') {
      description = 'Generates META-INF/jarjar/metadata.json listing the nested addon jars.'
-@@ -47,7 +47,7 @@ tasks.register('bundleJar', Jar) {
+@@ -52,7 +52,7 @@
+ 
+ tasks.register('bundleJar', Jar) {
      group = 'build'
 -    description = 'Builds the single-jar distribution: core with all three addons nested.'
 +    description = 'Builds the single-jar distribution: core with all four addons nested.'
      archiveBaseName = 'bluemap3d-bundle'
      archiveVersion = "${version}-${minecraft_version}"
      destinationDirectory = layout.buildDirectory.dir('libs')
+@@ -90,5 +90,5 @@
+     }
+ }
+ 
+-// Not wired into `assemble` on purpose: `./gradlew build` should build the four
++// Not wired into `assemble` on purpose: `./gradlew build` should build the five
+ // publishable modules, and the bundle is a separate, explicit distribution step.
