@@ -22,6 +22,16 @@ jobs:
           java-version: '21'
           cache: gradle
 
+      - name: Validate release tooling
+        shell: bash
+        run: |
+          python3 -m py_compile .github/scripts/release_version.py
+          BASE="$(python3 -c 'import json; print(json.load(open("release.json"))["version"])')"
+          python3 .github/scripts/release_version.py next \
+            --increment patch \
+            --fallback "${BASE}" \
+            --github-output /tmp/bluemap3d-release-version
+
       - name: Read release metadata
         id: release
         run: echo "version=$(python3 scripts/release_metadata.py --lines | sed -n '1p')" >> "$GITHUB_OUTPUT"
