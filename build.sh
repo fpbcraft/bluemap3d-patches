@@ -57,8 +57,13 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectLifecyc
    core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectLifecycle.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/PersistentSceneObjectProvider.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/PersistentSceneObjectProvider.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/ScenePersistencePolicy.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/ScenePersistencePolicy.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegment.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegment.java
+mkdir -p core/src/test/java/dev/duzo/bluemap3d/api
+cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/api/ScenePersistencePolicyTest.java" \
+   core/src/test/java/dev/duzo/bluemap3d/api/ScenePersistencePolicyTest.java
 mkdir -p core/src/main/resources/assets/bluemap3d/models/block
 cp "$ROOT/overrides/core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json" \
    core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json
@@ -115,7 +120,7 @@ python3 "$ROOT/scripts/patch-upstream.py"
 # Generate exhaustive static dispatch resources at build time.
 python3 "$ROOT/scripts/generate-static-resources.py"
 
-./gradlew clean bundleJar :addon-compat:build
+./gradlew clean :core:test bundleJar :addon-compat:build
 
 cp build/libs/bluemap3d-bundle-*.jar "$DIST/"
 
