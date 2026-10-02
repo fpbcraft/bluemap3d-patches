@@ -11,7 +11,6 @@ import net.minecraft.client.model.geom.LayerDefinitions;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.Bootstrap;
-import net.minecraft.server.Bootstrap;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -60,7 +59,7 @@ public final class VanillaEntityModelGenerator {
 
         SharedConstants.tryDetectVersion();
         installEmptyNeoForgeLoadingContext();
-        Bootstrap.bootStrap();
+        bootstrapRegistries();
 
         Map<String, JsonObject> generated = new TreeMap<>();
         for (var entry : LayerDefinitions.createRoots().entrySet()) {
