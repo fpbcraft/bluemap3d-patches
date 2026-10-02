@@ -57,6 +57,10 @@ jobs:
             tag="$GITHUB_REF_NAME"
             create_tag=false
           else
+            if [[ "$GITHUB_REF_NAME" != "${{ github.event.repository.default_branch }}" ]]; then
+              echo "::error::Manual releases must run from the default branch."
+              exit 1
+            fi
             base="$(python3 scripts/release_metadata.py --base-version)"
             version="$(python3 scripts/release_version.py next --bump "$BUMP" --fallback "$base" --exact "$EXACT_VERSION")"
             tag="v$version"
