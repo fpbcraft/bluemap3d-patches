@@ -13,35 +13,6 @@ def replace(path, old, new):
         raise SystemExit(f"expected text not found in {path}: {old!r}")
     p.write_text(s.replace(old, new))
 
-p = Path("settings.gradle")
-s = p.read_text()
-needle = 'include("addon-create")'
-if needle not in s:
-    raise SystemExit("settings.gradle addon insertion point not found")
-s = s.replace(
-    needle,
-    needle + '\ninclude("addon-compat")',
-    1,
-)
-p.write_text(s)
-
-# Create contraptions can exist inside Sable's hidden plot space (Aeronautics propellers).
-# Compile against Sable so the Create provider can project those child contraptions through
-# their owning ship's pose before publishing them to BlueMap3D.
-p = Path("addon-create/build.gradle")
-s = p.read_text()
-needle = '    compileOnly "net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1"\n'
-if needle not in s:
-    raise SystemExit("addon-create Sable dependency insertion point not found")
-s = s.replace(
-    needle,
-    needle
-        + '\n    compileOnly("dev.ryanhcode.sable:sable-neoforge-${minecraft_version}:${sable_version}") { transitive = false }\n'
-        + '    compileOnly "dev.ryanhcode.sable-companion:sable-companion-common-${minecraft_version}:${sable_companion_version}"\n',
-    1,
-)
-p.write_text(s)
-
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
     "GEOMETRY_REVISION + 15",
@@ -147,20 +118,6 @@ ship_source = ship_source.replace(
 )
 
 p.write_text(ship_source)
-
-# Register the optional Create: Simulated spring lifecycle mixin.
-p = Path("addon-create/src/main/resources/META-INF/neoforge.mods.toml")
-create_toml = p.read_text()
-if 'config="bluemap3d_create.mixins.json"' not in create_toml:
-    create_toml += '\n[[mixins]]\nconfig="bluemap3d_create.mixins.json"\n'
-p.write_text(create_toml)
-
-# Register the addon-sable mixin that receives Sable's authoritative server block changes.
-p = Path("addon-sable/src/main/resources/META-INF/neoforge.mods.toml")
-sable_toml = p.read_text()
-if 'config="bluemap3d_sable.mixins.json"' not in sable_toml:
-    sable_toml += '\n[[mixins]]\nconfig="bluemap3d_sable.mixins.json"\n'
-p.write_text(sable_toml)
 
 p = Path("addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java")
 s = p.read_text()
@@ -940,47 +897,6 @@ s = s.replace(terrain_methods_anchor, terrain_methods + terrain_methods_anchor, 
 
 p.write_text(s)
 
-# Register the live chain-conveyor overlay provider beside the existing bearing provider.
-p = Path("addon-create/src/main/java/dev/duzo/bluemap3d/create/CreateAddon.java")
-s = p.read_text()
-field_needle = '    private final BearingProvider bearings = new BearingProvider(chunks);'
-if field_needle not in s:
-    raise SystemExit("CreateAddon chain provider field insertion point not found")
-s = s.replace(
-    field_needle,
-    field_needle
-        + '\n    private final ChainConveyorProvider chainConveyors = new ChainConveyorProvider(chunks);'
-        + '\n    private final BeltProvider belts = new BeltProvider(chunks);'
-        + '\n    private final SimulatedRopeProvider simulatedRopes = new SimulatedRopeProvider();'
-        + '\n    private final SimulatedSpringProvider simulatedSprings = new SimulatedSpringProvider(chunks);',
-    1,
-)
-register_needle = '        BlueMap3D.register(bearings);'
-if register_needle not in s:
-    raise SystemExit("CreateAddon chain provider registration point not found")
-s = s.replace(
-    register_needle,
-    register_needle
-        + '\n        BlueMap3D.register(chainConveyors);'
-        + '\n        BlueMap3D.register(belts);'
-        + '\n        BlueMap3D.register(simulatedRopes);'
-        + '\n        BlueMap3D.register(simulatedSprings);',
-    1,
-)
-clear_needle = '        bearings.clear();'
-if clear_needle not in s:
-    raise SystemExit("CreateAddon chain provider clear point not found")
-s = s.replace(
-    clear_needle,
-    clear_needle
-        + '\n        chainConveyors.clear();'
-        + '\n        belts.clear();'
-        + '\n        simulatedRopes.clear();'
-        + '\n        simulatedSprings.clear();',
-    1,
-)
-p.write_text(s)
-
 # Translate ModelAttachment.Loop into the existing fixed-size BM3D node trailer.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java")
 s = p.read_text()
@@ -1021,25 +937,6 @@ replace(
     'var BUILD = "core-history-43-rope-removal";',
 )
 replace("gradle.properties", "version=1.0.9", f"version={VERSION}")
-
-# Core persistence contracts run against the patched source before the bundle is packaged.
-p = Path("core/build.gradle")
-core_build = p.read_text()
-test_config = """
-dependencies {
-    testImplementation platform('org.junit:junit-bom:5.11.4')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-
-tasks.named('test') {
-    useJUnitPlatform()
-}
-"""
-if "testImplementation 'org.junit.jupiter:junit-jupiter'" not in core_build:
-    core_build += test_config
-p.write_text(core_build)
-
 
 # Make restore/history lifecycle generic at the provider registry boundary.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")
