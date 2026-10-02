@@ -11,7 +11,7 @@ class EntityModelSourceTest {
     void layerNameCannotCreateCrossEntityMatch() {
         assertEquals(
                 0,
-                EntityModelSource.assetMatchScore(
+                EntityAssetMatch.score(
                         "cow",
                         "minecraft:sheep#fur",
                         "fur"));
@@ -20,7 +20,7 @@ class EntityModelSourceTest {
     @Test
     void exactEntityLayerRanksStrongly() {
         assertTrue(
-                EntityModelSource.assetMatchScore(
+                EntityAssetMatch.score(
                         "sheep",
                         "minecraft:sheep#fur",
                         "fur") > 0);
@@ -29,7 +29,7 @@ class EntityModelSourceTest {
     @Test
     void nestedModGeoModelMatchesRegistryId() {
         assertTrue(
-                EntityModelSource.assetMatchScore(
+                EntityAssetMatch.score(
                         "giraffe",
                         "assets/naturalist/geo/entity/giraffe_baby.geo.json",
                         "main") > 0);
