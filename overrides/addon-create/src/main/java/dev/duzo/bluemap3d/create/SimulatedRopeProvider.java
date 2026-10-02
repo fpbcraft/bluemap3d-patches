@@ -83,6 +83,15 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
         Map<UUID, RopeSnapshot> cache =
                 lastKnown.computeIfAbsent(level, ignored -> new HashMap<>());
 
+        // destroyRope() is positive destruction evidence. Keep the logical family
+        // authoritative for one publish with zero live children so generic persistence
+        // deletes every saved segment/knot for that rope. Ordinary manager removal caused
+        // by chunk unload never enters this registry and therefore remains restorable.
+        Set<UUID> destroyed = SimulatedRopeRegistry.drainRemoved(level);
+        for (UUID id : destroyed) {
+            cache.remove(id);
+        }
+
         try {
             Collection<?> strands = access.strands(level);
             Set<UUID> seen = new HashSet<>();
@@ -105,9 +114,14 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
             cache.keySet().retainAll(seen);
             Set<String> prefixes = new HashSet<>();
             for (UUID id : seen) prefixes.add(id + "/");
+            for (UUID id : destroyed) prefixes.add(id + "/");
             authoritativePrefixes.put(level, Set.copyOf(prefixes));
         } catch (ReflectiveOperationException | RuntimeException error) {
-            authoritativePrefixes.put(level, Set.of());
+            // Destruction events are independent positive evidence; preserve their empty
+            // authoritative families even if live strand enumeration failed this pass.
+            Set<String> prefixes = new HashSet<>();
+            for (UUID id : destroyed) prefixes.add(id + "/");
+            authoritativePrefixes.put(level, Set.copyOf(prefixes));
             if (!warned) {
                 warned = true;
                 LOGGER.warn(
@@ -186,6 +200,7 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
     public void clear() {
         lastKnown.clear();
         authoritativePrefixes.clear();
+        SimulatedRopeRegistry.clear();
     }
 
     private SimulatedApi api() {

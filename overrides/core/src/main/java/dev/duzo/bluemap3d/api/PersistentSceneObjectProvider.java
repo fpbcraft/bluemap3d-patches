@@ -51,7 +51,7 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
     private static final Path FILE =
             Path.of("config", "bluemap3d", "cache", "scene-objects.json");
     private static final long SAVE_INTERVAL_NANOS = 5_000_000_000L;
-    private static final int CACHE_FORMAT_VERSION = 4;
+    private static final int CACHE_FORMAT_VERSION = 5;
 
     private static final Object LOCK = new Object();
     private static final Map<String, SavedObject> SAVED = new ConcurrentHashMap<>();
@@ -240,13 +240,15 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
                         int droppedCreate = 0;
                         int droppedSable = 0;
                         int droppedSprings = 0;
+                        int droppedRopes = 0;
 
                         // v3 introduced deletion/topology cleanup for Create and Simulated
-                        // springs. v4 adds the missing positive-deletion path for Sable
-                        // sub-levels themselves. Keep the migrations provider-specific so
-                        // upgrading v3 -> v4 does not discard unrelated corrected snapshots.
+                        // springs. v4 added Sable sub-level deletion. v5 adds real rope
+                        // destruction, distinct from ordinary chunk unload. Keep migrations
+                        // provider-specific so later upgrades do not discard corrected data.
                         boolean preV3 = sourceFormat < 3;
                         boolean preV4 = sourceFormat < 4;
+                        boolean preV5 = sourceFormat < 5;
 
                         for (JsonElement element : entries) {
                             SavedObject saved = GSON.fromJson(element, SavedObject.class);
@@ -267,21 +269,28 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
                                 dirty = true;
                                 continue;
                             }
+                            if (preV5 && "simulated_ropes".equals(saved.provider)) {
+                                droppedRopes++;
+                                dirty = true;
+                                continue;
+                            }
 
                             SAVED.put(key(saved.provider, saved.id), saved);
                             PUBLISHED.put(key(saved.provider, saved.id), saved.version);
                         }
 
-                        if (droppedCreate > 0 || droppedSable > 0 || droppedSprings > 0) {
+                        if (droppedCreate > 0 || droppedSable > 0
+                                || droppedSprings > 0 || droppedRopes > 0) {
                             LOGGER.info(
-                                    "Migrated scene cache v{} -> v{}: dropped {} Create, {} Sable "
-                                            + "and {} spring snapshot(s); authoritative providers "
-                                            + "will repopulate current objects",
+                                    "Migrated scene cache v{} -> v{}: dropped {} Create, {} Sable, "
+                                            + "{} spring and {} rope snapshot(s); authoritative "
+                                            + "providers will repopulate current objects",
                                     sourceFormat,
                                     CACHE_FORMAT_VERSION,
                                     droppedCreate,
                                     droppedSable,
-                                    droppedSprings);
+                                    droppedSprings,
+                                    droppedRopes);
                         }
                         if (sourceFormat < CACHE_FORMAT_VERSION) dirty = true;
                     }
@@ -333,7 +342,8 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
                 // provider receives authoritative REMOVED vs UNLOADED lifecycle events.
                 // Importing Sable rows from an old live feed can resurrect an orphaned
                 // sub-level whose deletion happened before generic persistence learned it.
-                if ("sable_ships".equals(provider)) continue;
+                if ("sable_ships".equals(provider)
+                        || "simulated_ropes".equals(provider)) continue;
 
                 String fullId = row.get("id").getAsString();
                 String id = fullId.startsWith(provider + "/")
