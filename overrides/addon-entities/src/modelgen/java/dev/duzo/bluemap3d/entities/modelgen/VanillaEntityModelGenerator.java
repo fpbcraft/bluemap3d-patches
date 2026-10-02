@@ -10,6 +10,7 @@ import net.minecraft.SharedConstants;
 import net.minecraft.client.model.geom.LayerDefinitions;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.server.Bootstrap;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -57,6 +58,8 @@ public final class VanillaEntityModelGenerator {
         }
 
         SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+
         Map<String, JsonObject> generated = new TreeMap<>();
         for (var entry : LayerDefinitions.createRoots().entrySet()) {
             ModelLayerLocation location = entry.getKey();
@@ -69,6 +72,16 @@ public final class VanillaEntityModelGenerator {
 
             if (!collector.isEmpty()) {
                 generated.put(location.getModel() + "#" + location.getLayer(), collector.toJson());
+            }
+        }
+
+        for (String required : new String[]{
+                "minecraft:sheep#main",
+                "minecraft:cow#main",
+                "minecraft:pig#main",
+                "minecraft:chicken#main"}) {
+            if (!generated.containsKey(required)) {
+                throw new IllegalStateException("Missing required entity model layer: " + required);
             }
         }
 
