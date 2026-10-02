@@ -146,7 +146,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             float y,
             float z) {
         if (!propertyBool(key)) return;
-        Material material = materialFor(entity, key);
+        CopycatsMaterial material = materialFor(entity, key);
         if (!usable(material)) return;
         cuboid(out, new Transform(), x, y, z, x + 8, y + 8, z + 8, material);
     }
@@ -158,13 +158,13 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         int rot = yRotation(property("facing"));
 
         if (positive > 0) {
-            Material material = materialFor(entity, "positive_layers");
+            CopycatsMaterial material = materialFor(entity, "positive_layers");
             if (usable(material)) {
                 addHalfLayer(out, material, positive, new Transform().rotateY(rot + 180));
             }
         }
         if (negative > 0) {
-            Material material = materialFor(entity, "negative_layers");
+            CopycatsMaterial material = materialFor(entity, "negative_layers");
             if (usable(material)) {
                 addHalfLayer(out, material, negative,
                         new Transform().flipX(true).rotateY(rot + 180));
@@ -175,7 +175,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
 
     private void addHalfLayer(
             List<Quad> out,
-            Material material,
+            CopycatsMaterial material,
             int layer,
             Transform transform) {
         float l = Math.max(0, Math.min(8, layer));
@@ -187,7 +187,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> flatPane(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
 
         Transform transform = new Transform();
@@ -202,7 +202,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> verticalStairs(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
 
         int facing = yRotation(property("facing"));
@@ -224,7 +224,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         return out;
     }
 
-    private void stairStraight(List<Quad> out, Transform t, Material m) {
+    private void stairStraight(List<Quad> out, Transform t, CopycatsMaterial m) {
         piece(out,t,0,0,0,  0,0,0,   16,4,8,m);
         piece(out,t,0,4,0,  0,12,0,  16,16,8,m);
         piece(out,t,0,0,8,  0,0,8,   16,8,16,m);
@@ -232,7 +232,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         piece(out,t,0,8,12, 0,8,12,  16,16,16,m);
     }
 
-    private void stairInner(List<Quad> out, Transform t, Material m) {
+    private void stairInner(List<Quad> out, Transform t, CopycatsMaterial m) {
         piece(out,t,0,0,0,   0,0,0,   8,4,8,m);
         piece(out,t,0,4,0,   0,12,0,  8,16,8,m);
         piece(out,t,0,0,8,   0,0,8,   16,8,16,m);
@@ -244,7 +244,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         piece(out,t,8,0,0,   8,0,0,   16,8,8,m);
     }
 
-    private void stairOuter(List<Quad> out, Transform t, Material m) {
+    private void stairOuter(List<Quad> out, Transform t, CopycatsMaterial m) {
         piece(out,t,0,0,0,   0,0,0,   8,4,16,m);
         piece(out,t,0,4,0,   0,12,0,  8,16,16,m);
         piece(out,t,8,0,0,   8,0,0,   16,4,8,m);
@@ -262,18 +262,18 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         List<Quad> out = new ArrayList<>();
 
         if (!"top".equals(type)) {
-            Material bottom = materialFor(entity, "bottom");
+            CopycatsMaterial bottom = materialFor(entity, "bottom");
             if (usable(bottom)) addSlabHalf(out, axis, true, bottom);
         }
         if (!"bottom".equals(type)) {
-            Material top = materialFor(entity, "top");
+            CopycatsMaterial top = materialFor(entity, "top");
             if (usable(top)) addSlabHalf(out, axis, false, top);
         }
         return out;
     }
 
     private List<Quad> connectedSlab(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
 
         String type = property("type");
@@ -288,7 +288,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             List<Quad> out,
             String axis,
             boolean bottomPart,
-            Material material) {
+            CopycatsMaterial material) {
         if ("y".equals(axis)) {
             Transform t = new Transform().flipY(!bottomPart);
             cuboid(out, t, 0, 0, 0, 16, 4, 16, material);
@@ -308,7 +308,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> slopeLayer(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
 
         int layer = propertyInt("layers");
@@ -343,7 +343,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         for (Direction face : Direction.values()) {
             String key = face.name().toLowerCase(java.util.Locale.ROOT);
             if (!propertyBool(key)) continue;
-            Material material = materialFor(entity, key);
+            CopycatsMaterial material = materialFor(entity, key);
             if (!usable(material)) continue;
 
             switch (face) {
@@ -359,7 +359,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> verticalSlice(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
         float layers = Math.max(1, Math.min(8, propertyInt("layers")));
         float size = layers * 2f;
@@ -370,7 +370,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> slice(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
         float layers = Math.max(1, Math.min(8, propertyInt("layers")));
         float size = layers * 2f;
@@ -383,7 +383,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> cornerSlice(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
         float layers = Math.max(1, Math.min(8, propertyInt("layers")));
         float size = layers * 2f;
@@ -396,7 +396,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> layer(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
         float layers = Math.max(1, Math.min(8, propertyInt("layers")));
         float size = layers * 2f;
@@ -421,7 +421,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         List<Quad> out = new ArrayList<>();
 
         if (negative > 0) {
-            Material material = materialFor(entity, "negative_layers");
+            CopycatsMaterial material = materialFor(entity, "negative_layers");
             if (usable(material)) {
                 float size = Math.min(8, negative) * 2f;
                 Transform t = new Transform().rotateY(rot).flipY(top);
@@ -429,7 +429,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             }
         }
         if (positive > 0) {
-            Material material = materialFor(entity, "positive_layers");
+            CopycatsMaterial material = materialFor(entity, "positive_layers");
             if (usable(material)) {
                 float size = Math.min(8, positive) * 2f;
                 Transform t = new Transform().rotateY(rot + 180).flipY(top);
@@ -446,7 +446,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         List<Quad> out = new ArrayList<>();
 
         if (negative > 0) {
-            Material material = materialFor(entity, "negative_layers");
+            CopycatsMaterial material = materialFor(entity, "negative_layers");
             if (usable(material)) {
                 float size = Math.min(8, negative) * 2f;
                 cuboid(out, new Transform().rotateY(rot),
@@ -454,7 +454,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             }
         }
         if (positive > 0) {
-            Material material = materialFor(entity, "positive_layers");
+            CopycatsMaterial material = materialFor(entity, "positive_layers");
             if (usable(material)) {
                 float size = Math.min(8, positive) * 2f;
                 cuboid(out, new Transform().flipY(true).rotateY(rot),
@@ -465,7 +465,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> halfPanel(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
 
         String facing = property("facing");
@@ -499,7 +499,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> verticalStep(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
         List<Quad> out = new ArrayList<>();
         cuboid(out,
@@ -509,7 +509,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> beam(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
         Transform t = new Transform();
         String axis = property("axis");
@@ -536,7 +536,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             int i,
             int j) {
         if (!propertyBool(key)) return;
-        Material material = materialFor(entity, key);
+        CopycatsMaterial material = materialFor(entity, key);
         if (!usable(material)) return;
 
         String facing = property("facing");
@@ -559,7 +559,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> pressurePlate(CopycatsTerrainBlockEntity entity) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
         boolean powered = propertyBool("powered") || propertyInt("power") > 0;
         float height = powered ? 0.5f : 1f;
@@ -579,7 +579,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
     }
 
     private List<Quad> templateQuads(CopycatsTerrainBlockEntity entity, String id) {
-        Material material = materialFor(entity, null);
+        CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
 
         List<CopycatsTemplateGeometry.TemplateQuad> templateQuads =
@@ -599,7 +599,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             float dx, float dy, float dz,
             float sx1, float sy1, float sz1,
             float sx2, float sy2, float sz2,
-            Material material) {
+            CopycatsMaterial material) {
         cuboid(out, transform,
                 dx, dy, dz,
                 dx + (sx2 - sx1),
@@ -613,7 +613,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             Transform transform,
             float minX, float minY, float minZ,
             float maxX, float maxY, float maxZ,
-            Material material) {
+            CopycatsMaterial material) {
         float[][] c = {
                 p(minX,minY,minZ), p(minX,minY,maxZ),
                 p(maxX,minY,minZ), p(maxX,minY,maxZ),
@@ -632,7 +632,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             List<Quad> out,
             Transform transform,
             Direction materialFace,
-            Material material,
+            CopycatsMaterial material,
             float[] a, float[] b, float[] c, float[] d) {
         float[] positions = {
                 a[0],a[1],a[2],
@@ -684,7 +684,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         return true;
     }
 
-    private Appearance appearance(Material material, Direction wantedFace) {
+    private Appearance appearance(CopycatsMaterial material, Direction wantedFace) {
         BlockState materialState = material.asBlockState();
         var stateResource = resourcePack.getBlockState(materialState);
         if (stateResource == null) return null;
@@ -740,57 +740,12 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         return new Appearance(textureIndex, tint);
     }
 
-    private Material materialFor(CopycatsTerrainBlockEntity entity, String part) {
-        if (part != null && entity.materialData() instanceof Map<?, ?> data) {
-            Material specific = materialFromStorage(data.get(part));
-            if (usable(specific)) return specific;
-        }
-
-        Material direct = materialFromState(entity.material());
-        if (usable(direct)) return direct;
-
-        if (entity.materialData() instanceof Map<?, ?> data) {
-            for (Object value : data.values()) {
-                Material fallback = materialFromStorage(value);
-                if (usable(fallback)) return fallback;
-            }
-        }
-        return direct;
+    private CopycatsMaterial materialFor(CopycatsTerrainBlockEntity entity, String part) {
+        return CopycatsMaterialResolver.materialFor(entity, part);
     }
 
-    private static Material materialFromStorage(Object raw) {
-        if (!(raw instanceof Map<?, ?> storage)) return null;
-        Object material = storage.containsKey("material")
-                ? storage.get("material")
-                : storage.get("Material");
-        return materialFromState(material);
-    }
-
-    private static Material materialFromState(Object raw) {
-        if (!(raw instanceof Map<?, ?> state)) return null;
-        Object nameValue = state.containsKey("Name") ? state.get("Name") : state.get("name");
-        if (!(nameValue instanceof String name) || name.isBlank()) return null;
-
-        Map<String, String> properties = new LinkedHashMap<>();
-        Object rawProperties = state.containsKey("Properties")
-                ? state.get("Properties")
-                : state.get("properties");
-        if (rawProperties instanceof Map<?, ?> map) {
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                if (entry.getKey() instanceof String key
-                        && entry.getValue() instanceof String value) {
-                    properties.put(key, value);
-                }
-            }
-        }
-        return new Material(name, Map.copyOf(properties));
-    }
-
-    private static boolean usable(Material material) {
-        return material != null
-                && !"create:copycat_base".equals(material.id())
-                && !"copycats:copycat_base".equals(material.id())
-                && !"minecraft:air".equals(material.id());
+    private static boolean usable(CopycatsMaterial material) {
+        return CopycatsMaterialResolver.usable(material);
     }
 
     private String property(String name) {
@@ -831,13 +786,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         }
     }
 
-    private record Material(String id, Map<String, String> properties) {
-        BlockState asBlockState() {
-            return new BlockState(id, properties);
-        }
-    }
-
-    private record Quad(float[] positions, Direction face, Material material) {
+    private record Quad(float[] positions, Direction face, CopycatsMaterial material) {
     }
 
     private record Appearance(int textureIndex, Color tint) {
