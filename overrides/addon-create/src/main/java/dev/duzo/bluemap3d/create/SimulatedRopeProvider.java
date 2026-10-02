@@ -18,7 +18,6 @@ import org.joml.Vector3dc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -126,7 +125,7 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
                 warned = true;
                 LOGGER.warn(
                         "Could not read Create: Simulated rope state; keeping last-known rope snapshots: {}",
-                        rootMessage(error));
+                        SimulatedReflection.rootMessage(error));
             }
         }
 
@@ -213,20 +212,10 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
                 LOGGER.debug("Create: Simulated is not installed; rope integration disabled");
             } catch (ReflectiveOperationException | RuntimeException error) {
                 LOGGER.warn("Create: Simulated was found but its rope API shape is unsupported: {}",
-                        rootMessage(error));
+                        SimulatedReflection.rootMessage(error));
             }
         }
         return api;
-    }
-
-    private static String rootMessage(Throwable error) {
-        Throwable current = error;
-        while (current.getCause() != null) {
-            current = current.getCause();
-        }
-        String message = current.getMessage();
-        return current.getClass().getSimpleName()
-                + (message == null || message.isBlank() ? "" : ": " + message);
     }
 
     private record RopeSnapshot(UUID id, List<Vec3> points) {
@@ -268,9 +257,8 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
         }
 
         static SimulatedApi discover() throws ReflectiveOperationException {
-            ClassLoader loader = SimulatedRopeProvider.class.getClassLoader();
-            Class<?> managerClass = Class.forName(MANAGER, false, loader);
-            Class<?> strandClass = Class.forName(STRAND, false, loader);
+            Class<?> managerClass = SimulatedReflection.loadClass(MANAGER);
+            Class<?> strandClass = SimulatedReflection.loadClass(STRAND);
 
             return new SimulatedApi(
                     managerClass.getMethod("getOrCreate", Level.class),
@@ -282,23 +270,23 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
         }
 
         Collection<?> strands(ServerLevel level) throws ReflectiveOperationException {
-            Object manager = invoke(getOrCreate, null, level);
+            Object manager = SimulatedReflection.invoke(getOrCreate, null, level);
             if (manager == null) {
                 return List.of();
             }
-            Object value = invoke(getAllStrands, manager);
+            Object value = SimulatedReflection.invoke(getAllStrands, manager);
             return value instanceof Collection<?> collection ? collection : List.of();
         }
 
         RopeSnapshot snapshot(Object strand) throws ReflectiveOperationException {
-            if (Boolean.TRUE.equals(invoke(isActive, strand))) {
+            if (Boolean.TRUE.equals(SimulatedReflection.invoke(isActive, strand))) {
                 // Mirrors Simulated's own ServerRopeTrackingSystem: copy the physics pose
                 // into the strand's point list before reading it for rendering.
-                invoke(updatePose, strand);
+                SimulatedReflection.invoke(updatePose, strand);
             }
 
-            Object uuidValue = invoke(getUuid, strand);
-            Object pointsValue = invoke(getPoints, strand);
+            Object uuidValue = SimulatedReflection.invoke(getUuid, strand);
+            Object pointsValue = SimulatedReflection.invoke(getPoints, strand);
             if (!(uuidValue instanceof UUID uuid) || !(pointsValue instanceof Iterable<?> points)) {
                 return null;
             }
@@ -316,20 +304,4 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
             return new RopeSnapshot(uuid, copy);
         }
 
-        private static Object invoke(Method method, Object target, Object... args)
-                throws ReflectiveOperationException {
-            try {
-                return method.invoke(target, args);
-            } catch (InvocationTargetException error) {
-                Throwable cause = error.getCause();
-                if (cause instanceof ReflectiveOperationException reflective) {
-                    throw reflective;
-                }
-                if (cause instanceof RuntimeException runtime) {
-                    throw runtime;
-                }
-                throw error;
-            }
-        }
-    }
 }
