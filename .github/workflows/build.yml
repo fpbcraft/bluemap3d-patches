@@ -22,6 +22,12 @@ jobs:
           java-version: '21'
           cache: gradle
 
+      - name: Resolve immutable build version
+        run: |
+          base="$(python3 scripts/release_metadata.py --base-version)"
+          version="$(python3 scripts/release_version.py dev --base "$base" --sha "$GITHUB_SHA")"
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+
       - name: Read release metadata
         id: release
         run: echo "version=$(python3 scripts/release_metadata.py --lines | sed -n '1p')" >> "$GITHUB_OUTPUT"
