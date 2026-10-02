@@ -238,7 +238,7 @@ The goal is to avoid an addon-per-mod architecture.
 
 ## Migrating from 1.0.28
 
-Remove the old native addon JARs before installing 1.1.6:
+Remove the old native addon JARs before installing 1.1.8:
 
 ```text
 config/bluemap/packs/bluemap-copycats-compat-1.0.28.jar
@@ -246,7 +246,7 @@ config/bluemap/packs/bluemap-trafficcraft-compat-1.0.28.jar
 config/bluemap/packs/bluemap-foliage-compat-1.0.28.jar
 ```
 
-Replace them with the single `bluemap-compat-1.1.6.jar`. Keeping the old addons installed
+Replace them with the single `bluemap-compat-1.1.8.jar`. Keeping the old addons installed
 would register duplicate renderer/block-entity hooks.
 
 
