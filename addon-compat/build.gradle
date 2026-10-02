@@ -17,8 +17,7 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    testImplementation "de.bluecolored:bluemap-core:5.7"
-    testImplementation "de.bluecolored:bluemap-common:5.7"
+    testRuntimeOnly 'com.google.code.gson:gson:2.10.1'
 }
 
 test {
