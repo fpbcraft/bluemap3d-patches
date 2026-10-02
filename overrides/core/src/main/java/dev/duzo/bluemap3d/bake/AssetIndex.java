@@ -318,7 +318,6 @@ public final class AssetIndex implements Closeable {
         }
         ownedFileSystems.clear();
         roots.clear();
-        modContents.clear();
         cache.clear();
         pathCache.clear();
     }
