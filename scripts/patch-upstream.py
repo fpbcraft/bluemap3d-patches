@@ -1022,6 +1022,25 @@ replace(
 )
 replace("gradle.properties", "version=1.0.9", f"version={VERSION}")
 
+# Core persistence contracts run against the patched source before the bundle is packaged.
+p = Path("core/build.gradle")
+core_build = p.read_text()
+test_config = """
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+"""
+if "testImplementation 'org.junit.jupiter:junit-jupiter'" not in core_build:
+    core_build += test_config
+p.write_text(core_build)
+
+
 # Make restore/history lifecycle generic at the provider registry boundary.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")
 bs = p.read_text()
