@@ -118,9 +118,9 @@ public final class SimulatedSpringProvider implements SceneObjectProvider {
 
             authoritativePrefixes.put(level, Set.copyOf(authoritative));
         } catch (ReflectiveOperationException | RuntimeException error) {
-            // Do not claim topology authority when enumeration failed; that would turn
-            // a transient reflection/provider failure into destructive persistence edits.
-            authoritativePrefixes.put(level, Set.of());
+            // Removal events are independent positive evidence. Preserve those empty
+            // authoritative prefixes even if one remaining live spring failed to snapshot.
+            authoritativePrefixes.put(level, Set.copyOf(authoritative));
             if (!warned) {
                 warned = true;
                 LOGGER.warn(
