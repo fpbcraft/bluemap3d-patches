@@ -1594,9 +1594,9 @@ index 0000000..d860ac3
 +            out.add(new ModelQuad(
 +                    cullFaceOf(from, to, surface),
 +                    surface,
-+                    ResourcePackSource.faceCorners(from, to, surface),
-+                    ResourcePackSource.uvCorners(
-+                            ResourcePackSource.autoUv(from, to, surface), 0),
++                    ResourcePackGeometry.faceCorners(from, to, surface),
++                    ResourcePackGeometry.uvCorners(
++                            ResourcePackGeometry.autoUv(from, to, surface), 0),
 +                    appearance.texture(),
 +                    appearance.tint()));
 +        }
@@ -1746,9 +1746,9 @@ index 0000000..c8bfbf8
 +                out.add(new ModelQuad(
 +                        cullFaceOf(from, to, face),
 +                        face,
-+                        ResourcePackSource.faceCorners(from, to, face),
-+                        ResourcePackSource.uvCorners(
-+                                ResourcePackSource.autoUv(from, to, face), 0),
++                        ResourcePackGeometry.faceCorners(from, to, face),
++                        ResourcePackGeometry.uvCorners(
++                                ResourcePackGeometry.autoUv(from, to, face), 0),
 +                        appearance.texture(),
 +                        appearance.tint()));
 +            }
@@ -2061,8 +2061,8 @@ index 0000000..9935e8e
 +            out.add(new ModelQuad(
 +                    null,
 +                    face,
-+                    ResourcePackSource.faceCorners(from, to, face),
-+                    ResourcePackSource.uvCorners(ResourcePackSource.autoUv(from, to, face), 0),
++                    ResourcePackGeometry.faceCorners(from, to, face),
++                    ResourcePackGeometry.uvCorners(ResourcePackGeometry.autoUv(from, to, face), 0),
 +                    appearance.texture(),
 +                    appearance.tint()));
 +        }
@@ -2079,13 +2079,13 @@ index 0000000..9935e8e
 +        for (Direction face : Direction.values()) {
 +            Direction rotatedFace = rotateY(face, turns);
 +            Appearance appearance = appearance(material, rotatedFace);
-+            float[] positions = ResourcePackSource.faceCorners(from, to, face);
++            float[] positions = ResourcePackGeometry.faceCorners(from, to, face);
 +            rotateY(positions, turns);
 +            out.add(new ModelQuad(
 +                    null,
 +                    rotatedFace,
 +                    positions,
-+                    ResourcePackSource.uvCorners(ResourcePackSource.autoUv(from, to, face), 0),
++                    ResourcePackGeometry.uvCorners(ResourcePackGeometry.autoUv(from, to, face), 0),
 +                    appearance.texture(),
 +                    appearance.tint()));
 +        }
