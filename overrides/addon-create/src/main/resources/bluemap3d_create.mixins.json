@@ -4,7 +4,8 @@
   "package": "dev.duzo.bluemap3d.create.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "SimulatedSpringBlockEntityMixin"
+    "SimulatedSpringBlockEntityMixin",
+    "SimulatedRopeStrandHolderMixin"
   ],
   "client": [],
   "injectors": {
