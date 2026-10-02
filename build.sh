@@ -44,6 +44,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSourc
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometry.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometry.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryMath.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryMath.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackModelResolver.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackModelResolver.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ProceduralBlockSource.java" \
