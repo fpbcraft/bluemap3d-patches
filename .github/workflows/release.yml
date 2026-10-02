@@ -1,0 +1,111 @@
+name: Semantic Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semantic version bump when exact version is empty
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      version:
+        description: Optional exact SemVer (for example 2.0.0 or 2.0.0-rc.1)
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Resolve release version
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EXACT_VERSION: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
+        run: |
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            version="$(python3 scripts/release_version.py from-tag "$GITHUB_REF_NAME")"
+            tag="$GITHUB_REF_NAME"
+            create_tag=false
+          else
+            base="$(python3 scripts/release_metadata.py --base-version)"
+            version="$(python3 scripts/release_version.py next --bump "$BUMP" --fallback "$base" --exact "$EXACT_VERSION")"
+            tag="v$version"
+            create_tag=true
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+              echo "::error::Release tag $tag already exists; release versions are immutable."
+              exit 1
+            fi
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "create_tag=$create_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build release artifacts
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: ./build.sh
+
+      - name: Upload verified release build
+        uses: actions/upload-artifact@v7
+        with:
+          name: bluemap3d-patches-${{ steps.release.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+          CREATE_TAG: ${{ steps.release.outputs.create_tag }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then
+            prerelease+=(--prerelease)
+          fi
+
+          assets=(
+            dist/bluemap3d-bundle-*.jar
+            "dist/bluemap-compat-$VERSION.jar"
+            "dist/BUILD_INFO.json"
+            "dist/MANIFEST.json"
+            "dist/bluemap3d-patches-$VERSION.zip"
+          )
+
+          if [[ "$CREATE_TAG" == "true" ]]; then
+            gh release create "$TAG" "${assets[@]}"               --target "$TARGET_SHA"               --title "$TAG"               --generate-notes               "${prerelease[@]}"
+          else
+            gh release create "$TAG" "${assets[@]}"               --verify-tag               --title "$TAG"               --generate-notes               "${prerelease[@]}"
+          fi
