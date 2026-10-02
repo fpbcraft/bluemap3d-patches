@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from release_metadata import load_release
+from release_metadata import build_release
 from transforms.contraption_provider import apply as patch_contraption_provider
 
-RELEASE = load_release()
+RELEASE = build_release()
 VERSION = RELEASE["version"]
 BLUEMAP_TARGET = RELEASE["blueMapVersion"]
 
