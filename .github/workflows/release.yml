@@ -1,0 +1,151 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semantic version bump
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - exact
+      exact_version:
+        description: Exact MAJOR.MINOR.PATCH when bump is exact
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Resolve release version
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            mapfile -t resolved < <(
+              python3 scripts/release_version.py --tag "$GITHUB_REF_NAME"
+            )
+            create_tag=false
+          else
+            if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+              echo "Manual releases must be dispatched from main; got $GITHUB_REF" >&2
+              exit 1
+            fi
+
+            fallback="$(python3 scripts/release_metadata.py --lines | sed -n '1p')"
+            mapfile -t resolved < <(
+              python3 scripts/release_version.py                 --bump "${{ inputs.bump }}"                 --fallback "$fallback"                 --exact "${{ inputs.exact_version }}"
+            )
+            create_tag=true
+          fi
+
+          version="${resolved[0]}"
+          tag="${resolved[1]}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "create_tag=$create_tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag"
+
+      - name: Apply release version to checkout
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path("release.json")
+          data = json.loads(path.read_text())
+          data["version"] = os.environ["VERSION"]
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+
+      - name: Build BlueMap compatibility artifacts
+        run: ./build.sh
+
+      - name: Collect release assets
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+
+          bundle="$(find dist -maxdepth 1 -type f -name 'bluemap3d-bundle-*.jar' -print -quit)"
+          compat="dist/bluemap-compat-${VERSION}.jar"
+          archive="dist/bluemap3d-patches-${VERSION}.zip"
+
+          test -n "$bundle"
+          test -f "$compat"
+          test -f "$archive"
+          test -f dist/BUILD_INFO.json
+          test -f dist/MANIFEST.json
+
+          cp "$bundle" "$compat" "$archive" dist/BUILD_INFO.json dist/MANIFEST.json release-assets/
+          (
+            cd release-assets
+            sha256sum * > SHA256SUMS.txt
+          )
+
+      - name: Create release tag
+        if: steps.release.outputs.create_tag == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$GITHUB_SHA" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" release-assets/*               --verify-tag               --title "$TAG"               --generate-notes
+          fi
+
+      - name: Upload release build
+        uses: actions/upload-artifact@v7
+        with:
+          name: bluemap3d-patches-${{ steps.release.outputs.version }}
+          path: release-assets/*
+          if-no-files-found: error
