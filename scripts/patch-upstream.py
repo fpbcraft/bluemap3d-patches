@@ -41,16 +41,60 @@ replace(
     "GEOMETRY_REVISION + 15",
     "GEOMETRY_REVISION + 33",
 )
-replace(
-    "addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java",
-    "mix(mix(hash, sections), 15L)",
-    "mix(mix(hash, sections), 33L)",
-)
+# ShipProvider's old geometry version is a cheap heuristic (bounds + mass + section
+# serialized sizes) and can miss real block removal/re-addition. Replace the complete
+# method after the base patch with an exact structural hash cached behind Sable's
+# authoritative block-change signal.
 replace(
     "addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java",
     'if (!"copycats".equals(namespace)) {',
     'if (!CompatRegistry.get().preserveMovingNamespace(namespace)) {',
 )
+
+p = Path("addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java")
+ship_source = p.read_text()
+ship_start = ship_source.index(
+    "    private static long geometryVersion(ServerSubLevel ship, BoundingBox3ic bounds) {")
+ship_end = ship_source.index(
+    "    /** FNV-1a, sixty-four bits of it. */",
+    ship_start)
+ship_source = (
+    ship_source[:ship_start]
+    + '''    private static long geometryVersion(ServerSubLevel ship, BoundingBox3ic bounds) {
+        // Exact hash is computed once on initial observation and again only after Sable
+        // reports a real plot block change. Ship movement never dirties it.
+        return mix(ShipGeometryRevisionTracker.structureHash(ship), 34L);
+    }
+
+'''
+    + ship_source[ship_end:]
+)
+# Drop tracker state when the ship is genuinely removed (not distance-unloaded).
+remove_needle = '''                lastObjects.remove(key);
+                pendingSnapshots.remove(objectId);
+                publishedVersions.remove(objectId);
+                removePersisted(cacheFile(level), key);
+'''
+if remove_needle not in ship_source:
+    raise SystemExit("ShipProvider revision tracker removal insertion point not found")
+ship_source = ship_source.replace(
+    remove_needle,
+    '''                lastObjects.remove(key);
+                pendingSnapshots.remove(objectId);
+                publishedVersions.remove(objectId);
+                ShipGeometryRevisionTracker.clear(uuid);
+                removePersisted(cacheFile(level), key);
+''',
+    1,
+)
+p.write_text(ship_source)
+
+# Register the addon-sable mixin that receives Sable's authoritative server block changes.
+p = Path("addon-sable/src/main/resources/META-INF/neoforge.mods.toml")
+sable_toml = p.read_text()
+if 'config="bluemap3d_sable.mixins.json"' not in sable_toml:
+    sable_toml += '\n[[mixins]]\nconfig="bluemap3d_sable.mixins.json"\n'
+p.write_text(sable_toml)
 
 p = Path("addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionProvider.java")
 s = p.read_text()
@@ -864,9 +908,9 @@ p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-38-authoritative-scopes";',
+    'var BUILD = "core-history-39-sable-structural-hash";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.6")
+replace("gradle.properties", "version=1.0.9", "version=1.1.7")
 
 # Make restore/history lifecycle generic at the provider registry boundary.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")
@@ -1004,7 +1048,7 @@ if needle not in s:
 s = s.replace(
     needle,
     'CompatRegistry.get();\n\n        ' + needle
-        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.6 active; BlueMap target is 5.7.");',
+        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.7 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
