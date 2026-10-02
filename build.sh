@@ -13,6 +13,7 @@ MINECRAFT_TARGET="${RELEASE_METADATA[3]}"
 
 python3 -m unittest discover -s "$ROOT/tests" -p 'test_*.py'
 python3 "$ROOT/scripts/validate-compat.py"
+python3 "$ROOT/scripts/generate-compat-shared.py" --check
 
 rm -rf "$WORK" "$DIST"
 mkdir -p "$WORK" "$DIST"
@@ -37,6 +38,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ConfiguredRuleSou
 mkdir -p core/src/main/java/dev/duzo/bluemap3d/compat
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/compat/CompatRegistry.java" \
    core/src/main/java/dev/duzo/bluemap3d/compat/CompatRegistry.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/compat/SharedCompatRules.java" \
+   core/src/main/java/dev/duzo/bluemap3d/compat/SharedCompatRules.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/TrafficCraftSignSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/TrafficCraftSignSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/SymmetricSailSource.java" \

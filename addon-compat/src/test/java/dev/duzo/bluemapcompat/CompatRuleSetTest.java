@@ -10,7 +10,7 @@ final class CompatRuleSetTest {
 
     @Test
     void globMatchingCapturesStarsButNotQuestionMarks() {
-        var glob = new CompatRuleSet.Glob("example:?_*_branch");
+        var glob = new SharedCompatRules.Glob("example:?_*_branch");
 
         assertTrue(glob.matches("example:x_oak_branch"));
         assertEquals(List.of("oak"), glob.captures("example:x_oak_branch"));
@@ -20,12 +20,12 @@ final class CompatRuleSetTest {
 
     @Test
     void ruleMatchingHonorsPropertiesAndExclusions() {
-        var match = new CompatRuleSet.Match();
+        var match = new SharedCompatRules.Match();
         match.blocks = List.of("example:*_fence");
         match.exclude = List.of("example:debug_*");
         match.properties = Map.of("waterlogged", "fals?");
 
-        var rule = new CompatRuleSet.Rule();
+        var rule = new SharedCompatRules.Rule();
         rule.id = "fences";
         rule.match = match;
         rule.compile();
@@ -37,7 +37,7 @@ final class CompatRuleSetTest {
 
     @Test
     void aliasTemplatesUseWildcardAndIdTokens() {
-        var model = new CompatRuleSet.Model();
+        var model = new SharedCompatRules.Model();
         model.type = "alias";
         model.sourceBlock = "replacement:${1}_${path0}";
 
@@ -50,7 +50,7 @@ final class CompatRuleSetTest {
 
     @Test
     void resourceAliasDefaultsTargetToMatchedBlockModel() {
-        var model = new CompatRuleSet.Model();
+        var model = new SharedCompatRules.Model();
         model.type = "resource_alias";
         model.sourceModel = "example:block/${1}_log";
 
@@ -64,14 +64,14 @@ final class CompatRuleSetTest {
 
     @Test
     void compileRejectsTemplatesThatReferenceMissingCaptures() {
-        var match = new CompatRuleSet.Match();
+        var match = new SharedCompatRules.Match();
         match.blocks = List.of("example:*_fence");
 
-        var model = new CompatRuleSet.Model();
+        var model = new SharedCompatRules.Model();
         model.type = "alias";
         model.sourceBlock = "example:${2}_fence";
 
-        var rule = new CompatRuleSet.Rule();
+        var rule = new SharedCompatRules.Rule();
         rule.id = "bad-capture";
         rule.match = match;
         rule.model = model;
