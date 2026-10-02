@@ -1,17 +1,39 @@
 from pathlib import Path
-import hashlib, json, zipfile
+import hashlib
+import json
+import subprocess
+import zipfile
 
-dist = Path("dist")
+from release_metadata import load_release
+
+root = Path(__file__).resolve().parents[1]
+dist = root / "dist"
+release = load_release()
+
+try:
+    patch_commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=root, text=True
+    ).strip()
+except (OSError, subprocess.CalledProcessError):
+    patch_commit = "unknown"
+
+build_info = {
+    **release,
+    "patchCommit": patch_commit,
+}
+(dist / "BUILD_INFO.json").write_text(json.dumps(build_info, indent=2) + "\n")
+
 manifest = {}
-for p in sorted(dist.iterdir()):
-    if p.is_file():
-        manifest[p.name] = {
-            "size": p.stat().st_size,
-            "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+for path in sorted(dist.iterdir()):
+    if path.is_file():
+        manifest[path.name] = {
+            "size": path.stat().st_size,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         }
 (dist / "MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
-with zipfile.ZipFile(dist / "bluemap3d-patches-1.1.1.zip", "w", zipfile.ZIP_DEFLATED) as z:
-    for p in sorted(dist.rglob("*")):
-        if p.is_file() and p.name != "bluemap3d-patches-1.1.1.zip":
-            z.write(p, p.relative_to(dist))
+archive_name = f"bluemap3d-patches-{release['version']}.zip"
+with zipfile.ZipFile(dist / archive_name, "w", zipfile.ZIP_DEFLATED) as archive:
+    for path in sorted(dist.rglob("*")):
+        if path.is_file() and path.name != archive_name:
+            archive.write(path, path.relative_to(dist))

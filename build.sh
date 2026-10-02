@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$PWD"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
-UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.1.11"
 
+mapfile -t RELEASE_METADATA < <(python3 "$ROOT/scripts/release_metadata.py" --lines)
+VERSION="${RELEASE_METADATA[0]}"
+UPSTREAM_COMMIT="${RELEASE_METADATA[1]}"
+BLUEMAP_TARGET="${RELEASE_METADATA[2]}"
+MINECRAFT_TARGET="${RELEASE_METADATA[3]}"
+
+python3 -m unittest discover -s "$ROOT/tests" -p 'test_*.py'
 python3 "$ROOT/scripts/validate-compat.py"
 
 rm -rf "$WORK" "$DIST"
@@ -124,7 +129,9 @@ cp -R addon-compat/* "$DIST/source-addon-compat/"
 mkdir -p "$DIST/compat"
 cp -R "$ROOT/compat/"* "$DIST/compat/"
 printf '%s\n' "$UPSTREAM_COMMIT" > "$DIST/UPSTREAM.txt"
-printf '%s\n' "BlueMap 5.7" > "$DIST/BLUEMAP_TARGET.txt"
+printf 'BlueMap %s\n' "$BLUEMAP_TARGET" > "$DIST/BLUEMAP_TARGET.txt"
+printf '%s\n' "$MINECRAFT_TARGET" > "$DIST/MINECRAFT_TARGET.txt"
+cp "$WORK/src/LICENSE" "$DIST/UPSTREAM-LICENSE.txt"
 
 cd "$ROOT"
 python3 "$ROOT/scripts/package-dist.py"
