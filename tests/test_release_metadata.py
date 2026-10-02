@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import tempfile
@@ -10,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from release_metadata import load_release  # noqa: E402
+from release_metadata import build_release, load_release  # noqa: E402
 
 
 class ReleaseMetadataTest(unittest.TestCase):
@@ -20,6 +21,25 @@ class ReleaseMetadataTest(unittest.TestCase):
         self.assertRegex(release["upstreamCommit"], r"^[0-9a-f]{40}$")
         self.assertTrue(release["blueMapVersion"])
         self.assertTrue(release["minecraftVersion"])
+
+    def test_build_metadata_defaults_to_commit_qualified_version(self) -> None:
+        release = build_release()
+        source = load_release()
+        self.assertRegex(
+            release["version"],
+            rf"^{re.escape(source['version'])}-dev\.[0-9a-f]+$",
+        )
+
+    def test_exact_release_version_can_be_injected(self) -> None:
+        previous = os.environ.get("BLUEMAP3D_VERSION")
+        os.environ["BLUEMAP3D_VERSION"] = "9.8.7"
+        try:
+            self.assertEqual(build_release()["version"], "9.8.7")
+        finally:
+            if previous is None:
+                os.environ.pop("BLUEMAP3D_VERSION", None)
+            else:
+                os.environ["BLUEMAP3D_VERSION"] = previous
 
     def test_invalid_version_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
