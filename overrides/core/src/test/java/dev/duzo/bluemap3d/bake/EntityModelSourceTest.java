@@ -34,4 +34,26 @@ class EntityModelSourceTest {
                         "assets/naturalist/geo/entity/giraffe_baby.geo.json",
                         "main") > 0);
     }
+    @Test
+    void babyAppearanceOutranksAdultGeoModel() {
+        var metadata = java.util.Map.of("__bm3d_visual_age", "baby");
+
+        int adult = EntityAssetMatch.score(
+                "giraffe",
+                "assets/naturalist/geo/entity/giraffe.geo.json",
+                "main")
+                + EntityAssetMatch.appearanceScore(
+                        metadata,
+                        "assets/naturalist/geo/entity/giraffe.geo.json");
+        int baby = EntityAssetMatch.score(
+                "giraffe",
+                "assets/naturalist/geo/entity/giraffe_baby.geo.json",
+                "main")
+                + EntityAssetMatch.appearanceScore(
+                        metadata,
+                        "assets/naturalist/geo/entity/giraffe_baby.geo.json");
+
+        assertTrue(baby > adult);
+    }
+
 }
