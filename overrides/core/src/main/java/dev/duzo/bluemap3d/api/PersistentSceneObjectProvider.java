@@ -51,7 +51,7 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
     private static final Path FILE =
             Path.of("config", "bluemap3d", "cache", "scene-objects.json");
     private static final long SAVE_INTERVAL_NANOS = 5_000_000_000L;
-    private static final int CACHE_FORMAT_VERSION = 2;
+    private static final int CACHE_FORMAT_VERSION = 3;
 
     private static final Object LOCK = new Object();
     private static final Map<String, SavedObject> SAVED = new ConcurrentHashMap<>();
@@ -222,52 +222,66 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
                 try (var reader = Files.newBufferedReader(FILE)) {
                     JsonElement parsed = JsonParser.parseReader(reader);
                     JsonArray entries = null;
-                    boolean legacyFormat = false;
+                    int sourceFormat = 1;
 
                     if (parsed.isJsonArray()) {
-                        // v1 was a bare array. It could contain stale Create child entity
-                        // UUIDs from before providers emitted positive deletion evidence.
-                        // Drop those once during migration; the live Create provider, train
-                        // registry and Sable child cache immediately repopulate the valid
-                        // current objects.
                         entries = parsed.getAsJsonArray();
-                        legacyFormat = true;
                     } else if (parsed.isJsonObject()) {
                         JsonObject root = parsed.getAsJsonObject();
+                        if (root.has("formatVersion")) {
+                            sourceFormat = root.get("formatVersion").getAsInt();
+                        }
                         if (root.has("objects") && root.get("objects").isJsonArray()) {
                             entries = root.getAsJsonArray("objects");
                         }
                     }
 
                     if (entries != null) {
-                        int droppedLegacyCreate = 0;
-                        int droppedLegacySable = 0;
+                        int droppedCreate = 0;
+                        int droppedSable = 0;
+                        int droppedSprings = 0;
+                        boolean migrate = sourceFormat < CACHE_FORMAT_VERSION;
+
                         for (JsonElement element : entries) {
                             SavedObject saved = GSON.fromJson(element, SavedObject.class);
                             if (saved == null || !saved.valid()) continue;
-                            if (legacyFormat && "create_contraptions".equals(saved.provider)) {
-                                droppedLegacyCreate++;
+
+                            // v1/v2 could retain ghosts because Create/Sable/Spring providers
+                            // did not yet provide complete positive deletion semantics.
+                            // Purge only while crossing into v3; current authoritative state
+                            // repopulates immediately and v3 snapshots persist normally.
+                            if (migrate && "create_contraptions".equals(saved.provider)) {
+                                droppedCreate++;
                                 dirty = true;
                                 continue;
                             }
-                            if (legacyFormat && "sable_ships".equals(saved.provider)) {
-                                droppedLegacySable++;
+                            if (migrate && "sable_ships".equals(saved.provider)) {
+                                droppedSable++;
                                 dirty = true;
                                 continue;
                             }
+                            if (migrate && "simulated_springs".equals(saved.provider)) {
+                                droppedSprings++;
+                                dirty = true;
+                                continue;
+                            }
+
                             SAVED.put(key(saved.provider, saved.id), saved);
-                            // The cache is only written after mesh publication.
                             PUBLISHED.put(key(saved.provider, saved.id), saved.version);
                         }
-                        if (droppedLegacyCreate > 0 || droppedLegacySable > 0) {
+
+                        if (droppedCreate > 0 || droppedSable > 0 || droppedSprings > 0) {
                             LOGGER.info(
-                                    "Dropped {} legacy Create and {} legacy Sable scene snapshot(s) "
-                                            + "while migrating generic persistence; authoritative "
-                                            + "providers will repopulate current objects",
-                                    droppedLegacyCreate,
-                                    droppedLegacySable);
+                                    "Migrated scene cache v{} -> v{}: dropped {} Create, {} Sable "
+                                            + "and {} spring snapshot(s); authoritative providers "
+                                            + "will repopulate current objects",
+                                    sourceFormat,
+                                    CACHE_FORMAT_VERSION,
+                                    droppedCreate,
+                                    droppedSable,
+                                    droppedSprings);
                         }
-                        if (legacyFormat) dirty = true;
+                        if (migrate) dirty = true;
                     }
                 } catch (IOException | RuntimeException error) {
                     LOGGER.warn("Could not read generic scene-object cache {}", FILE, error);
