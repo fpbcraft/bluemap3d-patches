@@ -130,7 +130,7 @@ public final class EntityModelSource implements BlockModelSource {
             EntityKey entity, String layer, Map<String, String> metadata) {
         String exact = entity.namespace() + ":" + entity.path() + "#" + layer;
         RawMesh direct = vanilla.get(exact);
-        if (direct != null && EntityAssetMatch.appearanceScore(metadata, exact) == 0) {
+        if (direct != null && !hasVisualMetadata(metadata)) {
             return direct;
         }
 
@@ -166,6 +166,14 @@ public final class EntityModelSource implements BlockModelSource {
             System.arraycopy(raw.uvs(), vertex * 2, uvs, 0, 8);
             out.add(new ModelQuad(null, null, positions, uvs, texture, tint));
         }
+    }
+
+    private static boolean hasVisualMetadata(Map<String, String> metadata) {
+        if (metadata == null || metadata.isEmpty()) return false;
+        for (String key : metadata.keySet()) {
+            if (key.startsWith("__bm3d_visual_")) return true;
+        }
+        return false;
     }
 
     private static int layerTint(Map<String, String> metadata, String layer) {
@@ -218,33 +226,36 @@ public final class EntityModelSource implements BlockModelSource {
     private List<ModelQuad> geo(EntityKey entity, Map<String, String> metadata) {
         LinkedHashSet<String> candidates = new LinkedHashSet<>();
 
-        // Fast path for conventional GeckoLib/AzureLib names.
+        // Fast conventional names plus a namespace scan for exporters that use names
+        // such as <entity>_baby.geo.json or <entity>_model.geo.json.
         for (String relative : geoCandidates(entity.path())) {
             candidates.add("assets/" + entity.namespace() + "/" + relative);
         }
 
-        // Automatic path discovery for mods whose model filename does not exactly match
-        // the registry id (e.g. ostrich_model.geo.json, nested model families, etc.).
         String namespaceRoot = "assets/" + entity.namespace() + "/";
         for (String prefix : List.of(
                 namespaceRoot + "geo",
                 namespaceRoot + "geckolib/models",
                 namespaceRoot + "models")) {
-            List<String> discovered = new ArrayList<>(assets.findPaths(
+            for (String candidate : assets.findPaths(
                     prefix,
-                    candidate -> candidate.toLowerCase(Locale.ROOT).endsWith(".geo.json"),
-                    512));
-            discovered.removeIf(candidate ->
-                    EntityAssetMatch.score(entity.path(), candidate, "main")
-                            + EntityAssetMatch.appearanceScore(metadata, candidate) <= 0);
-            discovered.sort(Comparator.comparingInt(
-                    (String candidate) -> EntityAssetMatch.score(entity.path(), candidate, "main")
-                            + EntityAssetMatch.appearanceScore(metadata, candidate))
-                    .reversed());
-            candidates.addAll(discovered);
+                    pathCandidate -> pathCandidate.toLowerCase(Locale.ROOT).endsWith(".geo.json"),
+                    512)) {
+                if (EntityAssetMatch.score(entity.path(), candidate, "main") > 0) {
+                    candidates.add(candidate);
+                }
+            }
         }
 
-        for (String assetPath : candidates) {
+        List<String> ranked = new ArrayList<>(candidates);
+        ranked.removeIf(candidate ->
+                EntityAssetMatch.score(entity.path(), candidate, "main") <= 0);
+        ranked.sort(Comparator.comparingInt(
+                (String candidate) -> EntityAssetMatch.score(entity.path(), candidate, "main")
+                        + EntityAssetMatch.appearanceScore(metadata, candidate))
+                .reversed());
+
+        for (String assetPath : ranked) {
             byte[] bytes = assets.read(assetPath);
             if (bytes == null) continue;
             try {
