@@ -107,6 +107,13 @@ public final class EntityModelSource implements BlockModelSource {
             String layer,
             boolean required,
             Map<String, String> metadata) {
+        if ("true".equals(metadata.get("__bm3d_hide_wool"))
+                && ("wool".equals(layer)
+                    || "fur".equals(layer)
+                    || "undercoat".equals(layer))) {
+            return;
+        }
+
         RawMesh raw = findVanillaLayer(entity, layer, metadata);
         if (raw == null) return;
 
