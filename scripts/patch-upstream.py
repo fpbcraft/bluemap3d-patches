@@ -127,8 +127,13 @@ ship_source = ship_source.replace(
     deleted_method_needle,
     '''    @Override
     public Collection<String> deletedObjectIds(ServerLevel level) {
-        Set<String> deleted = deletedShipIds.remove(level);
-        return deleted == null || deleted.isEmpty() ? List.of() : List.copyOf(deleted);
+        Set<String> deleted = deletedShipIds.get(level);
+        if (deleted == null || deleted.isEmpty()) return List.of();
+
+        List<String> result = List.copyOf(deleted);
+        deleted.removeAll(result);
+        if (deleted.isEmpty()) deletedShipIds.remove(level, deleted);
+        return result;
     }
 
 ''' + deleted_method_needle,
