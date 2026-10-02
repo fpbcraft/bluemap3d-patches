@@ -63,7 +63,10 @@ ship_source = (
     + '''    private static long geometryVersion(ServerSubLevel ship, BoundingBox3ic bounds) {
         // Exact hash is computed once on initial observation and again only after Sable
         // reports a real plot block change. Ship movement never dirties it.
-        return mix(ShipGeometryRevisionTracker.structureHash(ship), 34L);
+        // Revision 35 intentionally invalidates every previously published Sable hull once.
+        // That cleans stale meshes created by the old post-change dirty hook; subsequent
+        // publishes return to hash-based reuse and only structural changes rebake.
+        return mix(ShipGeometryRevisionTracker.structureHash(ship), 35L);
     }
 
 '''
@@ -908,9 +911,9 @@ p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-39-sable-structural-hash";',
+    'var BUILD = "core-history-40-sable-prechange-dirty";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.7")
+replace("gradle.properties", "version=1.0.9", "version=1.1.8")
 
 # Make restore/history lifecycle generic at the provider registry boundary.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")
@@ -1048,7 +1051,7 @@ if needle not in s:
 s = s.replace(
     needle,
     'CompatRegistry.get();\n\n        ' + needle
-        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.7 active; BlueMap target is 5.7.");',
+        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.8 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
