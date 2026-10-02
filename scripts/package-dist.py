@@ -4,11 +4,11 @@ import json
 import subprocess
 import zipfile
 
-from release_metadata import load_release
+from release_metadata import build_release
 
 root = Path(__file__).resolve().parents[1]
 dist = root / "dist"
-release = load_release()
+release = build_release()
 
 try:
     patch_commit = subprocess.check_output(
