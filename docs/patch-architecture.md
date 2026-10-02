@@ -5,8 +5,10 @@ owned by one of three mechanisms, in preference order:
 
 1. **Whole-file overrides** for files that are maintained as FPB-owned implementations.
 2. **Numbered Git patches** for stable structural changes to upstream-owned files.
-3. **`scripts/patch-upstream.py`** only for transformations that still need dynamic values or
-   that are too entangled to migrate safely in one step.
+3. **Dedicated transform modules** for behavior that is still too entangled to migrate safely
+   to a patch or whole-file override.
+4. **`scripts/patch-upstream.py`** as a small orchestrator for those transforms plus
+   release-metadata substitutions.
 
 ## Patch series
 
@@ -33,7 +35,9 @@ Current ownership:
 The large remaining transformations are behavioral and should be migrated separately, with
 regression coverage around each migration:
 
-- `ContraptionProvider.java`: Sable projection, dynamic topology and compatibility behavior.
+- `scripts/transforms/contraption_provider.py`: Sable projection, dynamic topology and
+  compatibility behavior. This is the remaining large transform and the next candidate for
+  replacement by a maintained override.
 - `BlueMap3DMod.java`: release-version startup marker only.
 - release-version/build-marker substitutions that depend on `release.json`.
 
