@@ -22,7 +22,11 @@ git clone https://github.com/duzos/bluemap3d.git "$WORK/src"
 cd "$WORK/src"
 git checkout "$UPSTREAM_COMMIT"
 
-git apply "$ROOT/patches/0015-base.patch"
+for patch in "$ROOT"/patches/*.patch; do
+  echo "Applying $(basename "$patch")"
+  git apply --check "$patch"
+  git apply "$patch"
+done
 
 # Maintained moving/live compatibility overrides.
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java" \
