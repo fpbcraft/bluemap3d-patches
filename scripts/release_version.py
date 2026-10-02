@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+from pathlib import Path
 from collections.abc import Iterable
 
 SEMVER = re.compile(r"^(?:v)?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
@@ -81,12 +82,13 @@ def development_version(tags: Iterable[str], *, fallback: str, sha: str) -> str:
     return f"{format_version(target)}-dev.g{sha.strip().lower()[:8]}"
 
 
-def git_tags() -> list[str]:
+def git_tags(cwd: str | Path | None = None) -> list[str]:
     result = subprocess.run(
         ["git", "tag", "--list", "v*"],
         check=True,
         text=True,
         capture_output=True,
+        cwd=cwd,
     )
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
