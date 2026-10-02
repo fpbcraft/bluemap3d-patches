@@ -5,7 +5,7 @@ ROOT="$PWD"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 UPSTREAM_COMMIT="f9a027de06f49384b86867b5c58b3630d29b1c9f"
-VERSION="1.1.10"
+VERSION="1.1.11"
 
 python3 "$ROOT/scripts/validate-compat.py"
 
@@ -65,6 +65,8 @@ cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/BeltPro
    addon-create/src/main/java/dev/duzo/bluemap3d/create/BeltProvider.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeProvider.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeProvider.java
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeRegistry.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeRegistry.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringProvider.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringProvider.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringRegistry.java" \
@@ -72,6 +74,8 @@ cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/Simulat
 mkdir -p addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedSpringBlockEntityMixin.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedSpringBlockEntityMixin.java
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedRopeStrandHolderMixin.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedRopeStrandHolderMixin.java
 cp "$ROOT/overrides/addon-create/src/main/resources/bluemap3d_create.mixins.json" \
    addon-create/src/main/resources/bluemap3d_create.mixins.json
 
