@@ -1,0 +1,111 @@
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java b/core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java
+--- a/core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java
+@@ -72,11 +72,17 @@
+             if (existing.id().equals(id)) {
+                 throw new IllegalArgumentException(
+                         "A SceneObjectProvider with id '" + id + "' is already registered: "
+-                                + existing.getClass().getName());
++                                + PersistentSceneObjectProvider.unwrap(existing).getClass().getName());
+             }
+         }
+-        PROVIDERS.add(provider);
+-        LOGGER.info("Registered SceneObjectProvider '{}' ({})", id, provider.getClass().getName());
++
++        SceneObjectProvider registered = PersistentSceneObjectProvider.wrap(provider);
++        PROVIDERS.add(registered);
++        LOGGER.info(
++                "Registered SceneObjectProvider '{}' ({}) lifecycle={}",
++                id,
++                provider.getClass().getName(),
++                provider.lifecycle());
+     }
+ 
+     /**
+@@ -88,7 +94,12 @@
+      * @return whether it was registered
+      */
+     public static boolean unregister(SceneObjectProvider provider) {
+-        return PROVIDERS.remove(provider);
++        for (SceneObjectProvider registered : PROVIDERS) {
++            if (PersistentSceneObjectProvider.wraps(registered, provider)) {
++                return PROVIDERS.remove(registered);
++            }
++        }
++        return false;
+     }
+ 
+     /**
+@@ -134,6 +145,7 @@
+         MeshPublication publication =
+                 new MeshPublication(provider, objectId, version, meshUrl);
+         PUBLISHED_MESHES.put(provider + "/" + objectId, publication);
++        PersistentSceneObjectProvider.meshPublished(provider, objectId, version);
+         for (MeshPublicationListener listener : MESH_LISTENERS) {
+             notifyMeshListener(listener, publication);
+         }
+@@ -146,6 +158,7 @@
+ 
+     /** Core-internal: clear live publication state when BlueMap3D shuts down. */
+     public static void clearPublishedMeshes() {
++        PersistentSceneObjectProvider.flushNow();
+         PUBLISHED_MESHES.clear();
+     }
+ 
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java b/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
+--- a/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
+@@ -5,6 +5,12 @@
+ import dev.duzo.bluemap3d.bake.AssetIndex;
+ import dev.duzo.bluemap3d.bake.BlockModelSource;
+ import dev.duzo.bluemap3d.bake.BitsNBobsStrutSource;
++import dev.duzo.bluemap3d.bake.ProceduralBlockSource;
++import dev.duzo.bluemap3d.bake.ConfiguredRuleSource;
++import dev.duzo.bluemap3d.bake.TrafficCraftSignSource;
++import dev.duzo.bluemap3d.bake.SymmetricSailSource;
++import dev.duzo.bluemap3d.bake.ChainConveyorSource;
++import dev.duzo.bluemap3d.compat.CompatRegistry;
+ import dev.duzo.bluemap3d.bake.CopycatsSpecialSource;
+ import dev.duzo.bluemap3d.bake.CopycatsBoardSource;
+ import dev.duzo.bluemap3d.bake.CopycatsShapeSource;
+@@ -56,6 +62,8 @@
+         BlueMapAPI.onEnable(this::onBlueMapEnable);
+         BlueMapAPI.onDisable(api -> shutdown());
+ 
++        CompatRegistry.get();
++
+         LOGGER.info("BlueMap3D loaded. Waiting for BlueMap and at least one addon.");
+     }
+ 
+@@ -79,6 +87,11 @@
+                 // These mods generate important geometry in client code. Reconstruct it
+                 // from server blockstate/block-entity data before ordinary JSON lookup.
+                 sources.add(new BitsNBobsStrutSource(packs));
++                sources.add(new ProceduralBlockSource(packs));
++                sources.add(new SymmetricSailSource(packs));
++                sources.add(new ChainConveyorSource(packs));
++                sources.add(new TrafficCraftSignSource(packs));
++                sources.add(new ConfiguredRuleSource(packs));
+                 sources.add(new CopycatsSpecialSource(packs));
+                 // Dynamic Copycats+ boards have no JSON geometry; their material lives in
+                 // block-entity NBT, so they must be resolved before the ordinary pack path.
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java b/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java
+--- a/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java
+@@ -383,6 +383,16 @@
+                     // No radius or period: a constant rate is not a length, so the
+                     // transform's scale has nothing to act on.
+                     0f, 0f, rate.radiansPerSecond());
++            case ModelAttachment.Loop loop -> new BakedMesh.Node(
++                    BakedMesh.KIND_LOOP, indexStart, indexCount,
++                    new float[]{0f, 0f, 0f},
++                    axisFor(loop.axis(), matrix),
++                    0f, loop.period() / 16f * s, loop.blocksPerSecond());
++            case ModelAttachment.UvScroll scroll -> new BakedMesh.Node(
++                    BakedMesh.KIND_UV_SCROLL, indexStart, indexCount,
++                    new float[]{0f, 0f, 0f},
++                    new float[]{scroll.axis().x(), scroll.axis().y(), 0f},
++                    0f, scroll.phase(), scroll.cyclesPerSecond());
+         };
+     }
+ 
