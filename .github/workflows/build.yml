@@ -23,9 +23,11 @@ jobs:
           cache: gradle
 
       - name: Resolve immutable build version
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           base="$(python3 scripts/release_metadata.py --base-version)"
-          version="$(python3 scripts/release_version.py dev --base "$base" --sha "$GITHUB_SHA")"
+          version="$(python3 scripts/release_version.py dev --base "$base" --sha "$SOURCE_SHA")"
           echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Read release metadata
