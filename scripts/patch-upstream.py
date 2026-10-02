@@ -53,6 +53,20 @@ replace(
 
 p = Path("addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java")
 ship_source = p.read_text()
+
+# Generic scene persistence needs positive destruction evidence for Sable sub-levels.
+# ShipProvider already observes REMOVED vs UNLOADED for its legacy/private cache; retain
+# those UUIDs until core's persistence wrapper consumes them.
+deleted_field_needle = '    private final Map<String, SceneObject> lastObjects = new ConcurrentHashMap<>();'
+if deleted_field_needle not in ship_source:
+    raise SystemExit("ShipProvider deleted-id field insertion point not found")
+ship_source = ship_source.replace(
+    deleted_field_needle,
+    deleted_field_needle
+        + '\n    private final Map<ServerLevel, Set<String>> deletedShipIds = new ConcurrentHashMap<>();',
+    1,
+)
+
 ship_start = ship_source.index(
     "    private static long geometryVersion(ServerSubLevel ship, BoundingBox3ic bounds) {")
 ship_end = ship_source.index(
@@ -86,6 +100,9 @@ ship_source = ship_source.replace(
                 pendingSnapshots.remove(objectId);
                 publishedVersions.remove(objectId);
                 ShipGeometryRevisionTracker.clear(uuid);
+                deletedShipIds
+                        .computeIfAbsent(level, ignored -> ConcurrentHashMap.newKeySet())
+                        .add(objectId);
                 removePersisted(cacheFile(level), key);
 ''',
     1,
@@ -104,6 +121,21 @@ ship_source = ship_source.replace(
     "new SnapshotFile(3, List.copyOf(saved.values()))",
     1,
 )
+deleted_method_needle = '    private void observeContainer(ServerLevel level, ServerSubLevelContainer container) {'
+if deleted_method_needle not in ship_source:
+    raise SystemExit("ShipProvider deletedObjectIds insertion point not found")
+ship_source = ship_source.replace(
+    deleted_method_needle,
+    '''    @Override
+    public Collection<String> deletedObjectIds(ServerLevel level) {
+        Set<String> deleted = deletedShipIds.remove(level);
+        return deleted == null || deleted.isEmpty() ? List.of() : List.copyOf(deleted);
+    }
+
+''' + deleted_method_needle,
+    1,
+)
+
 p.write_text(ship_source)
 
 # Register the optional Create: Simulated spring lifecycle mixin.
@@ -976,9 +1008,9 @@ p.write_text(s)
 replace(
     "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
     'var BUILD = "core-history-15-special-models";',
-    'var BUILD = "core-history-41-no-stale-topology";',
+    'var BUILD = "core-history-42-sable-removal";',
 )
-replace("gradle.properties", "version=1.0.9", "version=1.1.9")
+replace("gradle.properties", "version=1.0.9", "version=1.1.10")
 
 # Make restore/history lifecycle generic at the provider registry boundary.
 p = Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")
@@ -1116,7 +1148,7 @@ if needle not in s:
 s = s.replace(
     needle,
     'CompatRegistry.get();\n\n        ' + needle
-        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.9 active; BlueMap target is 5.7.");',
+        + '\n        LOGGER.info("BlueMap3D FPB patches 1.1.10 active; BlueMap target is 5.7.");',
     1,
 )
 p.write_text(s)
