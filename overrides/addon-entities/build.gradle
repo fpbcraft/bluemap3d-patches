@@ -19,6 +19,13 @@ sourceSets {
         compileClasspath += sourceSets.main.compileClasspath
         runtimeClasspath += output + compileClasspath
     }
+    // bluemap3d-addon wires Minecraft/NeoForge onto main's classpath. Gradle's plain
+    // Java test source set does not inherit those compile-only artifacts automatically,
+    // but provider API tests legitimately reference ResourceLocation and other MC types.
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
     main.resources.srcDir generatedEntityModelsDir
 }
 
