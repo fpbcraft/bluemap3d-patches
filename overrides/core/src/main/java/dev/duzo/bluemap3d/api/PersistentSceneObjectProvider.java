@@ -175,10 +175,14 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
             for (String prefix : authoritative) {
                 if (prefix == null || prefix.isBlank()) continue;
                 for (SavedObject saved : List.copyOf(SAVED.values())) {
-                    if (!id().equals(saved.provider)
-                            || !dimension.equals(saved.dimension)
-                            || !saved.id.startsWith(prefix)
-                            || liveIds.contains(saved.id)) {
+                    if (!isAuthoritativelyMissing(
+                            id(),
+                            dimension,
+                            prefix,
+                            saved.provider,
+                            saved.dimension,
+                            saved.id,
+                            liveIds.contains(saved.id))) {
                         continue;
                     }
                     removeSnapshot(id(), saved.id);
@@ -194,6 +198,28 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
 
         flushIfDue();
         return List.copyOf(merged.values());
+    }
+
+    static boolean isAuthoritativelyMissing(
+            String provider,
+            String dimension,
+            String prefix,
+            String savedProvider,
+            String savedDimension,
+            String savedId,
+            boolean live) {
+        return !live
+                && provider.equals(savedProvider)
+                && dimension.equals(savedDimension)
+                && savedId.startsWith(prefix);
+    }
+
+    static boolean shouldDropForMigration(String provider, int sourceFormat) {
+        return (sourceFormat < 3
+                        && ("create_contraptions".equals(provider)
+                                || "simulated_springs".equals(provider)))
+                || (sourceFormat < 4 && "sable_ships".equals(provider))
+                || (sourceFormat < 5 && "simulated_ropes".equals(provider));
     }
 
     private static void saveSnapshot(SavedObject snapshot) {
@@ -254,23 +280,16 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
                             SavedObject saved = GSON.fromJson(element, SavedObject.class);
                             if (saved == null || !saved.valid()) continue;
 
-                            if (preV3 && "create_contraptions".equals(saved.provider)) {
-                                droppedCreate++;
-                                dirty = true;
-                                continue;
-                            }
-                            if (preV4 && "sable_ships".equals(saved.provider)) {
-                                droppedSable++;
-                                dirty = true;
-                                continue;
-                            }
-                            if (preV3 && "simulated_springs".equals(saved.provider)) {
-                                droppedSprings++;
-                                dirty = true;
-                                continue;
-                            }
-                            if (preV5 && "simulated_ropes".equals(saved.provider)) {
-                                droppedRopes++;
+                            if (shouldDropForMigration(saved.provider, sourceFormat)) {
+                                if (preV3 && "create_contraptions".equals(saved.provider)) {
+                                    droppedCreate++;
+                                } else if (preV4 && "sable_ships".equals(saved.provider)) {
+                                    droppedSable++;
+                                } else if (preV3 && "simulated_springs".equals(saved.provider)) {
+                                    droppedSprings++;
+                                } else if (preV5 && "simulated_ropes".equals(saved.provider)) {
+                                    droppedRopes++;
+                                }
                                 dirty = true;
                                 continue;
                             }
