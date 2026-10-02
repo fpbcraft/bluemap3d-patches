@@ -1,0 +1,38 @@
+diff --git a/settings.gradle b/settings.gradle
+--- a/settings.gradle
++++ b/settings.gradle
+@@ -24,6 +24,7 @@ include("addon-turtles")
+ include("addon-sable")
+ include("addon-create")
+ include("addon-compat")
++include("addon-entities")
+ 
+ // Local end-to-end test harness. Never published, never in the bundle jar - it is how
+ // you see the whole pipeline working in a browser without needing CC, Sable or Create
+diff --git a/build.gradle b/build.gradle
+--- a/build.gradle
++++ b/build.gradle
+@@ -8,7 +8,7 @@ evaluationDependsOnChildren()
+ // Bundle jar
+ //
+-// Interim distribution is ONE jar: core, with the three addons jar-in-jar'd. NeoForge
++// Interim distribution is ONE jar: core, with the four addons jar-in-jar'd. NeoForge
+ // loads nested jars from META-INF/jarjar/ using metadata.json, so this is pure
+ // packaging - no source changes, and no extra mod id. Publishing the four artifacts
+ // separately later means not running this task, nothing more.
+@@ -17,7 +17,7 @@ evaluationDependsOnChildren()
+ // dev.eriksonn.aeronautics.aeronautics-neoforge.
+ // ---------------------------------------------------------------------------------
+ 
+-def addonPaths = [':addon-turtles', ':addon-sable', ':addon-create']
++def addonPaths = [':addon-turtles', ':addon-sable', ':addon-create', ':addon-entities']
+ 
+ def bundleMetadata = tasks.register('bundleMetadata') {
+     description = 'Generates META-INF/jarjar/metadata.json listing the nested addon jars.'
+@@ -47,7 +47,7 @@ tasks.register('bundleJar', Jar) {
+     group = 'build'
+-    description = 'Builds the single-jar distribution: core with all three addons nested.'
++    description = 'Builds the single-jar distribution: core with all four addons nested.'
+     archiveBaseName = 'bluemap3d-bundle'
+     archiveVersion = "${version}-${minecraft_version}"
+     destinationDirectory = layout.buildDirectory.dir('libs')

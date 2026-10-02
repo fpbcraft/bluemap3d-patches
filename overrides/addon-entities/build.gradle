@@ -1,0 +1,19 @@
+plugins {
+    id 'bluemap3d-addon'
+}
+
+ext {
+    mod_id = 'bluemap3d_entities'
+    mod_name = 'BlueMap3D: Surface Mobs'
+    mod_description = 'Shows loaded vanilla mobs on the visible world surface as live 3D models on BlueMap.'
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

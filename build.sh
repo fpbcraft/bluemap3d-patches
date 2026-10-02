@@ -134,6 +134,10 @@ cp "$ROOT/overrides/addon-sable/src/main/resources/bluemap3d_sable.mixins.json" 
 # TrafficCraft dynamic textures) and generic rule capabilities share this artifact.
 cp -R "$ROOT/addon-compat" ./addon-compat
 
+# Vanilla surface-mob provider. This is a complete owned addon rather than an upstream
+# source override, so copy it into the patched checkout as one unit.
+cp -R "$ROOT/overrides/addon-entities" ./addon-entities
+
 # One source of truth for built-in compatibility rules. Package the same rules into
 # the static BlueMap addon and the moving BlueMap3D bundle.
 mkdir -p addon-compat/src/main/resources/bluemap3d-compat
@@ -155,7 +159,7 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTra
 # Generate exhaustive static dispatch resources at build time.
 python3 "$ROOT/scripts/generate-static-resources.py"
 
-./gradlew clean :core:test bundleJar :addon-compat:build
+./gradlew clean :core:test :addon-entities:test bundleJar :addon-compat:build
 
 cp build/libs/bluemap3d-bundle-*.jar "$DIST/"
 
