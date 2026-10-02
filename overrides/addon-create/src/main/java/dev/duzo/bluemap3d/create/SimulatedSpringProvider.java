@@ -20,7 +20,6 @@ import org.joml.Vector3dc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -125,7 +124,7 @@ public final class SimulatedSpringProvider implements SceneObjectProvider {
                 warned = true;
                 LOGGER.warn(
                         "Could not read Create: Simulated spring state; persistent snapshots remain available: {}",
-                        rootMessage(error));
+                        SimulatedReflection.rootMessage(error));
             }
         }
 
@@ -174,18 +173,10 @@ public final class SimulatedSpringProvider implements SceneObjectProvider {
                 LOGGER.debug("Create: Simulated is not installed; spring integration disabled");
             } catch (ReflectiveOperationException | RuntimeException error) {
                 LOGGER.warn("Create: Simulated was found but its spring API shape is unsupported: {}",
-                        rootMessage(error));
+                        SimulatedReflection.rootMessage(error));
             }
         }
         return api;
-    }
-
-    private static String rootMessage(Throwable error) {
-        Throwable current = error;
-        while (current.getCause() != null) current = current.getCause();
-        String message = current.getMessage();
-        return current.getClass().getSimpleName()
-                + (message == null || message.isBlank() ? "" : ": " + message);
     }
 
     private static Vec3 projectPosition(Vector3dc local, SubLevel subLevel) {
@@ -276,8 +267,7 @@ public final class SimulatedSpringProvider implements SceneObjectProvider {
         }
 
         static SpringApi discover() throws ReflectiveOperationException {
-            Class<?> springClass = Class.forName(
-                    SPRING, false, SimulatedSpringProvider.class.getClassLoader());
+            Class<?> springClass = SimulatedReflection.loadClass(SPRING);
             return new SpringApi(
                     springClass,
                     springClass.getMethod("isController"),
@@ -290,15 +280,15 @@ public final class SimulatedSpringProvider implements SceneObjectProvider {
         }
 
         boolean isController(Object spring) throws ReflectiveOperationException {
-            return Boolean.TRUE.equals(invoke(isController, spring));
+            return Boolean.TRUE.equals(SimulatedReflection.invoke(isController, spring));
         }
 
         SpringSnapshot snapshot(BlockEntity controller) throws ReflectiveOperationException {
-            Object paired = invoke(getPairedSpring, controller);
+            Object paired = SimulatedReflection.invoke(getPairedSpring, controller);
             if (!(paired instanceof BlockEntity partner) || !isSpring(partner)) return null;
 
-            Object aValue = invoke(getCenter, controller);
-            Object bValue = invoke(getCenter, partner);
+            Object aValue = SimulatedReflection.invoke(getCenter, controller);
+            Object bValue = SimulatedReflection.invoke(getCenter, partner);
             if (!(aValue instanceof Vector3dc aLocal) || !(bValue instanceof Vector3dc bLocal)) {
                 return null;
             }
@@ -315,16 +305,4 @@ public final class SimulatedSpringProvider implements SceneObjectProvider {
                     sizeOf(controller.getBlockState()));
         }
 
-        private static Object invoke(Method method, Object target, Object... args)
-                throws ReflectiveOperationException {
-            try {
-                return method.invoke(target, args);
-            } catch (InvocationTargetException error) {
-                Throwable cause = error.getCause();
-                if (cause instanceof ReflectiveOperationException reflective) throw reflective;
-                if (cause instanceof RuntimeException runtime) throw runtime;
-                throw error;
-            }
-        }
-    }
 }
