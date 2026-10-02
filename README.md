@@ -11,9 +11,12 @@ The repository is intentionally split between **declarative compatibility rules*
 
 ## Supported baseline
 
-The authoritative release version and compatibility targets live in [`release.json`](release.json).
-The current release targets Minecraft 1.21.1, BlueMap 5.7, and a pinned BlueMap3D upstream
-commit. Do not assume compatibility with other targets unless `release.json` says so.
+The compatibility targets and baseline semantic version live in [`release.json`](release.json).
+Normal development/CI builds derive an immutable version from that baseline and the commit,
+for example `1.1.11-dev.a1b2c3d4`. Published releases use the exact `vMAJOR.MINOR.PATCH`
+tag version. The current baseline targets Minecraft 1.21.1, BlueMap 5.7, and a pinned
+BlueMap3D upstream commit. Do not assume compatibility with other targets unless
+`release.json` says so.
 
 ## Artifacts
 
@@ -171,6 +174,18 @@ also includes the pinned upstream LGPL license.
 The build always clones the pinned upstream BlueMap3D commit, applies the base patch,
 copies maintained overrides and shared compatibility rules, runs the deterministic patch
 script, builds, and packages the result.
+
+### Releases
+
+`.github/workflows/release.yml` publishes immutable GitHub Releases. Pushing a
+`vMAJOR.MINOR.PATCH` (or SemVer prerelease) tag builds and publishes that exact version.
+The workflow can also be run manually from the default branch: choose a patch/minor/major
+bump, or provide an exact SemVer. Manual releases build successfully before the workflow
+creates the tag and release, and refuse to reuse an existing tag/version.
+
+Non-release builds never reuse the release version: they include the short commit SHA as a
+`-dev.<sha>` suffix. Re-running the same commit intentionally produces the same artifact
+identity; a different commit produces a different version.
 
 ## Installation
 

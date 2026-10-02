@@ -5,6 +5,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$ROOT/.tmp-bluemap3d"
 DIST="$ROOT/dist"
 
+if [[ -z "${RELEASE_VERSION:-}" ]]; then
+  BASE_VERSION="$(python3 "$ROOT/scripts/release_metadata.py" --base-version)"
+  BUILD_SHA="${GITHUB_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
+  export RELEASE_VERSION
+  RELEASE_VERSION="$(python3 "$ROOT/scripts/release_version.py" dev --base "$BASE_VERSION" --sha "$BUILD_SHA")"
+fi
+
 mapfile -t RELEASE_METADATA < <(python3 "$ROOT/scripts/release_metadata.py" --lines)
 VERSION="${RELEASE_METADATA[0]}"
 UPSTREAM_COMMIT="${RELEASE_METADATA[1]}"
