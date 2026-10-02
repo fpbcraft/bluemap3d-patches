@@ -779,7 +779,7 @@ public final class EntityModelSource implements BlockModelSource {
         return score;
     }
 
-    private static int assetMatchScore(String entityPath, String assetPath, String layer) {
+    static int assetMatchScore(String entityPath, String assetPath, String layer) {
         String entity = compactName(leaf(entityPath));
         if (entity.isEmpty()) return 0;
 
