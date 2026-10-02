@@ -26,6 +26,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bluemap3d-patches-1.1.10
+          name: bluemap3d-patches-1.1.11
           path: dist/*
           if-no-files-found: error
