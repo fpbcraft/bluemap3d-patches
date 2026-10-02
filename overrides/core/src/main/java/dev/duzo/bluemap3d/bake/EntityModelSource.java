@@ -82,46 +82,73 @@ public final class EntityModelSource implements BlockModelSource {
         if (entity == null) return List.of();
 
         if ("minecraft".equals(entity.namespace())) {
-            List<ModelQuad> exact = vanilla(entity);
+            List<ModelQuad> exact = vanilla(entity, metadata);
             if (!exact.isEmpty()) return exact;
         }
 
-        List<ModelQuad> geo = geo(entity);
+        List<ModelQuad> geo = geo(entity, metadata);
         if (!geo.isEmpty()) return geo;
 
         return fallback(entity, metadata);
     }
 
-    private List<ModelQuad> vanilla(EntityKey entity) {
+    private List<ModelQuad> vanilla(EntityKey entity, Map<String, String> metadata) {
         List<ModelQuad> out = new ArrayList<>();
-        appendVanillaLayer(out, entity, "main", true);
+        appendVanillaLayer(out, entity, "main", true, metadata);
         for (String layer : EXTRA_LAYERS) {
-            appendVanillaLayer(out, entity, layer, false);
+            appendVanillaLayer(out, entity, layer, false, metadata);
         }
         return out.isEmpty() ? List.of() : List.copyOf(out);
     }
 
     private void appendVanillaLayer(
-            List<ModelQuad> out, EntityKey entity, String layer, boolean required) {
-        RawMesh raw = vanilla.get(entity.namespace() + ":" + entity.path() + "#" + layer);
-        if (raw == null) {
-            if (required) {
-                // Some renderer model ids differ from the registry id. The Geo/fallback
-                // path below still guarantees the mob remains visible.
-            }
-            return;
-        }
+            List<ModelQuad> out,
+            EntityKey entity,
+            String layer,
+            boolean required,
+            Map<String, String> metadata) {
+        RawMesh raw = findVanillaLayer(entity, layer, metadata);
+        if (raw == null) return;
 
-        String texture = findTexture(entity.namespace(), entity.path(), layer);
+        String texture = findTexture(entity.namespace(), entity.path(), layer, metadata);
         if (texture == null) {
             if (!required) return;
             texture = FALLBACK_TEXTURE;
         }
 
-        appendRaw(out, raw, texture);
+        appendRaw(out, raw, texture, layerTint(metadata, layer));
     }
 
-    private void appendRaw(List<ModelQuad> out, RawMesh raw, String texture) {
+    private RawMesh findVanillaLayer(
+            EntityKey entity, String layer, Map<String, String> metadata) {
+        String exact = entity.namespace() + ":" + entity.path() + "#" + layer;
+        RawMesh direct = vanilla.get(exact);
+        if (direct != null && appearanceScore(metadata, exact) == 0) {
+            return direct;
+        }
+
+        RawMesh best = direct;
+        int bestScore = direct == null
+                ? Integer.MIN_VALUE
+                : assetMatchScore(entity.path(), exact, layer) + appearanceScore(metadata, exact);
+
+        String suffix = "#" + layer;
+        for (Map.Entry<String, RawMesh> entry : vanilla.entrySet()) {
+            String key = entry.getKey();
+            if (!key.endsWith(suffix)) continue;
+
+            int score = assetMatchScore(entity.path(), key, layer)
+                    + appearanceScore(metadata, key);
+            if (score > bestScore) {
+                best = entry.getValue();
+                bestScore = score;
+            }
+        }
+        return bestScore > 0 ? best : direct;
+    }
+
+    private void appendRaw(
+            List<ModelQuad> out, RawMesh raw, String texture, int tint) {
         int vertices = raw.positions().length / 3;
         if (vertices == 0 || vertices % 4 != 0 || raw.uvs().length != vertices * 2) return;
 
@@ -130,7 +157,23 @@ public final class EntityModelSource implements BlockModelSource {
             float[] uvs = new float[8];
             System.arraycopy(raw.positions(), vertex * 3, positions, 0, 12);
             System.arraycopy(raw.uvs(), vertex * 2, uvs, 0, 8);
-            out.add(new ModelQuad(null, null, positions, uvs, texture, 0xFFFFFF));
+            out.add(new ModelQuad(null, null, positions, uvs, texture, tint));
+        }
+    }
+
+    private static int layerTint(Map<String, String> metadata, String layer) {
+        if (!("wool".equals(layer)
+                || "fur".equals(layer)
+                || "undercoat".equals(layer))) {
+            return 0xFFFFFF;
+        }
+
+        String encoded = metadata.get("__bm3d_tint");
+        if (encoded == null) return 0xFFFFFF;
+        try {
+            return Integer.parseInt(encoded, 16) & 0xFFFFFF;
+        } catch (NumberFormatException ignored) {
+            return 0xFFFFFF;
         }
     }
 
@@ -165,7 +208,7 @@ public final class EntityModelSource implements BlockModelSource {
      * Tries common data-driven entity geometry locations used by GeckoLib, AzureLib and
      * Bedrock-style model exporters. No mod id or entity id is registered in code.
      */
-    private List<ModelQuad> geo(EntityKey entity) {
+    private List<ModelQuad> geo(EntityKey entity, Map<String, String> metadata) {
         LinkedHashSet<String> candidates = new LinkedHashSet<>();
 
         // Fast path for conventional GeckoLib/AzureLib names.
@@ -184,9 +227,12 @@ public final class EntityModelSource implements BlockModelSource {
                     prefix,
                     candidate -> candidate.toLowerCase(Locale.ROOT).endsWith(".geo.json"),
                     512));
-            discovered.removeIf(candidate -> assetMatchScore(entity.path(), candidate, "main") <= 0);
+            discovered.removeIf(candidate ->
+                    assetMatchScore(entity.path(), candidate, "main")
+                            + appearanceScore(metadata, candidate) <= 0);
             discovered.sort(Comparator.comparingInt(
-                    (String candidate) -> assetMatchScore(entity.path(), candidate, "main"))
+                    (String candidate) -> assetMatchScore(entity.path(), candidate, "main")
+                            + appearanceScore(metadata, candidate))
                     .reversed());
             candidates.addAll(discovered);
         }
@@ -195,7 +241,7 @@ public final class EntityModelSource implements BlockModelSource {
             byte[] bytes = assets.read(assetPath);
             if (bytes == null) continue;
             try {
-                List<ModelQuad> parsed = parseGeo(entity, bytes);
+                List<ModelQuad> parsed = parseGeo(entity, bytes, metadata);
                 if (!parsed.isEmpty()) {
                     LOGGER.debug("Resolved {} from {}", entity.id(), assetPath);
                     return parsed;
@@ -221,13 +267,13 @@ public final class EntityModelSource implements BlockModelSource {
         return List.copyOf(paths);
     }
 
-    private List<ModelQuad> parseGeo(EntityKey entity, byte[] bytes) {
+    private List<ModelQuad> parseGeo(EntityKey entity, byte[] bytes, Map<String, String> metadata) {
         JsonObject root = JsonParser.parseString(
                 new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();
         JsonArray geometries = root.getAsJsonArray("minecraft:geometry");
         if (geometries == null || geometries.isEmpty()) return List.of();
 
-        JsonObject geometry = selectGeometry(entity, geometries);
+        JsonObject geometry = selectGeometry(entity, geometries, metadata);
         if (geometry == null) return List.of();
         JsonObject description = geometry.has("description")
                 ? geometry.getAsJsonObject("description")
@@ -235,7 +281,7 @@ public final class EntityModelSource implements BlockModelSource {
         float textureWidth = number(description, "texture_width", 64F);
         float textureHeight = number(description, "texture_height", 64F);
 
-        String texture = findTexture(entity.namespace(), entity.path(), "main");
+        String texture = findTexture(entity.namespace(), entity.path(), "main", metadata);
         if (texture == null) texture = FALLBACK_TEXTURE;
 
         JsonArray bonesJson = geometry.getAsJsonArray("bones");
@@ -275,7 +321,7 @@ public final class EntityModelSource implements BlockModelSource {
         return out.isEmpty() ? List.of() : List.copyOf(out);
     }
 
-    private static JsonObject selectGeometry(EntityKey entity, JsonArray geometries) {
+    private static JsonObject selectGeometry(EntityKey entity, JsonArray geometries, Map<String, String> metadata) {
         JsonObject best = null;
         int bestScore = Integer.MIN_VALUE;
 
@@ -290,7 +336,8 @@ public final class EntityModelSource implements BlockModelSource {
                     : string(description, "identifier", null);
             int score = identifier == null
                     ? 0
-                    : assetMatchScore(entity.path(), identifier, "main");
+                    : assetMatchScore(entity.path(), identifier, "main")
+                            + appearanceScore(metadata, identifier);
             if (best == null || score > bestScore) {
                 best = geometry;
                 bestScore = score;
@@ -448,7 +495,7 @@ public final class EntityModelSource implements BlockModelSource {
         float half = width * 8F;
         float top = height * 16F;
 
-        String texture = findTexture(entity.namespace(), entity.path(), "main");
+        String texture = findTexture(entity.namespace(), entity.path(), "main", metadata);
         if (texture == null) texture = FALLBACK_TEXTURE;
 
         float minX = -half, maxX = half;
@@ -468,70 +515,81 @@ public final class EntityModelSource implements BlockModelSource {
         return List.copyOf(out);
     }
 
-    private String findTexture(String namespace, String path, String layer) {
+    private String findTexture(
+            String namespace,
+            String path,
+            String layer,
+            Map<String, String> metadata) {
         String leaf = leaf(path);
-        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        LinkedHashSet<String> relativeCandidates = new LinkedHashSet<>();
 
         if (!"main".equals(layer)) {
             for (String name : List.of(path, leaf)) {
-                candidates.add("entity/" + name + "/" + name + "_" + layer);
-                candidates.add("entity/" + name + "/" + layer);
-                candidates.add("entity/" + name + "_" + layer);
+                relativeCandidates.add("entity/" + name + "/" + name + "_" + layer);
+                relativeCandidates.add("entity/" + name + "/" + layer);
+                relativeCandidates.add("entity/" + name + "_" + layer);
             }
             if ("fur".equals(layer) || "wool".equals(layer) || "undercoat".equals(layer)) {
-                candidates.add("entity/" + leaf + "/" + leaf + "_fur");
-                candidates.add("entity/" + leaf + "/" + leaf + "_wool");
+                relativeCandidates.add("entity/" + leaf + "/" + leaf + "_fur");
+                relativeCandidates.add("entity/" + leaf + "/" + leaf + "_wool");
             }
         } else {
             for (String name : List.of(path, leaf)) {
-                candidates.add("entity/" + name + "/" + name);
-                candidates.add("entity/" + name);
+                relativeCandidates.add("entity/" + name + "/" + name);
+                relativeCandidates.add("entity/" + name);
             }
 
             int underscore = leaf.lastIndexOf('_');
             if (underscore > 0 && underscore < leaf.length() - 1) {
                 String prefix = leaf.substring(0, underscore);
                 String suffix = leaf.substring(underscore + 1);
-                candidates.add("entity/" + suffix + "/" + leaf);
-                candidates.add("entity/" + suffix + "/" + suffix + "_" + prefix);
-                candidates.add("entity/" + prefix + "/" + leaf);
+                relativeCandidates.add("entity/" + suffix + "/" + leaf);
+                relativeCandidates.add("entity/" + suffix + "/" + suffix + "_" + prefix);
+                relativeCandidates.add("entity/" + prefix + "/" + leaf);
             }
 
             for (String variant : List.of(
                     "brown", "white", "gray", "red", "temperate", "creamy", "tabby")) {
-                candidates.add("entity/" + leaf + "/" + leaf + "_" + variant);
-                candidates.add("entity/" + leaf + "/" + variant);
+                relativeCandidates.add("entity/" + leaf + "/" + leaf + "_" + variant);
+                relativeCandidates.add("entity/" + leaf + "/" + variant);
             }
         }
 
-        for (String candidate : candidates) {
-            if (assets.read("assets/" + namespace + "/textures/" + candidate + ".png") != null) {
-                return namespace + ":" + candidate;
-            }
+        String root = "assets/" + namespace + "/textures/";
+        LinkedHashSet<String> available = new LinkedHashSet<>();
+        for (String relative : relativeCandidates) {
+            String full = root + relative + ".png";
+            if (assets.read(full) != null) available.add(full);
         }
 
-        // Mods are not required to name renderer textures after the registry id. Scan the
-        // owning namespace and rank plausible entity textures instead of maintaining
-        // per-mod compatibility tables.
-        String textureRoot = "assets/" + namespace + "/textures";
-        List<String> discovered = new ArrayList<>(assets.findPaths(
-                textureRoot,
+        for (String discovered : assets.findPaths(
+                "assets/" + namespace + "/textures",
                 candidate -> candidate.toLowerCase(Locale.ROOT).endsWith(".png"),
-                2048));
-        discovered.removeIf(candidate -> assetMatchScore(path, candidate, layer) <= 0);
-        discovered.sort(Comparator.comparingInt(
-                (String candidate) -> assetMatchScore(path, candidate, layer)).reversed());
-
-        if (!discovered.isEmpty()) {
-            String selected = discovered.get(0);
-            String marker = "assets/" + namespace + "/textures/";
-            if (selected.startsWith(marker) && selected.endsWith(".png")) {
-                String resourcePath = selected.substring(marker.length(), selected.length() - 4);
-                LOGGER.debug("Resolved texture for {}:{}#{} from {}", namespace, path, layer, selected);
-                return namespace + ":" + resourcePath;
+                2048)) {
+            if (assetMatchScore(path, discovered, layer) > 0
+                    || appearanceScore(metadata, discovered) > 0) {
+                available.add(discovered);
             }
         }
-        return null;
+
+        String selected = null;
+        int selectedScore = Integer.MIN_VALUE;
+        for (String candidate : available) {
+            int score = assetMatchScore(path, candidate, layer)
+                    + appearanceScore(metadata, candidate);
+            if (score > selectedScore) {
+                selected = candidate;
+                selectedScore = score;
+            }
+        }
+
+        if (selected == null || !selected.startsWith(root) || !selected.endsWith(".png")) {
+            return null;
+        }
+
+        String resourcePath = selected.substring(root.length(), selected.length() - 4);
+        LOGGER.debug("Resolved texture for {}:{}#{} from {}", namespace, path, layer, selected);
+        return namespace + ":" + resourcePath;
     }
 
     private BufferedImage loadTexture(String texture) {
@@ -611,6 +669,23 @@ public final class EntityModelSource implements BlockModelSource {
         } catch (NumberFormatException e) {
             return fallback;
         }
+    }
+
+    private static int appearanceScore(
+            Map<String, String> metadata, String candidate) {
+        if (metadata == null || metadata.isEmpty() || candidate == null) return 0;
+        String normalizedCandidate = compactName(candidate);
+        int score = 0;
+
+        for (Map.Entry<String, String> entry : metadata.entrySet()) {
+            if (!entry.getKey().startsWith("__bm3d_visual_")) continue;
+            String token = compactName(entry.getValue());
+            if (token.length() < 2) continue;
+            if (normalizedCandidate.contains(token)) {
+                score += 400;
+            }
+        }
+        return score;
     }
 
     private static int assetMatchScore(String entityPath, String assetPath, String layer) {
