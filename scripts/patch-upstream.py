@@ -2,6 +2,7 @@ from pathlib import Path
 
 from release_metadata import load_release
 from transforms.contraption_provider import apply as patch_contraption_provider
+from transforms.instanced_scene_runtime import apply as patch_instanced_scene_runtime
 
 RELEASE = load_release()
 VERSION = RELEASE["version"]
@@ -36,3 +37,5 @@ s = s.replace(
     1,
 )
 p.write_text(s)
+
+patch_instanced_scene_runtime()

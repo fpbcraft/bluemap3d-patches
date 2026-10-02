@@ -1,19 +1,19 @@
 package dev.duzo.bluemap3d.create;
 
 import dev.duzo.bluemap3d.api.BlockVolume;
-import dev.duzo.bluemap3d.api.DynamicModelSegment;
+import dev.duzo.bluemap3d.api.InstancedSceneObject;
 import dev.duzo.bluemap3d.api.ModelAttachment;
+import dev.duzo.bluemap3d.api.SceneInstance;
+import dev.duzo.bluemap3d.api.SceneInstanceGroup;
 import dev.duzo.bluemap3d.api.SceneObject;
 import dev.duzo.bluemap3d.api.SceneObjectProvider;
 import dev.duzo.bluemap3d.compat.CompatRegistry;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
-import org.joml.Quaternionf;
 import org.joml.Vector3dc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +21,6 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -29,16 +28,11 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Publishes Create: Simulated's server-authoritative physics ropes to BlueMap3D.
+ * Publishes each Create: Simulated rope as one logical BlueMap3D object.
  *
- * <p>Simulated already keeps every rope as a ServerRopeStrand made of world-space physics
- * points. We intentionally access that optional mod through a tiny reflection adapter so
- * the normal BlueMap: Create addon still loads when Simulated is not installed.
- *
- * <p>Each physics edge is one {@link DynamicModelSegment}. Its mesh is almost always
- * immutable while only midpoint/rotation are streamed, avoiding a whole-rope re-bake on
- * every physics update. Segment length is streamed as live Y scale, so winch extension
- * and solver movement do not rebuild meshes and adjacent segments cannot undershoot.
+ * <p>The rope body and knots are two prototype groups rendered with GPU instances in the
+ * browser. A twenty-edge rope therefore costs one logical feed/history object and two
+ * draw calls rather than roughly forty independently managed SceneObjects.
  */
 public final class SimulatedRopeProvider implements SceneObjectProvider {
 
@@ -47,6 +41,12 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
             ResourceLocation.fromNamespaceAndPath("simulated", "block/rope/rope");
     private static final ResourceLocation KNOT_MODEL =
             ResourceLocation.fromNamespaceAndPath("simulated", "block/rope/knot");
+
+    private static final BlockVolume SEGMENT_GEOMETRY = BlockVolume.attachments(
+            BlockPos.ZERO,
+            BlockPos.ZERO,
+            new Vec3(0.5, 0.5, 0.5),
+            List.of(new ModelAttachment(BlockPos.ZERO, ROPE_MODEL, Map.of())));
     private static final BlockVolume KNOT_GEOMETRY = BlockVolume.attachments(
             BlockPos.ZERO,
             BlockPos.ZERO,
@@ -57,8 +57,11 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
                     Map.of(),
                     new Matrix4f().translation(-0.5f, -0.5f, -0.5f))));
 
-    private final Map<ServerLevel, Map<UUID, RopeSnapshot>> lastKnown = new HashMap<>();
-    private final Map<ServerLevel, Set<String>> authoritativePrefixes = new HashMap<>();
+    private final Map<ServerLevel, Set<String>> authoritativePrefixes =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<ServerLevel, Set<String>> deletedIds =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     private SimulatedApi api;
     private boolean discoveryAttempted;
     private boolean warned;
@@ -71,124 +74,102 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
     @Override
     public Collection<? extends SceneObject> objects(ServerLevel level) {
         if (!CompatRegistry.get().featureEnabled("simulated.ropeRendering", true)) {
+            authoritativePrefixes.put(level, Set.of());
             return List.of();
         }
 
         SimulatedApi access = api();
         if (access == null) {
-            return List.of();
-        }
-
-        Map<UUID, RopeSnapshot> cache =
-                lastKnown.computeIfAbsent(level, ignored -> new HashMap<>());
-
-        // destroyRope() is positive destruction evidence. Keep the logical family
-        // authoritative for one publish with zero live children so generic persistence
-        // deletes every saved segment/knot for that rope. Ordinary manager removal caused
-        // by chunk unload never enters this registry and therefore remains restorable.
-        Set<UUID> destroyed = SimulatedRopeRegistry.drainRemoved(level);
-        for (UUID id : destroyed) {
-            cache.remove(id);
-        }
-
-        try {
-            Collection<?> strands = access.strands(level);
-            Set<UUID> seen = new HashSet<>();
-
-            for (Object strand : strands) {
-                RopeSnapshot snapshot = access.snapshot(strand);
-                if (snapshot == null || snapshot.points().size() < 2) {
-                    continue;
-                }
-
-                seen.add(snapshot.id());
-                cache.put(snapshot.id(), snapshot);
-            }
-
-            // The manager only reports strands whose owning holder is currently loaded.
-            // Drop them from this RAM working set when absent and let generic persistence
-            // supply their last-known scene children. For strands we DID see, however,
-            // their current child topology is authoritative and stale saved segment/knot
-            // ids can be pruned safely.
-            cache.keySet().retainAll(seen);
-            Set<String> prefixes = new HashSet<>();
-            for (UUID id : seen) prefixes.add(id + "/");
-            for (UUID id : destroyed) prefixes.add(id + "/");
-            authoritativePrefixes.put(level, Set.copyOf(prefixes));
-        } catch (ReflectiveOperationException | RuntimeException error) {
-            // Destruction events are independent positive evidence; preserve their empty
-            // authoritative families even if live strand enumeration failed this pass.
-            Set<String> prefixes = new HashSet<>();
-            for (UUID id : destroyed) prefixes.add(id + "/");
-            authoritativePrefixes.put(level, Set.copyOf(prefixes));
-            if (!warned) {
-                warned = true;
-                LOGGER.warn(
-                        "Could not read Create: Simulated rope state; keeping last-known rope snapshots: {}",
-                        SimulatedReflection.rootMessage(error));
-            }
-        }
-
-        if (cache.isEmpty()) {
+            authoritativePrefixes.put(level, Set.of());
             return List.of();
         }
 
         List<SceneObject> out = new ArrayList<>();
-        for (RopeSnapshot rope : cache.values()) {
-            List<Vec3> points = rope.points();
-            for (int i = 1; i < points.size(); i++) {
-                Vec3 start = points.get(i - 1);
-                Vec3 end = points.get(i);
-                if (start.distanceToSqr(end) < 1.0e-10) {
-                    continue;
-                }
+        Set<String> legacyPrefixes = new HashSet<>();
 
-                // Simulated winches add/remove points at the BEGINNING of the rope.
-                // Numbering from that end made every existing segment change identity
-                // whenever the winch crossed a whole-block boundary, so historical
-                // interpolation connected unrelated physical segments. Number from the
-                // stable END instead: existing ids now survive addFirst/removeFirst.
-                int segmentFromEnd = points.size() - 1 - i;
+        Set<UUID> destroyed = SimulatedRopeRegistry.drainRemoved(level);
+        Set<String> removedIds = new HashSet<>();
+        for (UUID id : destroyed) {
+            removedIds.add(id.toString());
+            legacyPrefixes.add(id + "/");
+        }
+        deletedIds.put(level, Set.copyOf(removedIds));
 
-                out.add(DynamicModelSegment.between(
-                        rope.id() + "/segment-" + segmentFromEnd,
-                        level.dimension(),
-                        ROPE_MODEL,
-                        Map.of(),
-                        start,
-                        end,
-                        "Simulated Rope"));
+        try {
+            for (Object strand : access.strands(level)) {
+                RopeSnapshot rope = access.snapshot(strand);
+                if (rope == null || rope.points().size() < 2) continue;
 
-                // Match Simulated's rope renderer: internal joints from the second one
-                // onward also carry the little knot model. Keep knots as their own
-                // rigid objects so streamed Y scaling on the rope body never stretches
-                // the knot itself.
-                if (i > 1) {
-                    int knotFromEnd = points.size() - i;
-                    out.add(knotObject(
-                            rope.id() + "/knot-" + knotFromEnd,
-                            level.dimension(),
-                            start));
-                }
+                out.add(objectOf(level, rope));
+                // Upgrade cleanup: pre-instancing builds persisted segment/knot children
+                // below UUID/. Once this live logical rope is known, that old child scope
+                // is authoritative-empty and can be removed from generic persistence.
+                legacyPrefixes.add(rope.id() + "/");
+            }
+            authoritativePrefixes.put(level, Set.copyOf(legacyPrefixes));
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            authoritativePrefixes.put(level, Set.copyOf(legacyPrefixes));
+            if (!warned) {
+                warned = true;
+                LOGGER.warn(
+                        "Could not read Create: Simulated rope state; persistent snapshots remain available: {}",
+                        SimulatedReflection.rootMessage(error));
             }
         }
 
-        return out;
+        return List.copyOf(out);
     }
 
-    private static SceneObject knotObject(
-            String id,
-            ResourceKey<Level> dimension,
-            Vec3 position) {
-        return new SceneObject() {
-            @Override public String id() { return id; }
-            @Override public BlockVolume geometry() { return KNOT_GEOMETRY; }
-            @Override public long geometryVersion() { return 1L; }
-            @Override public Vec3 position() { return position; }
-            @Override public Quaternionf rotation() { return new Quaternionf(); }
-            @Override public String label() { return "Simulated Rope Knot"; }
-            @Override public ResourceKey<Level> dimension() { return dimension; }
+    private static SceneObject objectOf(ServerLevel level, RopeSnapshot rope) {
+        List<Vec3> points = rope.points();
+
+        List<SceneInstance> segments = new ArrayList<>(Math.max(0, points.size() - 1));
+        // Simulated winches add/remove at the beginning. Emit transforms from the stable
+        // END so index 0 continues to mean the same physical edge across extension.
+        for (int fromEnd = 0; fromEnd < points.size() - 1; fromEnd++) {
+            int endIndex = points.size() - 1 - fromEnd;
+            Vec3 start = points.get(endIndex - 1);
+            Vec3 end = points.get(endIndex);
+            if (start.distanceToSqr(end) < 1.0e-10) continue;
+            segments.add(SceneInstance.between(start, end, 1f));
+        }
+
+        List<SceneInstance> knots = new ArrayList<>(Math.max(0, points.size() - 2));
+        for (int fromEnd = 1; fromEnd <= points.size() - 2; fromEnd++) {
+            knots.add(SceneInstance.at(points.get(points.size() - 1 - fromEnd)));
+        }
+
+        List<SceneInstanceGroup> groups = new ArrayList<>(2);
+        groups.add(new SceneInstanceGroup(
+                "segments",
+                "simulated-rope-segment",
+                SEGMENT_GEOMETRY,
+                1L,
+                segments));
+        if (!knots.isEmpty()) {
+            groups.add(new SceneInstanceGroup(
+                    "knots",
+                    "simulated-rope-knot",
+                    KNOT_GEOMETRY,
+                    1L,
+                    knots));
+        }
+
+        return new InstancedSceneObject() {
+            @Override public String id() { return rope.id().toString(); }
+            @Override public String label() { return "Simulated Rope"; }
+            @Override public net.minecraft.resources.ResourceKey<Level> dimension() {
+                return level.dimension();
+            }
+            @Override public List<SceneInstanceGroup> instanceGroups() {
+                return List.copyOf(groups);
+            }
         };
+    }
+
+    @Override
+    public Collection<String> deletedObjectIds(ServerLevel level) {
+        return deletedIds.getOrDefault(level, Set.of());
     }
 
     @Override
@@ -197,8 +178,8 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
     }
 
     public void clear() {
-        lastKnown.clear();
         authoritativePrefixes.clear();
+        deletedIds.clear();
         SimulatedRopeRegistry.clear();
     }
 
@@ -207,7 +188,8 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
             discoveryAttempted = true;
             try {
                 api = SimulatedApi.discover();
-                LOGGER.info("Create: Simulated rope integration enabled");
+                LOGGER.info(
+                        "Create: Simulated rope integration enabled (using Simulated's already-refreshed server point list)");
             } catch (ClassNotFoundException ignored) {
                 LOGGER.debug("Create: Simulated is not installed; rope integration disabled");
             } catch (ReflectiveOperationException | RuntimeException error) {
@@ -225,8 +207,12 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
     }
 
     /**
-     * Reflection boundary for optional Simulated classes. Resolve methods once; the hot
-     * publish path only performs Method.invoke and cheap vector copies.
+     * Reflection boundary for optional Simulated classes.
+     *
+     * <p>Do not call ServerRopeStrand.updatePose() here. Simulated's
+     * ServerRopeTrackingSystem.neededPlayers() is invoked every Sable tracking tick and
+     * already refreshes every active strand before networking decisions. A second read
+     * here duplicated the native/physics-to-Java pose copy.
      */
     private static final class SimulatedApi {
         private static final String MANAGER =
@@ -238,53 +224,36 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
         private final Method getAllStrands;
         private final Method getUuid;
         private final Method getPoints;
-        private final Method isActive;
-        private final Method updatePose;
 
         private SimulatedApi(
                 Method getOrCreate,
                 Method getAllStrands,
                 Method getUuid,
-                Method getPoints,
-                Method isActive,
-                Method updatePose) {
+                Method getPoints) {
             this.getOrCreate = getOrCreate;
             this.getAllStrands = getAllStrands;
             this.getUuid = getUuid;
             this.getPoints = getPoints;
-            this.isActive = isActive;
-            this.updatePose = updatePose;
         }
 
         static SimulatedApi discover() throws ReflectiveOperationException {
             Class<?> managerClass = SimulatedReflection.loadClass(MANAGER);
             Class<?> strandClass = SimulatedReflection.loadClass(STRAND);
-
             return new SimulatedApi(
                     managerClass.getMethod("getOrCreate", Level.class),
                     managerClass.getMethod("getAllStrands"),
                     strandClass.getMethod("getUUID"),
-                    strandClass.getMethod("getPoints"),
-                    strandClass.getMethod("isActive"),
-                    strandClass.getMethod("updatePose"));
+                    strandClass.getMethod("getPoints"));
         }
 
         Collection<?> strands(ServerLevel level) throws ReflectiveOperationException {
             Object manager = SimulatedReflection.invoke(getOrCreate, null, level);
-            if (manager == null) {
-                return List.of();
-            }
+            if (manager == null) return List.of();
             Object value = SimulatedReflection.invoke(getAllStrands, manager);
             return value instanceof Collection<?> collection ? collection : List.of();
         }
 
         RopeSnapshot snapshot(Object strand) throws ReflectiveOperationException {
-            if (Boolean.TRUE.equals(SimulatedReflection.invoke(isActive, strand))) {
-                // Mirrors Simulated's own ServerRopeTrackingSystem: copy the physics pose
-                // into the strand's point list before reading it for rendering.
-                SimulatedReflection.invoke(updatePose, strand);
-            }
-
             Object uuidValue = SimulatedReflection.invoke(getUuid, strand);
             Object pointsValue = SimulatedReflection.invoke(getPoints, strand);
             if (!(uuidValue instanceof UUID uuid) || !(pointsValue instanceof Iterable<?> points)) {
@@ -300,8 +269,8 @@ public final class SimulatedRopeProvider implements SceneObjectProvider {
                     copy.add(new Vec3(vector.x(), vector.y(), vector.z()));
                 }
             }
-
             return new RopeSnapshot(uuid, copy);
         }
+
     }
 }

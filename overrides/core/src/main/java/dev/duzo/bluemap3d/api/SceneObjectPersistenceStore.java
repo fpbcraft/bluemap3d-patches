@@ -157,8 +157,16 @@ final class SceneObjectPersistenceStore {
     static void stage(String provider, SceneObject object) {
         SavedObject snapshot = SavedObject.from(provider, object);
         String key = key(provider, object.id());
-        PENDING.put(key, snapshot);
 
+        if (object instanceof InstancedSceneObject) {
+            // Instance transforms are the restore state. Prototype meshes are published
+            // independently by geometry key, so the logical object needs no own mesh.
+            PENDING.remove(key);
+            saveSnapshot(snapshot);
+            return;
+        }
+
+        PENDING.put(key, snapshot);
         Long published = PUBLISHED.get(key);
         if (published != null && published == snapshot.version) {
             PENDING.remove(key);
@@ -358,6 +366,7 @@ final class SceneObjectPersistenceStore {
         float sx;
         float sy;
         float sz;
+        List<SavedGroup> groups;
 
         SavedObject() {}
 
@@ -376,7 +385,8 @@ final class SceneObjectPersistenceStore {
                 float qw,
                 float sx,
                 float sy,
-                float sz) {
+                float sz,
+                List<SavedGroup> groups) {
             this.provider = provider;
             this.id = id;
             this.dimension = dimension;
@@ -392,12 +402,18 @@ final class SceneObjectPersistenceStore {
             this.sx = sx;
             this.sy = sy;
             this.sz = sz;
+            this.groups = groups == null ? List.of() : List.copyOf(groups);
         }
 
         static SavedObject from(String provider, SceneObject object) {
             Vec3 position = object.position();
             Quaternionf rotation = object.rotation();
             Vector3f scale = object.scale();
+            List<SavedGroup> groups = object instanceof InstancedSceneObject instanced
+                    ? instanced.instanceGroups().stream()
+                            .map(SavedGroup::from)
+                            .toList()
+                    : List.of();
             return new SavedObject(
                     provider,
                     object.id(),
@@ -413,7 +429,8 @@ final class SceneObjectPersistenceStore {
                     rotation.w,
                     scale.x,
                     scale.y,
-                    scale.z);
+                    scale.z,
+                    groups);
         }
 
         boolean valid() {
@@ -423,7 +440,8 @@ final class SceneObjectPersistenceStore {
                     && Double.isFinite(x) && Double.isFinite(y) && Double.isFinite(z)
                     && Float.isFinite(qx) && Float.isFinite(qy)
                     && Float.isFinite(qz) && Float.isFinite(qw)
-                    && Float.isFinite(sx) && Float.isFinite(sy) && Float.isFinite(sz);
+                    && Float.isFinite(sx) && Float.isFinite(sy) && Float.isFinite(sz)
+                    && (groups == null || groups.stream().allMatch(SavedGroup::valid));
         }
 
         SceneObject cached(ServerLevel level) {
@@ -433,6 +451,22 @@ final class SceneObjectPersistenceStore {
             Vec3 position = new Vec3(x, y, z);
             Quaternionf rotation = new Quaternionf(qx, qy, qz, qw);
             Vector3f scale = new Vector3f(sx, sy, sz);
+
+            if (groups != null && !groups.isEmpty()) {
+                List<SceneInstanceGroup> restoredGroups =
+                        groups.stream().map(SavedGroup::cached).toList();
+                return new InstancedSceneObject() {
+                    @Override public String id() { return SavedObject.this.id; }
+                    @Override public Vec3 position() { return position; }
+                    @Override public Quaternionf rotation() { return new Quaternionf(rotation); }
+                    @Override public Vector3f scale() { return new Vector3f(scale); }
+                    @Override public String label() { return label; }
+                    @Override public ResourceKey<Level> dimension() { return dimensionKey; }
+                    @Override public List<SceneInstanceGroup> instanceGroups() {
+                        return restoredGroups;
+                    }
+                };
+            }
 
             return new SceneObject() {
                 @Override public String id() { return SavedObject.this.id; }
@@ -465,13 +499,150 @@ final class SceneObjectPersistenceStore {
                     && Objects.equals(provider, that.provider)
                     && Objects.equals(id, that.id)
                     && Objects.equals(dimension, that.dimension)
-                    && Objects.equals(label, that.label);
+                    && Objects.equals(label, that.label)
+                    && Objects.equals(groups, that.groups);
         }
 
         @Override
         public int hashCode() {
             return Objects.hash(provider, id, dimension, label, version,
-                    x, y, z, qx, qy, qz, qw, sx, sy, sz);
+                    x, y, z, qx, qy, qz, qw, sx, sy, sz, groups);
+        }
+    }
+
+    private static final class SavedGroup {
+        String id;
+        String geometryKey;
+        long geometryVersion;
+        List<SavedInstance> instances;
+
+        SavedGroup() {}
+
+        SavedGroup(
+                String id,
+                String geometryKey,
+                long geometryVersion,
+                List<SavedInstance> instances) {
+            this.id = id;
+            this.geometryKey = geometryKey;
+            this.geometryVersion = geometryVersion;
+            this.instances = instances == null ? List.of() : List.copyOf(instances);
+        }
+
+        static SavedGroup from(SceneInstanceGroup group) {
+            return new SavedGroup(
+                    group.id(),
+                    group.geometryKey(),
+                    group.geometryVersion(),
+                    group.instances().stream().map(SavedInstance::from).toList());
+        }
+
+        boolean valid() {
+            return id != null && !id.isBlank()
+                    && geometryKey != null && !geometryKey.isBlank()
+                    && instances != null
+                    && instances.stream().allMatch(SavedInstance::valid);
+        }
+
+        SceneInstanceGroup cached() {
+            return new SceneInstanceGroup(
+                    id,
+                    geometryKey,
+                    BlockVolume.EMPTY,
+                    geometryVersion,
+                    false,
+                    instances.stream().map(SavedInstance::restore).toList());
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof SavedGroup that)) return false;
+            return geometryVersion == that.geometryVersion
+                    && Objects.equals(id, that.id)
+                    && Objects.equals(geometryKey, that.geometryKey)
+                    && Objects.equals(instances, that.instances);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(id, geometryKey, geometryVersion, instances);
+        }
+    }
+
+    private static final class SavedInstance {
+        double x;
+        double y;
+        double z;
+        float qx;
+        float qy;
+        float qz;
+        float qw;
+        float sx;
+        float sy;
+        float sz;
+
+        SavedInstance() {}
+
+        SavedInstance(
+                double x, double y, double z,
+                float qx, float qy, float qz, float qw,
+                float sx, float sy, float sz) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.qx = qx;
+            this.qy = qy;
+            this.qz = qz;
+            this.qw = qw;
+            this.sx = sx;
+            this.sy = sy;
+            this.sz = sz;
+        }
+
+        static SavedInstance from(SceneInstance instance) {
+            Vec3 p = instance.position();
+            Quaternionf q = instance.rotation();
+            Vector3f s = instance.scale();
+            return new SavedInstance(
+                    p.x, p.y, p.z,
+                    q.x, q.y, q.z, q.w,
+                    s.x, s.y, s.z);
+        }
+
+        boolean valid() {
+            return Double.isFinite(x) && Double.isFinite(y) && Double.isFinite(z)
+                    && Float.isFinite(qx) && Float.isFinite(qy)
+                    && Float.isFinite(qz) && Float.isFinite(qw)
+                    && Float.isFinite(sx) && Float.isFinite(sy) && Float.isFinite(sz);
+        }
+
+        SceneInstance restore() {
+            return new SceneInstance(
+                    new Vec3(x, y, z),
+                    new Quaternionf(qx, qy, qz, qw),
+                    new Vector3f(sx, sy, sz));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof SavedInstance that)) return false;
+            return Double.compare(x, that.x) == 0
+                    && Double.compare(y, that.y) == 0
+                    && Double.compare(z, that.z) == 0
+                    && Float.compare(qx, that.qx) == 0
+                    && Float.compare(qy, that.qy) == 0
+                    && Float.compare(qz, that.qz) == 0
+                    && Float.compare(qw, that.qw) == 0
+                    && Float.compare(sx, that.sx) == 0
+                    && Float.compare(sy, that.sy) == 0
+                    && Float.compare(sz, that.sz) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(x, y, z, qx, qy, qz, qw, sx, sy, sz);
         }
     }
 }
