@@ -404,39 +404,113 @@ public final class EntityModelSource implements BlockModelSource {
             rotateAround(transform, pivot, vector(cube.get("rotation"), new float[]{0F, 0F, 0F}));
         }
 
+        float dx = Math.abs(size[0]);
+        float dy = Math.abs(size[1]);
+        float dz = Math.abs(size[2]);
+        boolean mirror = cube.has("mirror") && cube.get("mirror").getAsBoolean();
+        JsonElement uvDefinition = cube.get("uv");
+
+        // Bedrock geometry supports two UV encodings:
+        //  - [u,v]: the standard unfolded box layout
+        //  - {north:{uv:[...],uv_size:[...]}, ...}: independently authored faces
+        // GeckoLib/AzureLib exporters use both, so preserve either form instead of
+        // reducing everything to the compact layout.
+        if (uvDefinition != null && uvDefinition.isJsonObject()) {
+            JsonObject faces = uvDefinition.getAsJsonObject();
+            addGeoFaceIfPresent(out, transform, texture, faces, "down", Direction.DOWN,
+                    minX,minY,minZ,maxX,maxY,maxZ, dx,dz, textureWidth,textureHeight, mirror);
+            addGeoFaceIfPresent(out, transform, texture, faces, "up", Direction.UP,
+                    minX,minY,minZ,maxX,maxY,maxZ, dx,dz, textureWidth,textureHeight, mirror);
+            addGeoFaceIfPresent(out, transform, texture, faces, "west", Direction.WEST,
+                    minX,minY,minZ,maxX,maxY,maxZ, dz,dy, textureWidth,textureHeight, mirror);
+            addGeoFaceIfPresent(out, transform, texture, faces, "north", Direction.NORTH,
+                    minX,minY,minZ,maxX,maxY,maxZ, dx,dy, textureWidth,textureHeight, mirror);
+            addGeoFaceIfPresent(out, transform, texture, faces, "east", Direction.EAST,
+                    minX,minY,minZ,maxX,maxY,maxZ, dz,dy, textureWidth,textureHeight, mirror);
+            addGeoFaceIfPresent(out, transform, texture, faces, "south", Direction.SOUTH,
+                    minX,minY,minZ,maxX,maxY,maxZ, dx,dy, textureWidth,textureHeight, mirror);
+            return;
+        }
+
         float u = 0F;
         float v = 0F;
-        if (cube.has("uv") && cube.get("uv").isJsonArray()) {
-            JsonArray uv = cube.getAsJsonArray("uv");
+        if (uvDefinition != null && uvDefinition.isJsonArray()) {
+            JsonArray uv = uvDefinition.getAsJsonArray();
             if (uv.size() >= 2) {
                 u = uv.get(0).getAsFloat();
                 v = uv.get(1).getAsFloat();
             }
         }
 
-        float dx = Math.abs(size[0]);
-        float dy = Math.abs(size[1]);
-        float dz = Math.abs(size[2]);
-
         addGeoFace(out, transform, texture,
                 corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.DOWN),
-                uvRect(u + dz + dx, v, u + dz + dx + dx, v + dz, textureWidth, textureHeight));
+                maybeMirrorUv(uvRect(u + dz + dx, v, u + dz + dx + dx, v + dz,
+                        textureWidth, textureHeight), mirror));
         addGeoFace(out, transform, texture,
                 corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.UP),
-                uvRect(u + dz, v, u + dz + dx, v + dz, textureWidth, textureHeight));
+                maybeMirrorUv(uvRect(u + dz, v, u + dz + dx, v + dz,
+                        textureWidth, textureHeight), mirror));
         addGeoFace(out, transform, texture,
                 corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.WEST),
-                uvRect(u, v + dz, u + dz, v + dz + dy, textureWidth, textureHeight));
+                maybeMirrorUv(uvRect(u, v + dz, u + dz, v + dz + dy,
+                        textureWidth, textureHeight), mirror));
         addGeoFace(out, transform, texture,
                 corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.NORTH),
-                uvRect(u + dz, v + dz, u + dz + dx, v + dz + dy, textureWidth, textureHeight));
+                maybeMirrorUv(uvRect(u + dz, v + dz, u + dz + dx, v + dz + dy,
+                        textureWidth, textureHeight), mirror));
         addGeoFace(out, transform, texture,
                 corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.EAST),
-                uvRect(u + dz + dx, v + dz, u + dz + dx + dz, v + dz + dy, textureWidth, textureHeight));
+                maybeMirrorUv(uvRect(u + dz + dx, v + dz, u + dz + dx + dz, v + dz + dy,
+                        textureWidth, textureHeight), mirror));
         addGeoFace(out, transform, texture,
                 corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.SOUTH),
-                uvRect(u + dz + dx + dz, v + dz,
-                        u + dz + dx + dz + dx, v + dz + dy, textureWidth, textureHeight));
+                maybeMirrorUv(uvRect(u + dz + dx + dz, v + dz,
+                        u + dz + dx + dz + dx, v + dz + dy,
+                        textureWidth, textureHeight), mirror));
+    }
+
+    private static void addGeoFaceIfPresent(
+            List<ModelQuad> out,
+            Matrix4f transform,
+            String texture,
+            JsonObject faces,
+            String faceName,
+            Direction direction,
+            float minX, float minY, float minZ,
+            float maxX, float maxY, float maxZ,
+            float defaultWidth, float defaultHeight,
+            float textureWidth, float textureHeight,
+            boolean mirror) {
+        JsonElement element = faces.get(faceName);
+        if (element == null || !element.isJsonObject()) return;
+
+        JsonObject face = element.getAsJsonObject();
+        float[] uv = vector2(face.get("uv"), null);
+        if (uv == null) return;
+
+        float[] uvSize = vector2(face.get("uv_size"),
+                new float[]{defaultWidth, defaultHeight});
+        float[] mapped = uvRect(
+                uv[0], uv[1],
+                uv[0] + uvSize[0], uv[1] + uvSize[1],
+                textureWidth, textureHeight);
+
+        addGeoFace(
+                out,
+                transform,
+                texture,
+                corners(minX,minY,minZ,maxX,maxY,maxZ,direction),
+                maybeMirrorUv(mapped, mirror));
+    }
+
+    private static float[] maybeMirrorUv(float[] uv, boolean mirror) {
+        if (!mirror) return uv;
+        // Swap left/right corners while retaining the face's winding.
+        return new float[]{
+                uv[2], uv[3],
+                uv[0], uv[1],
+                uv[6], uv[7],
+                uv[4], uv[5]};
     }
 
     private static void addGeoFace(
@@ -648,6 +722,17 @@ public final class EntityModelSource implements BlockModelSource {
         float[] values = new float[array.size()];
         for (int i = 0; i < array.size(); i++) values[i] = array.get(i).getAsFloat();
         return values;
+    }
+
+    private static float[] vector2(JsonElement element, float[] fallback) {
+        if (element == null || !element.isJsonArray()) {
+            return fallback == null ? null : fallback.clone();
+        }
+        JsonArray array = element.getAsJsonArray();
+        if (array.size() < 2) {
+            return fallback == null ? null : fallback.clone();
+        }
+        return new float[]{array.get(0).getAsFloat(), array.get(1).getAsFloat()};
     }
 
     private static float[] vector(JsonElement element, float[] fallback) {
