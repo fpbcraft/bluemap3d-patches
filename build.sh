@@ -63,6 +63,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectLifecyc
    core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectLifecycle.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/PersistentSceneObjectProvider.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/PersistentSceneObjectProvider.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectPersistenceStore.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectPersistenceStore.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/ScenePersistencePolicy.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/ScenePersistencePolicy.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegment.java" \
