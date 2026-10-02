@@ -35,6 +35,7 @@ class PatchArchitectureTest(unittest.TestCase):
             'Path("core/build.gradle")',
             'Path("core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java")',
             'Path("core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java")',
+            'Path("addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java")',
         )
         for path in migrated_paths:
             with self.subTest(path=path):
