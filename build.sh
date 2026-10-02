@@ -86,6 +86,8 @@ cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/Simulat
    addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeProvider.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeRegistry.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedRopeRegistry.java
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedReflection.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedReflection.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringProvider.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringProvider.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringRegistry.java" \
