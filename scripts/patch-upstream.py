@@ -300,6 +300,15 @@ cache_methods = '''    private void rememberSableContraption(
 
         try (InputStream input = Files.newInputStream(SABLE_CACHE_FILE)) {
             CompoundTag root = NbtIo.readCompressed(input, NbtAccounter.unlimitedHeap());
+            if (root.getInt("Version") < 2) {
+                // v1 predates positive deletion/reassembly semantics and may contain
+                // ghost Create entity UUIDs. Do not restore it; current live children
+                // repopulate a clean v2 cache.
+                LOGGER.info(
+                        "Ignoring legacy Sable child cache v{}; current children will repopulate",
+                        root.getInt("Version"));
+                return;
+            }
             ListTag entries = root.getList("Entries", Tag.TAG_COMPOUND);
             String dimensionId = level.dimension().location().toString();
             Map<String, SableContraptionCache> levelCache = sableContraptionCaches
@@ -378,12 +387,16 @@ cache_methods = '''    private void rememberSableContraption(
                 try (InputStream input = Files.newInputStream(SABLE_CACHE_FILE)) {
                     CompoundTag previousRoot =
                             NbtIo.readCompressed(input, NbtAccounter.unlimitedHeap());
-                    ListTag previousEntries =
-                            previousRoot.getList("Entries", Tag.TAG_COMPOUND);
-                    for (int i = 0; i < previousEntries.size(); i++) {
-                        CompoundTag previous = previousEntries.getCompound(i);
-                        if (!replacedDimensions.contains(previous.getString("Dimension"))) {
-                            entries.add(previous.copy());
+                    // Never carry v1 entries forward: they are exactly the snapshots that
+                    // can contain now-invalid child UUIDs.
+                    if (previousRoot.getInt("Version") >= 2) {
+                        ListTag previousEntries =
+                                previousRoot.getList("Entries", Tag.TAG_COMPOUND);
+                        for (int i = 0; i < previousEntries.size(); i++) {
+                            CompoundTag previous = previousEntries.getCompound(i);
+                            if (!replacedDimensions.contains(previous.getString("Dimension"))) {
+                                entries.add(previous.copy());
+                            }
                         }
                     }
                 } catch (IOException | RuntimeException error) {
@@ -424,7 +437,7 @@ cache_methods = '''    private void rememberSableContraption(
             }
 
             CompoundTag root = new CompoundTag();
-            root.putInt("Version", 1);
+            root.putInt("Version", 2);
             root.put("Entries", entries);
 
             Path temporary = SABLE_CACHE_FILE.resolveSibling(
