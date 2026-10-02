@@ -214,13 +214,13 @@ public final class TrafficCraftSignSource implements BlockModelSource {
             String texture) {
         float[] from = {0f, 0f, z};
         float[] to = {16f, 16f, z};
-        float[] positions = ResourcePackSource.faceCorners(from, to, face);
+        float[] positions = ResourcePackGeometry.faceCorners(from, to, face);
         rotateY(positions, rotation(facing));
         return new ModelQuad(
                 null,
                 null,
                 positions,
-                ResourcePackSource.uvCorners(new float[]{0f, 0f, 16f, 16f}, 0),
+                ResourcePackGeometry.uvCorners(new float[]{0f, 0f, 16f, 16f}, 0),
                 texture,
                 0xFFFFFF);
     }
