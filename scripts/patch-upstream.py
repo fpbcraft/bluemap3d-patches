@@ -66,7 +66,7 @@ ship_source = (
         // Revision 35 intentionally invalidates every previously published Sable hull once.
         // That cleans stale meshes created by the old post-change dirty hook; subsequent
         // publishes return to hash-based reuse and only structural changes rebake.
-        return mix(ShipGeometryRevisionTracker.structureHash(ship), 35L);
+        return mix(ShipGeometryRevisionTracker.structureHash(ship), 36L);
     }
 
 '''
@@ -90,18 +90,18 @@ ship_source = ship_source.replace(
 ''',
     1,
 )
-# Sable snapshot cache format 2 intentionally refuses pre-fix cached hull meshes.
+# Sable snapshot cache format 3 intentionally refuses pre-fix cached hull meshes.
 # Those snapshots may contain child blocks that were assembled away while the old dirty
 # hook missed the removal. Current ships repopulate the cache after their corrected mesh
 # is published; unloaded ships stay hidden rather than showing a known-stale hull.
 ship_source = ship_source.replace(
     "if (state != null && state.ships() != null) {",
-    "if (state != null && state.format() >= 2 && state.ships() != null) {",
+    "if (state != null && state.format() >= 3 && state.ships() != null) {",
     1,
 )
 ship_source = ship_source.replace(
     "new SnapshotFile(1, List.copyOf(saved.values()))",
-    "new SnapshotFile(2, List.copyOf(saved.values()))",
+    "new SnapshotFile(3, List.copyOf(saved.values()))",
     1,
 )
 p.write_text(ship_source)
