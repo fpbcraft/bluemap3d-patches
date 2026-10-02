@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -18,6 +19,10 @@ def load_release(path: Path | None = None) -> dict[str, str]:
     data = json.loads(source.read_text())
     if not isinstance(data, dict):
         raise ValueError("release metadata must be a JSON object")
+
+    override = os.environ.get("RELEASE_VERSION", "").strip()
+    if override:
+        data["version"] = override
 
     missing = [key for key in REQUIRED if not isinstance(data.get(key), str) or not data[key].strip()]
     if missing:
