@@ -266,6 +266,10 @@ final class JavaEntityModelSource {
 
             int score = EntityAssetMatch.score(entityPath, path, "main")
                     + EntityAssetMatch.appearanceScore(metadata, path);
+            if (score <= 0) {
+                score = javaNameScore(entityPath, leaf)
+                        + EntityAssetMatch.appearanceScore(metadata, path);
+            }
             if (score <= 0) continue;
 
             String compactPath = compact(path);
@@ -289,6 +293,122 @@ final class JavaEntityModelSource {
 
         out.sort(Comparator.comparingInt(Candidate::score).reversed());
         return out.size() <= 24 ? List.copyOf(out) : List.copyOf(out.subList(0, 24));
+    }
+
+    static int javaNameScoreForTest(String entityPath, String classLeaf) {
+        return javaNameScore(entityPath, classLeaf);
+    }
+
+    private static int javaNameScore(String entityPath, String classLeaf) {
+        String entity = compact(entityPath);
+        String model = classLeaf == null ? "" : classLeaf;
+        if (model.toLowerCase(Locale.ROOT).endsWith(".class")) {
+            model = model.substring(0, model.length() - 6);
+        }
+        int dollar = model.indexOf('$');
+        if (dollar >= 0) model = model.substring(0, dollar);
+
+        String lower = model.toLowerCase(Locale.ROOT);
+        for (String suffix : List.of("entitymodel", "mobmodel", "model")) {
+            if (lower.endsWith(suffix)) {
+                model = model.substring(0, model.length() - suffix.length());
+                lower = model.toLowerCase(Locale.ROOT);
+                break;
+            }
+        }
+        if (lower.startsWith("model") && model.length() > 5) {
+            model = model.substring(5);
+        }
+
+        String candidate = compact(model);
+        if (entity.isEmpty() || candidate.isEmpty()) return 0;
+        if (candidate.equals(entity)) return 900;
+        if (entity.contains(candidate) || candidate.contains(entity)) {
+            return Math.min(entity.length(), candidate.length()) >= 4 ? 560 : 0;
+        }
+
+        int distance = editDistance(entity, candidate, 2);
+        if (distance == 1 && Math.min(entity.length(), candidate.length()) >= 5) return 520;
+        if (distance == 2 && Math.min(entity.length(), candidate.length()) >= 9) return 430;
+
+        List<String> entityTokens = splitTokens(entityPath);
+        List<String> modelTokens = splitCamelTokens(model);
+        int shared = 0;
+        int sharedChars = 0;
+        for (String token : modelTokens) {
+            if (token.length() >= 4 && entityTokens.contains(token)) {
+                shared++;
+                sharedChars += token.length();
+            }
+        }
+        // One generic family word such as "horse" is deliberately insufficient: a mod
+        // can ship SmallHorseModel/MediumHorseModel/LargeHorseModel, and guessing one is
+        // worse than falling back + producing a diagnostic.
+        return shared >= 2 ? 360 + Math.min(180, sharedChars * 8) : 0;
+    }
+
+    private static List<String> splitTokens(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        List<String> out = new ArrayList<>();
+        StringBuilder token = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            char ch = Character.toLowerCase(value.charAt(i));
+            if (Character.isLetterOrDigit(ch)) {
+                token.append(ch);
+            } else if (!token.isEmpty()) {
+                out.add(token.toString());
+                token.setLength(0);
+            }
+        }
+        if (!token.isEmpty()) out.add(token.toString());
+        return List.copyOf(out);
+    }
+
+    private static List<String> splitCamelTokens(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        List<String> out = new ArrayList<>();
+        StringBuilder token = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (!Character.isLetterOrDigit(ch)) {
+                if (!token.isEmpty()) {
+                    out.add(token.toString().toLowerCase(Locale.ROOT));
+                    token.setLength(0);
+                }
+                continue;
+            }
+            if (Character.isUpperCase(ch) && !token.isEmpty()) {
+                out.add(token.toString().toLowerCase(Locale.ROOT));
+                token.setLength(0);
+            }
+            token.append(ch);
+        }
+        if (!token.isEmpty()) out.add(token.toString().toLowerCase(Locale.ROOT));
+        return List.copyOf(out);
+    }
+
+    private static int editDistance(String a, String b, int stopAfter) {
+        if (Math.abs(a.length() - b.length()) > stopAfter) return stopAfter + 1;
+        int[] previous = new int[b.length() + 1];
+        int[] current = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) previous[j] = j;
+
+        for (int i = 1; i <= a.length(); i++) {
+            current[0] = i;
+            int rowMin = current[0];
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                current[j] = Math.min(
+                        Math.min(current[j - 1] + 1, previous[j] + 1),
+                        previous[j - 1] + cost);
+                rowMin = Math.min(rowMin, current[j]);
+            }
+            if (rowMin > stopAfter) return stopAfter + 1;
+            int[] swap = previous;
+            previous = current;
+            current = swap;
+        }
+        return previous[b.length()];
     }
 
     private List<String> modelClasses() {
