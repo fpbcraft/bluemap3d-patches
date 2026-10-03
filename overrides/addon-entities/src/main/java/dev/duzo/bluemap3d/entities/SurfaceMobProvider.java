@@ -6,6 +6,7 @@ import dev.duzo.bluemap3d.api.SceneObject;
 import dev.duzo.bluemap3d.api.SceneObjectLifecycle;
 import dev.duzo.bluemap3d.api.SceneObjectProvider;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.entity.AgeableMob;
@@ -103,7 +104,10 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
 
     private static final List<String> APPEARANCE_GETTERS = List.of(
             "getVariant",
+            "getVariantString",
             "getColor",
+            "getDyeColor",
+            "getBreed",
             "getMarkings",
             "getPattern",
             "getStyle",
@@ -192,11 +196,21 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
         if (value instanceof ResourceLocation location) {
             return location.getPath();
         }
+        if (value instanceof ResourceKey<?> key) {
+            return key.location().getPath();
+        }
+        if (value instanceof Holder<?> holder) {
+            return holder.unwrapKey()
+                    .map(key -> key.location().getPath())
+                    .orElse(null);
+        }
         if (value instanceof Enum<?> enumeration) {
             return enumeration.name().toLowerCase(Locale.ROOT);
         }
         if (value instanceof CharSequence text) {
-            return text.toString();
+            String raw = text.toString();
+            ResourceLocation location = ResourceLocation.tryParse(raw);
+            return location == null ? raw : location.getPath();
         }
         if (value instanceof Number number) {
             return number.toString();
