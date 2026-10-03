@@ -30,6 +30,7 @@ import java.util.Locale;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -37,6 +38,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * core resolves the entity's real resource/model assets, including mod namespaces.
  */
 public final class SurfaceMobProvider implements SceneObjectProvider {
+    private final Map<ResourceKey<Level>, Set<String>> deletedByDimension =
+            new ConcurrentHashMap<>();
+
     @Override
     public String id() {
         return "surface_mobs";
@@ -44,7 +48,32 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
 
     @Override
     public SceneObjectLifecycle lifecycle() {
-        return SceneObjectLifecycle.LIVE_ONLY;
+        // Keep the last published transform while the backing chunk is unloaded, but do
+        // not record ordinary mobs into Player History.
+        return SceneObjectLifecycle.RESTORE_ONLY;
+    }
+
+    void entityLeft(Entity entity, Level level) {
+        if (!(entity instanceof Mob) || level.isClientSide()) return;
+
+        Entity.RemovalReason reason = entity.getRemovalReason();
+        if (!shouldForget(reason)) return;
+
+        deletedByDimension
+                .computeIfAbsent(level.dimension(), ignored -> ConcurrentHashMap.newKeySet())
+                .add(entity.getUUID().toString());
+    }
+
+    static boolean shouldForget(Entity.RemovalReason reason) {
+        // Chunk unloads are save-worthy and must retain the last known map position.
+        // Death, despawn/discard and dimension transfer are not save-worthy here.
+        return reason != null && !reason.shouldSave();
+    }
+
+    @Override
+    public Collection<String> deletedObjectIds(ServerLevel level) {
+        Set<String> deleted = deletedByDimension.remove(level.dimension());
+        return deleted == null ? List.of() : List.copyOf(deleted);
     }
 
     @Override
