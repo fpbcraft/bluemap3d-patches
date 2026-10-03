@@ -36,6 +36,18 @@ class JavaEntityModelSourceTest {
     }
 
     @Test
+    void matchesEntitySpecificGeometryClass() {
+        assertTrue(JavaEntityModelSource.javaNameScoreForTest(
+                "belgian_horse", "BelgianHorseGeometry.class") > 0);
+    }
+
+    @Test
+    void doesNotGuessAmongAmbiguousSharedHorseGeometry() {
+        assertEquals(0, JavaEntityModelSource.javaNameScoreForTest(
+                "belgian_horse", "MediumHorseGeometry.class"));
+    }
+
+    @Test
     void extractsBlockbenchStyleModelWithStaticPartNames() {
         byte[] model = modelClass("test/OstrichModel", FactoryKind.ZERO_ARG);
         assertEquals(1, JavaEntityModelSource.extractCubeCountForTest(model));
