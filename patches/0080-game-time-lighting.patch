@@ -41,7 +41,7 @@ diff --git a/core/src/main/java/dev/duzo/bluemap3d/publish/GameTimePublisher.jav
 new file mode 100644
 --- /dev/null
 +++ b/core/src/main/java/dev/duzo/bluemap3d/publish/GameTimePublisher.java
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,148 @@
 +package dev.duzo.bluemap3d.publish;
 +
 +import com.google.gson.Gson;
