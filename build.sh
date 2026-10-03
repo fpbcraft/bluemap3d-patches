@@ -104,6 +104,8 @@ cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/ResourcePackGeome
    core/src/test/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryTest.java
 cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/EntityModelSourceTest.java" \
    core/src/test/java/dev/duzo/bluemap3d/bake/EntityModelSourceTest.java
+cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/JavaEntityModelSourceTest.java" \
+   core/src/test/java/dev/duzo/bluemap3d/bake/JavaEntityModelSourceTest.java
 cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/TextureAtlasTest.java" \
    core/src/test/java/dev/duzo/bluemap3d/bake/TextureAtlasTest.java
 mkdir -p core/src/main/resources/assets/bluemap3d/models/block
