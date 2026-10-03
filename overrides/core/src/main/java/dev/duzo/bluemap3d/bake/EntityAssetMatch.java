@@ -138,7 +138,13 @@ final class EntityAssetMatch {
         }
 
         String semantic = start >= 0 ? normalized.substring(start) : leaf(normalized);
-        return tokens(assetStem(semantic));
+        for (String suffix : new String[]{".geo.json", ".json", ".png"}) {
+            if (semantic.endsWith(suffix)) {
+                semantic = semantic.substring(0, semantic.length() - suffix.length());
+                break;
+            }
+        }
+        return tokens(semantic);
     }
 
     private static List<String> tokens(String value) {
