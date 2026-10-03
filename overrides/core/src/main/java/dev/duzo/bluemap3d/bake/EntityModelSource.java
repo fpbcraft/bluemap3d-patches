@@ -40,6 +40,7 @@ import java.util.Set;
  */
 public final class EntityModelSource implements BlockModelSource {
     private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/Entities");
+    private static volatile EntityModelSource ACTIVE;
     private static final String GENERATED = "assets/bluemap3d_entities/entity-models.json";
     private static final String FALLBACK_TEXTURE = "minecraft:block/light_gray_wool";
 
@@ -56,6 +57,7 @@ public final class EntityModelSource implements BlockModelSource {
         this.assets = assets;
         this.javaModels = new JavaEntityModelSource(assets);
         loadVanillaModels();
+        ACTIVE = this;
     }
 
     @Override
@@ -77,6 +79,71 @@ public final class EntityModelSource implements BlockModelSource {
     @Override
     public boolean occludes(BlockState state) {
         return false;
+    }
+
+    /**
+     * Human-readable resolution trace for a registry entity id.
+     *
+     * <p>Used by the surface-mob diagnostic command. It intentionally exposes strings,
+     * not bake internals, so addon-entities does not depend on core implementation types.
+     */
+    public static List<String> diagnoseEntity(ResourceLocation entityId) {
+        EntityModelSource source = ACTIVE;
+        if (source == null) {
+            return List.of("Entity model source is not active yet.");
+        }
+
+        EntityKey entity = new EntityKey(
+                entityId.getNamespace(), entityId.getPath(), entityId.toString());
+        Map<String, String> metadata = Map.of();
+
+        List<String> out = new ArrayList<>();
+        out.add("entity=" + entityId);
+        out.add("texture=" + String.valueOf(source.findTexture(
+                entity.namespace(), entity.path(), "main", metadata)));
+
+        if ("minecraft".equals(entity.namespace())) {
+            RawMesh vanilla = source.findVanillaLayer(entity, "main", metadata);
+            out.add("vanillaGenerated=" + (vanilla != null));
+        }
+
+        List<JavaEntityModelSource.DiagnosticCandidate> java =
+                source.javaModels.diagnose(entity.namespace(), entity.path(), metadata);
+        out.add("javaCandidates=" + java.size());
+        for (JavaEntityModelSource.DiagnosticCandidate candidate : java) {
+            out.add("  [" + candidate.score() + "] "
+                    + candidate.classPath()
+                    + " extractable=" + candidate.extractable()
+                    + " :: " + candidate.detail());
+        }
+
+        LinkedHashSet<String> geoCandidates = new LinkedHashSet<>();
+        for (String relative : geoCandidates(entity.path())) {
+            String full = "assets/" + entity.namespace() + "/" + relative;
+            if (source.assets.read(full) != null) geoCandidates.add(full);
+        }
+        String namespaceRoot = "assets/" + entity.namespace() + "/";
+        for (String prefix : List.of(
+                namespaceRoot + "geo",
+                namespaceRoot + "geckolib/models",
+                namespaceRoot + "models")) {
+            geoCandidates.addAll(source.assets.findPaths(
+                    prefix,
+                    candidate -> candidate.toLowerCase(Locale.ROOT).endsWith(".geo.json")
+                            && EntityAssetMatch.score(entity.path(), candidate, "main") > 0,
+                    64));
+        }
+        List<String> rankedGeo = new ArrayList<>(geoCandidates);
+        rankedGeo.sort(Comparator.comparingInt(
+                (String candidate) -> EntityAssetMatch.score(
+                        entity.path(), candidate, "main")).reversed());
+        out.add("geoCandidates=" + rankedGeo.size());
+        for (String candidate : rankedGeo.stream().limit(24).toList()) {
+            out.add("  [" + EntityAssetMatch.score(entity.path(), candidate, "main")
+                    + "] " + candidate);
+        }
+
+        return List.copyOf(out);
     }
 
     private List<ModelQuad> resolve(ResourceLocation model, Map<String, String> metadata) {
