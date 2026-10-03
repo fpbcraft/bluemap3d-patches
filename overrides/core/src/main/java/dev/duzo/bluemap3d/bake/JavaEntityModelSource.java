@@ -8,6 +8,7 @@ import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldInsnNode;
+import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.IntInsnNode;
 import org.objectweb.asm.tree.JumpInsnNode;
@@ -502,7 +503,7 @@ final class JavaEntityModelSource {
             }
 
             // Named integer-dimension overload ends with explicit texture offsets.
-            if (offset == 1 && args.size() >= offset + 10
+            if (offset == 1 && args.size() >= 10
                     && isIntegral(args.get(args.size() - 2))
                     && isIntegral(args.get(args.size() - 1))) {
                 texOffs(integer(args.get(args.size() - 2)), integer(args.get(args.size() - 1)));
@@ -578,12 +579,16 @@ final class JavaEntityModelSource {
     private static final class Interpreter {
         private final ClassNode owner;
         private final Map<String, MethodNode> methods = new HashMap<>();
+        private final Map<String, Object> constants = new HashMap<>();
         private final Set<String> active = new HashSet<>();
 
         Interpreter(ClassNode owner) {
             this.owner = owner;
             for (MethodNode method : owner.methods) {
                 methods.put(method.name + method.desc, method);
+            }
+            for (FieldNode field : owner.fields) {
+                if (field.value != null) constants.put(field.name, field.value);
             }
         }
 
@@ -593,12 +598,12 @@ final class JavaEntityModelSource {
             if (!active.add(key)) throw new UnsupportedModel("recursive helper " + method.name);
 
             try {
+                Type[] argumentTypes = Type.getArgumentTypes(method.desc);
                 Object[] locals = new Object[Math.max(method.maxLocals, arguments.size() + 4)];
                 int local = 0;
-                for (Object argument : arguments) {
-                    locals[local++] = argument;
-                    Type type = Type.getArgumentTypes(method.desc)[Math.min(local - 1, Type.getArgumentTypes(method.desc).length - 1)];
-                    if (type.getSize() == 2) local++;
+                for (int i = 0; i < arguments.size(); i++) {
+                    locals[local] = arguments.get(i);
+                    local += argumentTypes[i].getSize();
                 }
 
                 ArrayDeque<Object> stack = new ArrayDeque<>();
@@ -640,7 +645,8 @@ final class JavaEntityModelSource {
                         case Opcodes.DUP -> stack.push(stack.peek());
 
                         case Opcodes.I2F, Opcodes.D2F, Opcodes.L2F -> stack.push(number(stack.pop()));
-                        case Opcodes.F2D -> stack.push((double) number(stack.pop()));
+                        case Opcodes.I2D, Opcodes.F2D, Opcodes.L2D ->
+                                stack.push((double) number(stack.pop()));
                         case Opcodes.IADD, Opcodes.FADD, Opcodes.DADD ->
                                 binary(stack, '+');
                         case Opcodes.ISUB, Opcodes.FSUB, Opcodes.DSUB ->
@@ -721,6 +727,8 @@ final class JavaEntityModelSource {
             Object built;
             if (MESH.equals(type)) {
                 built = new JavaMesh();
+            } else if (BUILDER.equals(type)) {
+                built = new JavaBuilder();
             } else if (DEFORMATION.equals(type)) {
                 if (args.size() == 1) {
                     float grow = number(args.get(0));
@@ -769,6 +777,13 @@ final class JavaEntityModelSource {
                     case "toRadians" -> Math.toRadians(doubleNumber(args.get(0)));
                     default -> throw new UnsupportedModel("Math." + call.name);
                 };
+            }
+            if ("java/util/Set".equals(call.owner) && "of".equals(call.name)) {
+                return Set.copyOf(args);
+            }
+            if ("java/util/EnumSet".equals(call.owner)
+                    && ("of".equals(call.name) || "allOf".equals(call.name))) {
+                return Set.copyOf(args);
             }
 
             if (owner.name.equals(call.owner)) {
@@ -828,7 +843,7 @@ final class JavaEntityModelSource {
                     "virtual call " + call.owner + "." + call.name);
         }
 
-        private static void handleGetStatic(
+        private void handleGetStatic(
                 ArrayDeque<Object> stack, FieldInsnNode field) {
             if (POSE.equals(field.owner) && "ZERO".equals(field.name)) {
                 stack.push(JavaPose.ZERO);
@@ -838,8 +853,27 @@ final class JavaEntityModelSource {
                 stack.push(JavaDeformation.NONE);
                 return;
             }
-            // Direction/EnumSet data only controls omitted cube faces. Keeping all six
-            // faces is visually safe and avoids linking client model code to Direction.
+            if (owner.name.equals(field.owner) && constants.containsKey(field.name)) {
+                Object value = constants.get(field.name);
+                stack.push(value == null ? NULL : value);
+                return;
+            }
+            if ("java/lang/Math".equals(field.owner) && "PI".equals(field.name)) {
+                stack.push(Math.PI);
+                return;
+            }
+            if ("net/minecraft/util/Mth".equals(field.owner)) {
+                if ("PI".equals(field.name)) {
+                    stack.push((float) Math.PI);
+                    return;
+                }
+                if ("DEG_TO_RAD".equals(field.name)) {
+                    stack.push((float) (Math.PI / 180.0));
+                    return;
+                }
+            }
+            // Direction values only control omitted cube faces. Keeping all six faces is
+            // visually safe and avoids linking to client-side model types.
             if ("net/minecraft/core/Direction".equals(field.owner)) {
                 stack.push(field.name);
                 return;
