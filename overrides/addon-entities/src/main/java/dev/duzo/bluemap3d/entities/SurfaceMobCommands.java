@@ -9,7 +9,9 @@ import net.minecraft.commands.Commands;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -54,7 +56,24 @@ final class SurfaceMobCommands {
             return 0;
         }
 
-        List<String> lines = EntityModelSource.diagnoseEntity(entityId);
+        Map<String, String> metadata = Map.of();
+        String liveEntity = "none";
+        outer:
+        for (var level : source.getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof Mob mob)) continue;
+                ResourceLocation typeId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
+                if (!entityId.equals(typeId)) continue;
+
+                metadata = SurfaceMobProvider.diagnosticMetadata(mob);
+                liveEntity = mob.getClass().getName() + " @ " + level.dimension().location();
+                break outer;
+            }
+        }
+
+        List<String> lines = new ArrayList<>(
+                EntityModelSource.diagnoseEntity(entityId, metadata));
+        lines.add(1, "liveEntity=" + liveEntity);
         Path output = source.getServer()
                 .getWorldPath(LevelResource.ROOT)
                 .resolve("bluemap3d")
