@@ -258,9 +258,11 @@ public final class VanillaEntityModelGenerator {
             positions.add(clean((1.501F - y) * scale * 16F));
             positions.add(clean(-z * scale * 16F));
 
-            // VolumeMesher's attachment API uses 0..16 sprite-local UV coordinates.
+            // ModelPart UVs are already normalized in Minecraft's top-origin texture
+            // convention. TextureAtlas/three.js uses that same convention (flipY=false),
+            // so converting to the attachment API's 0..16 space must not flip V again.
             uvs.add(clean(u * 16F));
-            uvs.add(clean((1F - v) * 16F));
+            uvs.add(clean(v * 16F));
             return this;
         }
 
