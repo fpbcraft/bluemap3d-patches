@@ -66,6 +66,11 @@ final class ImmersiveFurnitureRuntime {
             return null;
         }
 
+        if ("immersive_furniture:furniture_light".equals(
+                block.getBlockState().getFormatted())) {
+            identifier += 65536;
+        }
+
         Api runtime = api();
         if (runtime == null) return null;
         try {
