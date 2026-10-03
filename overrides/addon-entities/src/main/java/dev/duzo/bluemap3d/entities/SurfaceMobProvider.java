@@ -65,9 +65,12 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
     }
 
     static boolean shouldForget(Entity.RemovalReason reason) {
-        // Chunk unloads are save-worthy and must retain the last known map position.
-        // Death, despawn/discard and dimension transfer are not save-worthy here.
-        return reason != null && !reason.shouldSave();
+        // Both unload reasons are temporary from the map's point of view. In particular,
+        // UNLOADED_WITH_PLAYER is not marked save-to-chunk by vanilla, but the entity can
+        // return with its player and must not be mistaken for a despawn.
+        return reason == Entity.RemovalReason.KILLED
+                || reason == Entity.RemovalReason.DISCARDED
+                || reason == Entity.RemovalReason.CHANGED_DIMENSION;
     }
 
     @Override
