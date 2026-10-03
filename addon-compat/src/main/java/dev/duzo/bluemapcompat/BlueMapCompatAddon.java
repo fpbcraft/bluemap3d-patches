@@ -6,6 +6,7 @@ import dev.duzo.bluemapcopycats.BlueMapCopycatsCompatAddon;
 import dev.duzo.bluemaptrafficcraft.TrafficCraftAdapter;
 import dev.duzo.bluemapdynamictrees.DynamicTreesTerrainAdapter;
 import dev.duzo.bluemapdynamictrees.DynamicTreesTerrainDispatch;
+import dev.duzo.bluemapfurniture.ImmersiveFurnitureAdapter;
 
 /**
  * Single native BlueMap compatibility entrypoint.
@@ -22,12 +23,14 @@ public final class BlueMapCompatAddon implements Runnable {
         new BlueMapCopycatsCompatAddon().run();
         TrafficCraftAdapter.register();
         DynamicTreesTerrainAdapter.register();
+        ImmersiveFurnitureAdapter.register();
         CompatManager.start();
 
         BlueMapAPI.onEnable(api -> {
             ConfiguredModelAliasHook.install(api);
             ConfiguredTintHook.install(api);
             TrafficCraftAdapter.onBlueMapEnable(api);
+            ImmersiveFurnitureAdapter.onBlueMapEnable(api);
 
             // Run this last. Legacy/fallback Dynamic Trees aliases may still exist in
             // local compat config; the native renderer must reclaim those branch/root
