@@ -117,7 +117,7 @@ public final class TrafficCraftSignRenderer implements BlockRenderer {
         }
 
         if (TRACED.add(signTexture)) {
-            Logger.global.logInfo(String.format(
+            Logger.global.logDebug(String.format(
                     "TRAFFICCRAFT-SIGN block=%s texture=%s shape=%s facing=%s",
                     id, signTexture, shape, facing));
         }

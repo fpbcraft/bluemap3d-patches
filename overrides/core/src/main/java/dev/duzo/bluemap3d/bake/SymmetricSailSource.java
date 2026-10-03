@@ -99,7 +99,7 @@ public final class SymmetricSailSource implements BlockModelSource {
 
         String traceKey = id + "|" + axis;
         if (TRACED.add(traceKey)) {
-            LOGGER.info(
+            LOGGER.debug(
                     "SYMMETRIC-SAIL-DIAG block={} axis={} quads={} canvas={} side={}",
                     id, axis, out.size(), canvas, side);
         }

@@ -14,7 +14,7 @@ diff --git a/core/src/main/java/dev/duzo/bluemap3d/api/BlueMap3D.java b/core/src
 +
 +        SceneObjectProvider registered = PersistentSceneObjectProvider.wrap(provider);
 +        PROVIDERS.add(registered);
-+        LOGGER.info(
++        LOGGER.debug(
 +                "Registered SceneObjectProvider '{}' ({}) lifecycle={}",
 +                id,
 +                provider.getClass().getName(),
