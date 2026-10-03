@@ -24,6 +24,12 @@ class JavaEntityModelSourceTest {
             "net/minecraft/client/model/geom/builders/LayerDefinition";
 
     @Test
+    void matchesPrefixNamedModelClasses() {
+        assertTrue(JavaEntityModelSource.javaNameScoreForTest(
+                "anglerfish", "ModelAnglerfish.class") > 0);
+    }
+
+    @Test
     void matchesSmallSpellingDifferencesInModelClassNames() {
         assertTrue(JavaEntityModelSource.javaNameScoreForTest(
                 "spiky_bug", "SpikebugModel.class") > 0);
