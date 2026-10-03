@@ -56,6 +56,20 @@ final class SurfaceMobCommands {
             }
         }
 
+        List<String> spawnEggItems = BuiltInRegistries.ITEM.keySet().stream()
+                .filter(id -> id.getPath().endsWith("_spawn_egg"))
+                .map(ResourceLocation::toString)
+                .sorted()
+                .toList();
+
+        Map<String, Integer> spawnEggItemsByNamespace = new java.util.TreeMap<>();
+        for (String item : spawnEggItems) {
+            ResourceLocation id = ResourceLocation.tryParse(item);
+            if (id != null) {
+                spawnEggItemsByNamespace.merge(id.getNamespace(), 1, Integer::sum);
+            }
+        }
+
         List<EntityEntry> entities = new ArrayList<>();
         for (ResourceLocation id : BuiltInRegistries.ENTITY_TYPE.keySet()) {
             ResourceLocation egg = eggsByEntity.get(id);
@@ -83,13 +97,16 @@ final class SurfaceMobCommands {
         }
 
         DumpFile file = new DumpFile(
-                1,
+                2,
                 entities.size(),
                 spawnEggs.size(),
+                spawnEggItems.size(),
                 entitiesByNamespace,
                 eggsByNamespace,
+                spawnEggItemsByNamespace,
                 entities,
-                spawnEggs);
+                spawnEggs,
+                spawnEggItems);
 
         try {
             Files.createDirectories(output.getParent());
@@ -105,8 +122,9 @@ final class SurfaceMobCommands {
 
         source.sendSuccess(
                 () -> Component.literal(
-                        "Wrote " + entities.size() + " entity types and "
-                                + spawnEggs.size() + " spawn eggs to "
+                        "Wrote " + entities.size() + " entity types, "
+                                + spawnEggs.size() + " mapped spawn eggs and "
+                                + spawnEggItems.size() + " spawn-egg items to "
                                 + output),
                 false);
         return Command.SINGLE_SUCCESS;
@@ -122,9 +140,12 @@ final class SurfaceMobCommands {
             int format,
             int entityCount,
             int spawnEggCount,
+            int spawnEggItemCount,
             Map<String, Integer> entitiesByNamespace,
             Map<String, Integer> spawnEggsByNamespace,
+            Map<String, Integer> spawnEggItemsByNamespace,
             List<EntityEntry> entities,
-            List<SpawnEggEntry> spawnEggs) {
+            List<SpawnEggEntry> spawnEggs,
+            List<String> spawnEggItems) {
     }
 }
