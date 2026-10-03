@@ -218,7 +218,7 @@ diff --git a/core/src/main/resources/assets/bluemap3d/web/game-time-sync.core.js
 new file mode 100644
 --- /dev/null
 +++ b/core/src/main/resources/assets/bluemap3d/web/game-time-sync.core.js
-@@ -0,0 +1,317 @@
+@@ -0,0 +1,399 @@
 +/*
 + * Optional BlueMap lighting sync for Minecraft's in-game clock.
 + *
@@ -250,7 +250,8 @@ new file mode 100644
 +        pollTimer: null,
 +        applyTimer: null,
 +        manualStrength: null,
-+        observer: null
++        observer: null,
++        timeDisplay: null
 +    };
 +    window.__bluemap3dGameTimeSync = state;
 +
@@ -268,6 +269,46 @@ new file mode 100644
 +        if (bm.settings && bm.settings.useCookies && typeof bm.saveUserSetting === "function") {
 +            bm.saveUserSetting(SETTING_KEY, state.enabled);
 +        }
++    }
++
++    function installTimeDisplayStyles() {
++        if (document.getElementById("bluemap3d-server-time-style")) {
++            return;
++        }
++
++        var style = document.createElement("style");
++        style.id = "bluemap3d-server-time-style";
++        style.textContent =
++                ".bluemap3d-server-time{" +
++                "display:flex;align-items:center;justify-content:center;" +
++                "min-width:4.2em;min-height:2em;padding:0 .55em;box-sizing:border-box;" +
++                "background:var(--theme-bg);color:var(--theme-fg-light);" +
++                "font-size:.9em;font-variant-numeric:tabular-nums;font-weight:600;" +
++                "pointer-events:auto;cursor:default;white-space:nowrap" +
++                "}";
++        document.head.appendChild(style);
++    }
++
++    function ensureTimeDisplay() {
++        var bar = document.querySelector(".control-bar");
++        if (!bar) {
++            return null;
++        }
++
++        installTimeDisplayStyles();
++        var display = bar.querySelector(".bluemap3d-server-time");
++        if (!display) {
++            display = document.createElement("div");
++            display.className = "bluemap3d-server-time";
++            display.textContent = "--:--";
++            display.setAttribute("aria-label", "Minecraft server time");
++
++            var dayNight = bar.querySelector(".day-night-switch");
++            var position = bar.querySelector(".pos-input");
++            bar.insertBefore(display, dayNight || position || null);
++        }
++        state.timeDisplay = display;
++        return display;
 +    }
 +
 +    function setSunlight(value) {
@@ -304,6 +345,46 @@ new file mode 100644
 +        return state.feed.maps[map.id] || null;
 +    }
 +
++    function sampledDayTime(sample) {
++        if (!sample || !Number.isFinite(Number(sample.dayTime))) {
++            return null;
++        }
++
++        var dayTime = Number(sample.dayTime);
++        if (sample.daylightCycle !== false && state.fetchedAt > 0) {
++            dayTime += Math.max(0, performance.now() - state.fetchedAt) / 50;
++        }
++        return dayTime;
++    }
++
++    function formatMinecraftTime(dayTime) {
++        var timeOfDay = ((dayTime % 24000) + 24000) % 24000;
++        var totalMinutes = Math.floor((((timeOfDay + 6000) % 24000) * 1440) / 24000);
++        var hours = Math.floor(totalMinutes / 60);
++        var minutes = totalMinutes % 60;
++        return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0");
++    }
++
++    function updateTimeDisplay() {
++        var display = ensureTimeDisplay();
++        if (!display) {
++            return;
++        }
++
++        var sample = sampleForCurrentMap();
++        var dayTime = sampledDayTime(sample);
++        if (!Number.isFinite(dayTime)) {
++            display.textContent = "--:--";
++            display.title = "Minecraft server time unavailable";
++            return;
++        }
++
++        display.textContent = formatMinecraftTime(dayTime);
++        var day = Math.floor(dayTime / 24000) + 1;
++        var dimension = sample.dimension ? " · " + sample.dimension : "";
++        display.title = "Minecraft server time · Day " + day + dimension;
++    }
++
 +    function applyLighting() {
 +        if (!state.enabled) {
 +            return;
@@ -325,9 +406,9 @@ new file mode 100644
 +            return;
 +        }
 +
-+        var dayTime = Number(sample.dayTime);
-+        if (sample.daylightCycle !== false && state.fetchedAt > 0) {
-+            dayTime += Math.max(0, performance.now() - state.fetchedAt) / 50;
++        var dayTime = sampledDayTime(sample);
++        if (!Number.isFinite(dayTime)) {
++            return;
 +        }
 +
 +        var night = Math.min(base, NIGHT_STRENGTH);
@@ -336,18 +417,11 @@ new file mode 100644
 +    }
 +
 +    function schedulePoll(delay) {
-+        if (!state.enabled) {
-+            return;
-+        }
 +        clearTimeout(state.pollTimer);
 +        state.pollTimer = setTimeout(poll, delay);
 +    }
 +
 +    function poll() {
-+        if (!state.enabled) {
-+            return;
-+        }
-+
 +        fetch(FEED_URL + "?t=" + Date.now(), {cache: "no-store"})
 +            .then(function (response) {
 +                if (!response.ok) {
@@ -359,6 +433,7 @@ new file mode 100644
 +                state.feed = feed;
 +                state.fetchedAt = performance.now();
 +                applyLighting();
++                updateTimeDisplay();
 +            })
 +            .catch(function () {
 +                // BlueMap may be starting/reloading. Retrying quietly is enough.
@@ -380,7 +455,10 @@ new file mode 100644
 +    function startTimers() {
 +        stopTimers();
 +        poll();
-+        state.applyTimer = setInterval(applyLighting, APPLY_MS);
++        state.applyTimer = setInterval(function () {
++            applyLighting();
++            updateTimeDisplay();
++        }, APPLY_MS);
 +    }
 +
 +    function setEnabled(enabled, restoreManual) {
@@ -395,11 +473,10 @@ new file mode 100644
 +            state.manualStrength = uniform ? uniform.value : null;
 +            state.enabled = true;
 +            saveEnabled();
-+            startTimers();
++            applyLighting();
 +        } else {
 +            state.enabled = false;
 +            saveEnabled();
-+            stopTimers();
 +            if (restoreManual && Number.isFinite(state.manualStrength)) {
 +                setSunlight(state.manualStrength);
 +            }
@@ -511,28 +588,33 @@ new file mode 100644
 +    }
 +
 +    bm.events.addEventListener("bluemapMapChanged", function () {
++        var map = currentMap();
 +        if (state.enabled) {
-+            var map = currentMap();
 +            state.manualStrength = map ? Number(map.skyLight) : null;
-+            applyLighting();
-+            schedulePoll(0);
 +        }
++        applyLighting();
++        updateTimeDisplay();
++        schedulePoll(0);
 +    });
 +
 +    document.addEventListener("pointerdown", onManualLightingPointerDown, true);
 +
 +    if (window.MutationObserver) {
-+        state.observer = new MutationObserver(ensureSwitch);
++        state.observer = new MutationObserver(function () {
++            ensureSwitch();
++            ensureTimeDisplay();
++        });
 +        state.observer.observe(document.getElementById("app") || document.body, {
 +            childList: true,
 +            subtree: true
 +        });
 +    }
 +    ensureSwitch();
++    ensureTimeDisplay();
 +
++    var map = currentMap();
 +    if (state.enabled) {
-+        var map = currentMap();
 +        state.manualStrength = map ? Number(map.skyLight) : null;
-+        startTimers();
 +    }
++    startTimers();
 +})();
