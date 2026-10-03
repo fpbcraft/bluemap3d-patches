@@ -57,7 +57,7 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         // old "copycat voxel shape" fallback.
         if (TRACED.add(id)) {
             String keys = materialKeys(metadata);
-            LOGGER.info("V21 MOVING block={} state={} metadata={} materialKeys={} quads={}",
+            LOGGER.debug("V21 MOVING block={} state={} metadata={} materialKeys={} quads={}",
                     id, state, metadata == null ? "missing" : "present", keys, result.size());
         }
         return result;
