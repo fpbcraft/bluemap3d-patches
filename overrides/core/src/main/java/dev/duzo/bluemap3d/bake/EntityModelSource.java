@@ -34,7 +34,8 @@ import java.util.Set;
  *   <li>ResourcePackSource (registered before this source) for ordinary mod JSON models;</li>
  *   <li>exact vanilla ModelPart geometry generated at build time from Minecraft 1.21.1;</li>
  *   <li>Bedrock/GeckoLib/AzureLib-style geo JSON discovered in the owning mod's assets;</li>
- *   <li>a correctly sized textured box, so an unknown Java-only client renderer is visible
+ *   <li>standard Java LayerDefinition geometry extracted safely from mod bytecode;</li>
+ *   <li>a correctly sized textured box, so an unknown client renderer is visible
  *       rather than silently disappearing.</li>
  * </ol>
  */
@@ -153,10 +154,14 @@ public final class EntityModelSource implements BlockModelSource {
         if ("minecraft".equals(entity.namespace())) {
             List<ModelQuad> exact = vanilla(entity, metadata);
             if (!exact.isEmpty()) return exact;
-        } else {
-            // Prefer a standard Java LayerDefinition when the installed mod contains one.
-            // GeckoLib model classes normally do not expose such a factory, so they fall
-            // straight through to the data-driven geo path below.
+        }
+
+        // A data-driven model is the strongest mod-authored signal and is cheap to
+        // resolve. Prefer it over bytecode extraction if a mod ships both.
+        List<ModelQuad> geo = geo(entity, metadata);
+        if (!geo.isEmpty()) return geo;
+
+        if (!"minecraft".equals(entity.namespace())) {
             String texture = findTexture(
                     entity.namespace(), entity.path(), "main", metadata);
             if (texture == null) texture = FALLBACK_TEXTURE;
@@ -165,9 +170,6 @@ public final class EntityModelSource implements BlockModelSource {
                     entity.namespace(), entity.path(), metadata, texture);
             if (!javaModel.isEmpty()) return javaModel;
         }
-
-        List<ModelQuad> geo = geo(entity, metadata);
-        if (!geo.isEmpty()) return geo;
 
         return fallback(entity, metadata);
     }
