@@ -34,7 +34,6 @@ The build produces two installable JARs:
    - moving Copycats / Create Connected material support
    - procedural and dynamic-texture adapters
    - config-driven moving tint rules
-   - optional BlueMap lighting sync to the selected world's live Minecraft day/night clock
 
 2. **`bluemap-compat-*.jar`** — unified native BlueMap compatibility addon
    - config-driven wildcard tint and model-alias rules
@@ -127,28 +126,6 @@ hard dependency of the bundle.
 TrafficCraft signs remain a small adapter because BlueMap 5.7 cannot express dynamic
 server-side sign PNG loading as data. Copycats remains specialized because its renderer
 decodes per-part copied materials and custom geometry.
-
-## In-game day/night lighting sync
-
-The patched bundle adds **Sync lighting with in-game time** to BlueMap's **Settings → Lighting**
-group. It is enabled by default and, when BlueMap browser settings are persistent, the choice
-is saved per browser.
-
-When enabled, the browser reads the selected map's live server clock and drives BlueMap's
-existing sunlight-strength control:
-
-- each BlueMap map follows the Minecraft world it actually renders;
-- daylight advances smoothly between server samples and stays fixed when `doDaylightCycle`
-  is disabled;
-- dimensions without skylight keep their configured BlueMap lighting rather than receiving an
-  Overworld day/night cycle;
-- sunset and sunrise transition between BlueMap's normal daylight level and its existing
-  `0.25` night level instead of snapping instantly;
-- using the normal day/night button or dragging the sunlight slider disables sync first, so
-  manual lighting remains an explicit override.
-
-The live clock is published at `assets/bluemap3d/game-time.json` using the same server-side
-publish cadence as the BlueMap3D transform feed. It does not rerender map tiles.
 
 ## Repository layout
 
