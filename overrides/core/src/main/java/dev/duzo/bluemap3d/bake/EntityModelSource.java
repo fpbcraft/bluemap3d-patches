@@ -315,6 +315,8 @@ public final class EntityModelSource implements BlockModelSource {
                     string(json, "parent", null),
                     vector(json.get("pivot"), new float[]{0F, 0F, 0F}),
                     vector(json.get("rotation"), new float[]{0F, 0F, 0F}),
+                    json.has("mirror") && json.get("mirror").getAsBoolean(),
+                    number(json, "inflate", 0F),
                     json.getAsJsonArray("cubes")));
         }
 
@@ -328,6 +330,7 @@ public final class EntityModelSource implements BlockModelSource {
                 appendGeoCube(
                         out,
                         cubeElement.getAsJsonObject(),
+                        bone,
                         boneTransform,
                         texture,
                         textureWidth,
@@ -381,7 +384,13 @@ public final class EntityModelSource implements BlockModelSource {
             }
         }
 
-        rotateAround(matrix, bone.pivot(), bone.rotation());
+        // Match GeckoLib GeometryBone#bake exactly:
+        // pivot = (-x, +y, +z), rotation = (-x, -y, +z), applied ZYX.
+        rotateAroundZYX(
+                matrix,
+                bedrockPoint(bone.pivot()),
+                bedrockRotation(bone.rotation()));
+
         visiting.remove(bone.name());
         cache.put(bone.name(), new Matrix4f(matrix));
         return matrix;
@@ -390,6 +399,7 @@ public final class EntityModelSource implements BlockModelSource {
     private static void appendGeoCube(
             List<ModelQuad> out,
             JsonObject cube,
+            Bone bone,
             Matrix4f boneTransform,
             String texture,
             float textureWidth,
@@ -398,48 +408,58 @@ public final class EntityModelSource implements BlockModelSource {
         float[] size = vector(cube.get("size"), null);
         if (origin == null || size == null) return;
 
-        float inflate = number(cube, "inflate", 0F);
-        float minX = origin[0] - inflate;
+        // GeckoLib GeometryCube#bake:
+        // origin = (origin + [size.x,0,0]) * [-1,+1,+1]
+        // size remains positive. Keep model units here; VolumeMesher converts /16 later.
+        float inflate = cube.has("inflate")
+                ? number(cube, "inflate", 0F)
+                : bone.inflate();
+        boolean mirror = cube.has("mirror")
+                ? cube.get("mirror").getAsBoolean()
+                : bone.mirror();
+
+        float minX = -(origin[0] + size[0]) - inflate;
         float minY = origin[1] - inflate;
         float minZ = origin[2] - inflate;
-        float maxX = origin[0] + size[0] + inflate;
+        float maxX = -origin[0] + inflate;
         float maxY = origin[1] + size[1] + inflate;
         float maxZ = origin[2] + size[2] + inflate;
 
         Matrix4f transform = new Matrix4f(boneTransform);
         if (cube.has("rotation")) {
-            float[] pivot = vector(cube.get("pivot"), new float[]{
-                    origin[0] + size[0] / 2F,
-                    origin[1] + size[1] / 2F,
-                    origin[2] + size[2] / 2F});
-            rotateAround(transform, pivot, vector(cube.get("rotation"), new float[]{0F, 0F, 0F}));
+            // GeckoLib defaults an absent cube pivot to model origin, not cube center.
+            float[] pivot = bedrockPoint(
+                    vector(cube.get("pivot"), new float[]{0F, 0F, 0F}));
+            float[] rotation = bedrockRotation(
+                    vector(cube.get("rotation"), new float[]{0F, 0F, 0F}));
+            rotateAroundZYX(transform, pivot, rotation);
         }
 
         float dx = Math.abs(size[0]);
         float dy = Math.abs(size[1]);
         float dz = Math.abs(size[2]);
-        boolean mirror = cube.has("mirror") && cube.get("mirror").getAsBoolean();
         JsonElement uvDefinition = cube.get("uv");
 
-        // Bedrock geometry supports two UV encodings:
-        //  - [u,v]: the standard unfolded box layout
-        //  - {north:{uv:[...],uv_size:[...]}, ...}: independently authored faces
-        // GeckoLib/AzureLib exporters use both, so preserve either form instead of
-        // reducing everything to the compact layout.
         if (uvDefinition != null && uvDefinition.isJsonObject()) {
             JsonObject faces = uvDefinition.getAsJsonObject();
-            addGeoFaceIfPresent(out, transform, texture, faces, "down", Direction.DOWN,
-                    minX,minY,minZ,maxX,maxY,maxZ, dx,dz, textureWidth,textureHeight, mirror);
-            addGeoFaceIfPresent(out, transform, texture, faces, "up", Direction.UP,
-                    minX,minY,minZ,maxX,maxY,maxZ, dx,dz, textureWidth,textureHeight, mirror);
-            addGeoFaceIfPresent(out, transform, texture, faces, "west", Direction.WEST,
-                    minX,minY,minZ,maxX,maxY,maxZ, dz,dy, textureWidth,textureHeight, mirror);
-            addGeoFaceIfPresent(out, transform, texture, faces, "north", Direction.NORTH,
-                    minX,minY,minZ,maxX,maxY,maxZ, dx,dy, textureWidth,textureHeight, mirror);
-            addGeoFaceIfPresent(out, transform, texture, faces, "east", Direction.EAST,
-                    minX,minY,minZ,maxX,maxY,maxZ, dz,dy, textureWidth,textureHeight, mirror);
-            addGeoFaceIfPresent(out, transform, texture, faces, "south", Direction.SOUTH,
-                    minX,minY,minZ,maxX,maxY,maxZ, dx,dy, textureWidth,textureHeight, mirror);
+            addGeoMappedFace(out, transform, texture, faces, "west", Direction.WEST,
+                    minX,minY,minZ,maxX,maxY,maxZ, dz,dy,
+                    textureWidth,textureHeight, mirror);
+            addGeoMappedFace(out, transform, texture, faces, "east", Direction.EAST,
+                    minX,minY,minZ,maxX,maxY,maxZ, dz,dy,
+                    textureWidth,textureHeight, mirror);
+            addGeoMappedFace(out, transform, texture, faces, "north", Direction.NORTH,
+                    minX,minY,minZ,maxX,maxY,maxZ, dx,dy,
+                    textureWidth,textureHeight, mirror);
+            addGeoMappedFace(out, transform, texture, faces, "south", Direction.SOUTH,
+                    minX,minY,minZ,maxX,maxY,maxZ, dx,dy,
+                    textureWidth,textureHeight, mirror);
+            addGeoMappedFace(out, transform, texture, faces, "up", Direction.UP,
+                    minX,minY,minZ,maxX,maxY,maxZ, dx,dz,
+                    textureWidth,textureHeight, mirror);
+            addGeoMappedFace(out, transform, texture, faces, "down", Direction.DOWN,
+                    minX,minY,minZ,maxX,maxY,maxZ, dx,dz,
+                    textureWidth,textureHeight, mirror);
             return;
         }
 
@@ -453,34 +473,34 @@ public final class EntityModelSource implements BlockModelSource {
             }
         }
 
+        // Exact GeckoLib GeometryQuadUvs.ofBoxUv layout.
         addGeoFace(out, transform, texture,
-                corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.DOWN),
-                maybeMirrorUv(uvRect(u + dz + dx, v, u + dz + dx + dx, v + dz,
-                        textureWidth, textureHeight), mirror));
+                geoCorners(minX,minY,minZ,maxX,maxY,maxZ, Direction.WEST, mirror, true),
+                geoUv(u + dz + dx, v + dz, dz, dy,
+                        textureWidth, textureHeight, mirror, 0));
         addGeoFace(out, transform, texture,
-                corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.UP),
-                maybeMirrorUv(uvRect(u + dz, v, u + dz + dx, v + dz,
-                        textureWidth, textureHeight), mirror));
+                geoCorners(minX,minY,minZ,maxX,maxY,maxZ, Direction.EAST, mirror, true),
+                geoUv(u, v + dz, dz, dy,
+                        textureWidth, textureHeight, mirror, 0));
         addGeoFace(out, transform, texture,
-                corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.WEST),
-                maybeMirrorUv(uvRect(u, v + dz, u + dz, v + dz + dy,
-                        textureWidth, textureHeight), mirror));
+                geoCorners(minX,minY,minZ,maxX,maxY,maxZ, Direction.NORTH, mirror, true),
+                geoUv(u + dz, v + dz, dx, dy,
+                        textureWidth, textureHeight, mirror, 0));
         addGeoFace(out, transform, texture,
-                corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.NORTH),
-                maybeMirrorUv(uvRect(u + dz, v + dz, u + dz + dx, v + dz + dy,
-                        textureWidth, textureHeight), mirror));
+                geoCorners(minX,minY,minZ,maxX,maxY,maxZ, Direction.SOUTH, mirror, true),
+                geoUv(u + dz + dx + dz, v + dz, dx, dy,
+                        textureWidth, textureHeight, mirror, 0));
         addGeoFace(out, transform, texture,
-                corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.EAST),
-                maybeMirrorUv(uvRect(u + dz + dx, v + dz, u + dz + dx + dz, v + dz + dy,
-                        textureWidth, textureHeight), mirror));
+                geoCorners(minX,minY,minZ,maxX,maxY,maxZ, Direction.UP, mirror, true),
+                geoUv(u + dz, v, dx, dz,
+                        textureWidth, textureHeight, mirror, 0));
         addGeoFace(out, transform, texture,
-                corners(minX,minY,minZ,maxX,maxY,maxZ, Direction.SOUTH),
-                maybeMirrorUv(uvRect(u + dz + dx + dz, v + dz,
-                        u + dz + dx + dz + dx, v + dz + dy,
-                        textureWidth, textureHeight), mirror));
+                geoCorners(minX,minY,minZ,maxX,maxY,maxZ, Direction.DOWN, mirror, true),
+                geoUv(u + dz + dx, v + dz, dx, -dz,
+                        textureWidth, textureHeight, mirror, 0));
     }
 
-    private static void addGeoFaceIfPresent(
+    private static void addGeoMappedFace(
             List<ModelQuad> out,
             Matrix4f transform,
             String texture,
@@ -499,29 +519,110 @@ public final class EntityModelSource implements BlockModelSource {
         float[] uv = vector2(face.get("uv"), null);
         if (uv == null) return;
 
-        float[] uvSize = vector2(face.get("uv_size"),
+        float[] uvSize = vector2(
+                face.get("uv_size"),
                 new float[]{defaultWidth, defaultHeight});
-        float[] mapped = uvRect(
-                uv[0], uv[1],
-                uv[0] + uvSize[0], uv[1] + uvSize[1],
-                textureWidth, textureHeight);
+        int uvRotation = face.has("uv_rotation")
+                ? face.get("uv_rotation").getAsInt()
+                : 0;
 
         addGeoFace(
                 out,
                 transform,
                 texture,
-                corners(minX,minY,minZ,maxX,maxY,maxZ,direction),
-                maybeMirrorUv(mapped, mirror));
+                geoCorners(
+                        minX,minY,minZ,maxX,maxY,maxZ,
+                        direction, mirror, false),
+                geoUv(
+                        uv[0], uv[1], uvSize[0], uvSize[1],
+                        textureWidth, textureHeight, mirror, uvRotation));
     }
 
-    private static float[] maybeMirrorUv(float[] uv, boolean mirror) {
-        if (!mirror) return uv;
-        // Swap left/right corners while retaining the face's winding.
-        return new float[]{
-                uv[2], uv[3],
-                uv[0], uv[1],
-                uv[6], uv[7],
-                uv[4], uv[5]};
+    /**
+     * GeckoLib VertexSet ordering. Bedrock's mirrored X model coordinates mean the
+     * "front/back" names look counter-intuitive in normal Minecraft model space; copying
+     * the renderer's ordering avoids another hand-derived axis swap.
+     */
+    private static float[] geoCorners(
+            float minX, float minY, float minZ,
+            float maxX, float maxY, float maxZ,
+            Direction direction,
+            boolean mirror,
+            boolean boxUv) {
+        Direction effective = direction;
+        if (mirror) {
+            if (direction == Direction.WEST) effective = Direction.EAST;
+            else if (direction == Direction.EAST) effective = Direction.WEST;
+            else if (!boxUv && direction == Direction.UP) effective = Direction.DOWN;
+            else if (!boxUv && direction == Direction.DOWN) effective = Direction.UP;
+        }
+
+        return switch (effective) {
+            case WEST -> new float[]{
+                    minX,maxY,maxZ, minX,maxY,minZ,
+                    minX,minY,minZ, minX,minY,maxZ};
+            case EAST -> new float[]{
+                    maxX,maxY,minZ, maxX,maxY,maxZ,
+                    maxX,minY,maxZ, maxX,minY,minZ};
+            case NORTH -> new float[]{
+                    minX,maxY,minZ, maxX,maxY,minZ,
+                    maxX,minY,minZ, minX,minY,minZ};
+            case SOUTH -> new float[]{
+                    maxX,maxY,maxZ, minX,maxY,maxZ,
+                    minX,minY,maxZ, maxX,minY,maxZ};
+            case UP -> new float[]{
+                    minX,maxY,maxZ, maxX,maxY,maxZ,
+                    maxX,maxY,minZ, minX,maxY,minZ};
+            case DOWN -> new float[]{
+                    minX,minY,minZ, maxX,minY,minZ,
+                    maxX,minY,maxZ, minX,minY,maxZ};
+        };
+    }
+
+    /**
+     * GeckoLib GeometryQuadUvs#adjustVerticesForMirrorAndRotation semantics, converted
+     * to BlueMap3D's sprite-local 0..16 UV space.
+     */
+    private static float[] geoUv(
+            float u,
+            float v,
+            float uSize,
+            float vSize,
+            float textureWidth,
+            float textureHeight,
+            boolean mirror,
+            int rotationDegrees) {
+        float u2 = u + uSize;
+        float v2 = v + vSize;
+
+        if (!mirror) {
+            float tmp = u2;
+            u2 = u;
+            u = tmp;
+        }
+
+        float[] raw = switch (Math.floorMod(rotationDegrees, 360)) {
+            case 90 -> new float[]{u2,v, u2,v2, u,v2, u,v};
+            case 180 -> new float[]{u2,v2, u,v2, u,v, u2,v};
+            case 270 -> new float[]{u,v2, u,v, u2,v, u2,v2};
+            default -> new float[]{u,v, u2,v, u2,v2, u,v2};
+        };
+
+        float tw = Math.max(1F, textureWidth);
+        float th = Math.max(1F, textureHeight);
+        for (int i = 0; i < raw.length; i += 2) {
+            raw[i] = raw[i] / tw * 16F;
+            raw[i + 1] = raw[i + 1] / th * 16F;
+        }
+        return raw;
+    }
+
+    private static float[] bedrockPoint(float[] value) {
+        return new float[]{-value[0], value[1], value[2]};
+    }
+
+    private static float[] bedrockRotation(float[] degrees) {
+        return new float[]{-degrees[0], -degrees[1], degrees[2]};
     }
 
     private static void addGeoFace(
@@ -541,15 +642,17 @@ public final class EntityModelSource implements BlockModelSource {
         out.add(new ModelQuad(null, null, positions, uvs, texture, 0xFFFFFF));
     }
 
-    private static void rotateAround(Matrix4f matrix, float[] pivot, float[] rotationDegrees) {
+    private static void rotateAroundZYX(
+            Matrix4f matrix, float[] pivot, float[] rotationDegrees) {
         if (rotationDegrees == null) return;
+
         float rx = (float) Math.toRadians(rotationDegrees[0]);
         float ry = (float) Math.toRadians(rotationDegrees[1]);
         float rz = (float) Math.toRadians(rotationDegrees[2]);
         if (Math.abs(rx) + Math.abs(ry) + Math.abs(rz) < 1.0e-7F) return;
 
         matrix.translate(pivot[0], pivot[1], pivot[2])
-                .rotateXYZ(rx, ry, rz)
+                .rotateZYX(rz, ry, rx)
                 .translate(-pivot[0], -pivot[1], -pivot[2]);
     }
 
@@ -792,6 +895,8 @@ public final class EntityModelSource implements BlockModelSource {
             String parent,
             float[] pivot,
             float[] rotation,
+            boolean mirror,
+            float inflate,
             JsonArray cubes) {
     }
 }
