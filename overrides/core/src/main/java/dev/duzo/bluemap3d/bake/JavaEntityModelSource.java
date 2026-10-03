@@ -229,6 +229,20 @@ final class JavaEntityModelSource {
         return List.copyOf(out);
     }
 
+    static int extractCubeCountForTest(byte[] bytes) {
+        ClassNode node = new ClassNode();
+        new ClassReader(bytes).accept(node, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        for (MethodNode method : layerFactories(node)) {
+            List<Object> defaults = defaultArguments(method);
+            if (defaults == null) continue;
+            Object result = new Interpreter(node).invoke(method, defaults, 0);
+            if (result instanceof JavaLayer layer && !layer.root().isEmpty()) {
+                return countCubes(layer.root());
+            }
+        }
+        return 0;
+    }
+
     private List<Candidate> candidates(
             String namespace, String entityPath, Map<String, String> metadata) {
         String namespaceCompact = compact(namespace);
