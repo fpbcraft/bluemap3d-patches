@@ -92,12 +92,12 @@ final class JavaEntityModelSource {
 
                 JavaLayer best = null;
                 String methodName = null;
-                for (MethodNode method : node.methods) {
-                    if ((method.access & Opcodes.ACC_STATIC) == 0) continue;
-                    if (!LAYER.equals(Type.getReturnType(method.desc).getInternalName())) continue;
+                for (MethodNode method : layerFactories(node)) {
+                    List<Object> defaults = defaultArguments(method);
+                    if (defaults == null) continue;
 
                     try {
-                        Object value = new Interpreter(node).invoke(method, List.of(), 0);
+                        Object value = new Interpreter(node).invoke(method, defaults, 0);
                         if (value instanceof JavaLayer layer && !layer.root().isEmpty()) {
                             best = layer;
                             methodName = method.name;
@@ -140,9 +140,8 @@ final class JavaEntityModelSource {
             try {
                 ClassNode node = new ClassNode();
                 new ClassReader(bytes).accept(node, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-                List<String> factories = node.methods.stream()
-                        .filter(method -> (method.access & Opcodes.ACC_STATIC) != 0)
-                        .filter(method -> LAYER.equals(Type.getReturnType(method.desc).getInternalName()))
+                List<MethodNode> factoryMethods = layerFactories(node);
+                List<String> factories = factoryMethods.stream()
                         .map(method -> method.name + method.desc)
                         .toList();
                 if (factories.isEmpty()) {
@@ -153,11 +152,14 @@ final class JavaEntityModelSource {
 
                 String detail = "factories=" + factories;
                 boolean supported = false;
-                for (MethodNode method : node.methods) {
-                    if ((method.access & Opcodes.ACC_STATIC) == 0) continue;
-                    if (!LAYER.equals(Type.getReturnType(method.desc).getInternalName())) continue;
+                for (MethodNode method : factoryMethods) {
+                    List<Object> defaults = defaultArguments(method);
+                    if (defaults == null) {
+                        detail = method.name + ": unsupported factory parameters";
+                        continue;
+                    }
                     try {
-                        Object result = new Interpreter(node).invoke(method, List.of(), 0);
+                        Object result = new Interpreter(node).invoke(method, defaults, 0);
                         if (result instanceof JavaLayer layer && !layer.root().isEmpty()) {
                             supported = true;
                             detail = "extractable via " + method.name
@@ -173,6 +175,55 @@ final class JavaEntityModelSource {
             } catch (RuntimeException error) {
                 out.add(new DiagnosticCandidate(
                         candidate.path(), candidate.score(), false, error.toString()));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    private static List<MethodNode> layerFactories(ClassNode node) {
+        List<MethodNode> out = node.methods.stream()
+                .filter(method -> (method.access & Opcodes.ACC_STATIC) != 0)
+                .filter(method -> LAYER.equals(Type.getReturnType(method.desc).getInternalName()))
+                .sorted(Comparator.comparingInt(JavaEntityModelSource::factoryScore).reversed())
+                .toList();
+        return out;
+    }
+
+    private static int factoryScore(MethodNode method) {
+        String name = method.name.toLowerCase(Locale.ROOT);
+        int score = 0;
+        if (name.contains("body")) score += 500;
+        if (name.contains("texturedmodel")) score += 450;
+        if (name.contains("modeldata")) score += 400;
+        if (name.contains("layer")) score += 200;
+        if (name.contains("armor")) score -= 500;
+        if (name.contains("overlay")) score -= 400;
+        return score;
+    }
+
+    /**
+     * Standard model factories sometimes expose deformation/scale knobs even when the
+     * renderer uses their neutral values. Supply only values whose neutral meaning is
+     * unambiguous; unknown object parameters make that factory ineligible.
+     */
+    private static List<Object> defaultArguments(MethodNode method) {
+        List<Object> out = new ArrayList<>();
+        for (Type type : Type.getArgumentTypes(method.desc)) {
+            switch (type.getSort()) {
+                case Type.BOOLEAN, Type.BYTE, Type.SHORT, Type.INT, Type.CHAR -> out.add(0);
+                case Type.LONG -> out.add(0L);
+                case Type.FLOAT -> out.add(0F);
+                case Type.DOUBLE -> out.add(0D);
+                case Type.OBJECT -> {
+                    if (DEFORMATION.equals(type.getInternalName())) {
+                        out.add(JavaDeformation.NONE);
+                    } else {
+                        return null;
+                    }
+                }
+                default -> {
+                    return null;
+                }
             }
         }
         return List.copyOf(out);
@@ -784,6 +835,18 @@ final class JavaEntityModelSource {
             if ("java/util/EnumSet".equals(call.owner)
                     && ("of".equals(call.name) || "allOf".equals(call.name))) {
                 return Set.copyOf(args);
+            }
+
+            // Common vanilla base-model factories (HumanoidModel.createMesh,
+            // QuadrupedModel.createBodyMesh, etc.) return a MeshDefinition. Starting with
+            // an empty root is safe for models that replace/add their own parts; if they
+            // depend on an inherited child, getChild() below fails closed and the model
+            // falls back rather than rendering corrupt geometry.
+            Type returnType = Type.getReturnType(call.desc);
+            if (call.owner.startsWith("net/minecraft/client/model/")
+                    && returnType.getSort() == Type.OBJECT
+                    && MESH.equals(returnType.getInternalName())) {
+                return new JavaMesh();
             }
 
             if (owner.name.equals(call.owner)) {
