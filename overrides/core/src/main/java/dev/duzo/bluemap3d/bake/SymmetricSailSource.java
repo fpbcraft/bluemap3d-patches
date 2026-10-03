@@ -80,7 +80,7 @@ public final class SymmetricSailSource implements BlockModelSource {
 
         for (Direction face : Direction.values()) {
             boolean broadFace = face.getAxis() == axis;
-            float[] uv = ResourcePackSource.uvCorners(
+            float[] uv = ResourcePackGeometry.uvCorners(
                     broadFace
                             ? new float[] {0f, 0f, 16f, 16f}
                             : new float[] {0f, 0f, 16f, 4f},
@@ -91,7 +91,7 @@ public final class SymmetricSailSource implements BlockModelSource {
             out.add(new ModelQuad(
                     broadFace ? null : face,
                     face,
-                    ResourcePackSource.faceCorners(from, to, face),
+                    ResourcePackGeometry.faceCorners(from, to, face),
                     uv,
                     broadFace ? canvas : side,
                     0xFFFFFF));
@@ -99,7 +99,7 @@ public final class SymmetricSailSource implements BlockModelSource {
 
         String traceKey = id + "|" + axis;
         if (TRACED.add(traceKey)) {
-            LOGGER.info(
+            LOGGER.debug(
                     "SYMMETRIC-SAIL-DIAG block={} axis={} quads={} canvas={} side={}",
                     id, axis, out.size(), canvas, side);
         }

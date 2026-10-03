@@ -89,7 +89,7 @@ public final class BitsNBobsStrutSource implements BlockModelSource {
 
         ListTag connections = metadata.getList("Connections", Tag.TAG_COMPOUND);
         if (TRACED.add(id)) {
-            LOGGER.info("V21 strut={} metadata=present connections={} endpointQuads={} segmentQuads={} textureKey={}",
+            LOGGER.debug("V21 strut={} metadata=present connections={} endpointQuads={} segmentQuads={} textureKey={}",
                     id, connections.size(), out.size(), segment.size(), safeTexture);
         }
         for (Tag entry : connections) {

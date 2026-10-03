@@ -313,7 +313,7 @@ index a98a42e..6ecb9bf 100644
 +                        && COPYCATS_MISSING_METADATA.size() < 32
 +                        && COPYCATS_MISSING_METADATA.add(blockId)) {
 +                    CompoundTag full = entry.getValue().nbt();
-+                    LOGGER.info(
++                    LOGGER.debug(
 +                            "COPYCATS-V9 CREATE metadata missing block={} full={} update={}",
 +                            blockId,
 +                            full == null ? "<null>" : full.toString(),
@@ -374,7 +374,7 @@ index a98a42e..6ecb9bf 100644
 +            if (BOGEY_V12_TRACE.add(traceKey)) {
 +                List<ModelAttachment> resolved =
 +                        BogeyStyles.attachmentsFor(style, pos, axis, state);
-+                LOGGER.info(
++                LOGGER.debug(
 +                        "BOGEY-V13 TRACE style={} block={} axis={} attachments={} models={}",
 +                        style,
 +                        blockId,
@@ -926,7 +926,7 @@ index e8199bf..f2a3e33 100644
  import dev.duzo.bluemap3d.bake.MapColorSource;
  import dev.duzo.bluemap3d.bake.ResourcePackSource;
  import dev.duzo.bluemap3d.bake.ShapeSource;
-@@ -72,7 +76,17 @@ public final class BlueMap3DMod {
+@@ -72,7 +76,18 @@ public final class BlueMap3DMod {
              if (Config.USE_RESOURCE_PACKS.get()) {
                  assets = AssetIndex.open(configuredSources(), blueMapRoot);
                  ResourcePackSource packs = new ResourcePackSource(assets);
@@ -938,6 +938,7 @@ index e8199bf..f2a3e33 100644
 +                // block-entity NBT, so they must be resolved before the ordinary pack path.
 +                sources.add(new CopycatsBoardSource(packs));
                  sources.add(packs);
++                sources.add(new dev.duzo.bluemap3d.bake.EntityModelSource(assets));
 +                // Copycats+ emits many models entirely in client code. If no real JSON
 +                // model exists, preserve its server VoxelShape and copied material.
 +                sources.add(new CopycatsShapeSource(packs));
@@ -1594,9 +1595,9 @@ index 0000000..d860ac3
 +            out.add(new ModelQuad(
 +                    cullFaceOf(from, to, surface),
 +                    surface,
-+                    ResourcePackSource.faceCorners(from, to, surface),
-+                    ResourcePackSource.uvCorners(
-+                            ResourcePackSource.autoUv(from, to, surface), 0),
++                    ResourcePackGeometry.faceCorners(from, to, surface),
++                    ResourcePackGeometry.uvCorners(
++                            ResourcePackGeometry.autoUv(from, to, surface), 0),
 +                    appearance.texture(),
 +                    appearance.tint()));
 +        }
@@ -1746,9 +1747,9 @@ index 0000000..c8bfbf8
 +                out.add(new ModelQuad(
 +                        cullFaceOf(from, to, face),
 +                        face,
-+                        ResourcePackSource.faceCorners(from, to, face),
-+                        ResourcePackSource.uvCorners(
-+                                ResourcePackSource.autoUv(from, to, face), 0),
++                        ResourcePackGeometry.faceCorners(from, to, face),
++                        ResourcePackGeometry.uvCorners(
++                                ResourcePackGeometry.autoUv(from, to, face), 0),
 +                        appearance.texture(),
 +                        appearance.tint()));
 +            }
@@ -2061,8 +2062,8 @@ index 0000000..9935e8e
 +            out.add(new ModelQuad(
 +                    null,
 +                    face,
-+                    ResourcePackSource.faceCorners(from, to, face),
-+                    ResourcePackSource.uvCorners(ResourcePackSource.autoUv(from, to, face), 0),
++                    ResourcePackGeometry.faceCorners(from, to, face),
++                    ResourcePackGeometry.uvCorners(ResourcePackGeometry.autoUv(from, to, face), 0),
 +                    appearance.texture(),
 +                    appearance.tint()));
 +        }
@@ -2079,13 +2080,13 @@ index 0000000..9935e8e
 +        for (Direction face : Direction.values()) {
 +            Direction rotatedFace = rotateY(face, turns);
 +            Appearance appearance = appearance(material, rotatedFace);
-+            float[] positions = ResourcePackSource.faceCorners(from, to, face);
++            float[] positions = ResourcePackGeometry.faceCorners(from, to, face);
 +            rotateY(positions, turns);
 +            out.add(new ModelQuad(
 +                    null,
 +                    rotatedFace,
 +                    positions,
-+                    ResourcePackSource.uvCorners(ResourcePackSource.autoUv(from, to, face), 0),
++                    ResourcePackGeometry.uvCorners(ResourcePackGeometry.autoUv(from, to, face), 0),
 +                    appearance.texture(),
 +                    appearance.tint()));
 +        }
@@ -2366,7 +2367,7 @@ index 14cc6cc..3ba2e04 100644
 +                }
 +                String metadata = blockEntityData == null ? "<null>" : blockEntityData.toString();
 +                if (metadata.length() > 2000) metadata = metadata.substring(0, 2000) + "...";
-+                LOGGER.info("COPYCATS-V13 TRACE block={} state={} metadata={} sources={}",
++                LOGGER.debug("COPYCATS-V13 TRACE block={} state={} metadata={} sources={}",
 +                        blockId, state, metadata, traceSources);
 +            }
 +

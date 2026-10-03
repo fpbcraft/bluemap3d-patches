@@ -1,0 +1,60 @@
+plugins {
+    id 'bluemap3d-addon'
+}
+
+ext {
+    mod_id = 'bluemap3d_entities'
+    mod_name = 'BlueMap3D: Surface Mobs'
+    mod_description = 'Shows loaded surface mobs as live 3D models, using exact vanilla layers and automatically discovered mod assets when available.'
+}
+
+def generatedEntityModelsDir = layout.buildDirectory.dir('generated/entity-models')
+def generatedEntityModelsFile = generatedEntityModelsDir.map {
+    it.file('assets/bluemap3d_entities/entity-models.json')
+}
+
+sourceSets {
+    modelgen {
+        java.srcDir 'src/modelgen/java'
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+    // bluemap3d-addon wires Minecraft/NeoForge onto main's classpath. Gradle's plain
+    // Java test source set does not inherit those compile-only artifacts automatically,
+    // but provider API tests legitimately reference ResourceLocation and other MC types.
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+    main.resources.srcDir generatedEntityModelsDir
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.register('generateEntityModels', JavaExec) {
+    group = 'bluemap3d'
+    description = 'Bakes Minecraft 1.21.1 entity model layers into server-safe geometry.'
+    dependsOn tasks.named('compileModelgenJava')
+    classpath = sourceSets.modelgen.runtimeClasspath
+    mainClass = 'dev.duzo.bluemap3d.entities.modelgen.VanillaEntityModelGenerator'
+    inputs.property 'minecraftVersion', minecraft_version
+    outputs.file generatedEntityModelsFile
+
+    doFirst {
+        def output = generatedEntityModelsFile.get().asFile
+        output.parentFile.mkdirs()
+        args output.absolutePath, minecraft_version
+    }
+}
+
+tasks.named('processResources').configure {
+    dependsOn tasks.named('generateEntityModels')
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

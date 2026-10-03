@@ -42,6 +42,20 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSou
    core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/AssetIndex.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/AssetIndex.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/EntityModelSource.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/EntityModelSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/EntityAssetMatch.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/EntityAssetMatch.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/JavaEntityModelSource.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/JavaEntityModelSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/TextureAtlas.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/TextureAtlas.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometry.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometry.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryMath.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryMath.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackModelResolver.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackModelResolver.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ProceduralBlockSource.java" \
@@ -64,6 +78,12 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/ModelAttachment.ja
    core/src/main/java/dev/duzo/bluemap3d/api/ModelAttachment.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/SceneObject.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneInstance.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/SceneInstance.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneInstanceGroup.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/SceneInstanceGroup.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/InstancedSceneObject.java" \
+   core/src/main/java/dev/duzo/bluemap3d/api/InstancedSceneObject.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectProvider.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectProvider.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectLifecycle.java" \
@@ -79,6 +99,15 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegmen
 mkdir -p core/src/test/java/dev/duzo/bluemap3d/api
 cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/api/ScenePersistencePolicyTest.java" \
    core/src/test/java/dev/duzo/bluemap3d/api/ScenePersistencePolicyTest.java
+mkdir -p core/src/test/java/dev/duzo/bluemap3d/bake
+cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryTest.java" \
+   core/src/test/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryTest.java
+cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/EntityModelSourceTest.java" \
+   core/src/test/java/dev/duzo/bluemap3d/bake/EntityModelSourceTest.java
+cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/JavaEntityModelSourceTest.java" \
+   core/src/test/java/dev/duzo/bluemap3d/bake/JavaEntityModelSourceTest.java
+cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/TextureAtlasTest.java" \
+   core/src/test/java/dev/duzo/bluemap3d/bake/TextureAtlasTest.java
 mkdir -p core/src/main/resources/assets/bluemap3d/models/block
 cp "$ROOT/overrides/core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json" \
    core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json
@@ -121,6 +150,10 @@ cp "$ROOT/overrides/addon-sable/src/main/resources/bluemap3d_sable.mixins.json" 
 # TrafficCraft dynamic textures) and generic rule capabilities share this artifact.
 cp -R "$ROOT/addon-compat" ./addon-compat
 
+# Vanilla surface-mob provider. This is a complete owned addon rather than an upstream
+# source override, so copy it into the patched checkout as one unit.
+cp -R "$ROOT/overrides/addon-entities" ./addon-entities
+
 # One source of truth for built-in compatibility rules. Package the same rules into
 # the static BlueMap addon and the moving BlueMap3D bundle.
 mkdir -p addon-compat/src/main/resources/bluemap3d-compat
@@ -134,10 +167,15 @@ cp "$ROOT/compat/local-template.json" core/src/main/resources/bluemap3d-compat/l
 
 python3 "$ROOT/scripts/patch-upstream.py"
 
+# Shared-instance tracker is a maintained full override. Apply it after structural
+# transforms so the deterministic upstream patch anchors remain valid.
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java" \
+   core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java
+
 # Generate exhaustive static dispatch resources at build time.
 python3 "$ROOT/scripts/generate-static-resources.py"
 
-./gradlew clean :core:test bundleJar :addon-compat:build
+./gradlew clean :core:test :addon-entities:test bundleJar :addon-compat:build
 
 cp build/libs/bluemap3d-bundle-*.jar "$DIST/"
 
