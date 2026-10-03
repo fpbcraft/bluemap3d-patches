@@ -94,7 +94,7 @@ public final class EntityModelSource implements BlockModelSource {
         }
 
         EntityKey entity = new EntityKey(
-                entityId.getNamespace(), entityId.getPath(), entityId.toString());
+                entityId.getNamespace(), entityId.getPath());
         Map<String, String> metadata = Map.of();
 
         List<String> out = new ArrayList<>();
