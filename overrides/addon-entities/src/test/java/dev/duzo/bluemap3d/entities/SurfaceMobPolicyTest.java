@@ -2,6 +2,7 @@ package dev.duzo.bluemap3d.entities;
 
 import dev.duzo.bluemap3d.api.SceneObjectLifecycle;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,8 +31,22 @@ class SurfaceMobPolicyTest {
     }
 
     @Test
-    void providerNeverPersistsOrRecordsMobs() {
-        assertEquals(SceneObjectLifecycle.LIVE_ONLY, new SurfaceMobProvider().lifecycle());
+    void providerRestoresMobsButDoesNotRecordHistory() {
+        assertEquals(SceneObjectLifecycle.RESTORE_ONLY, new SurfaceMobProvider().lifecycle());
+    }
+
+    @Test
+    void keepsMobsWhenMinecraftUnloadsThemForPersistence() {
+        assertFalse(SurfaceMobProvider.shouldForget(Entity.RemovalReason.UNLOADED_TO_CHUNK));
+        assertFalse(SurfaceMobProvider.shouldForget(Entity.RemovalReason.UNLOADED_WITH_PLAYER));
+    }
+
+    @Test
+    void forgetsMobsThatWereActuallyRemoved() {
+        assertTrue(SurfaceMobProvider.shouldForget(Entity.RemovalReason.KILLED));
+        assertTrue(SurfaceMobProvider.shouldForget(Entity.RemovalReason.DISCARDED));
+        assertTrue(SurfaceMobProvider.shouldForget(Entity.RemovalReason.CHANGED_DIMENSION));
+        assertFalse(SurfaceMobProvider.shouldForget(null));
     }
 
     @Test
