@@ -94,7 +94,7 @@ public final class TrafficCraftSignSource implements BlockModelSource {
         }
 
         if (traced.add(signTexture)) {
-            LOGGER.info(
+            LOGGER.debug(
                     "TRAFFICCRAFT-SIGN moving texture={} shape={} facing={} baseQuads={} totalQuads={}",
                     signTexture, shape, facing, base.size(), out.size());
         }
