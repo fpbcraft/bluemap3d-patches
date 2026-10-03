@@ -18,6 +18,53 @@ class PatchArchitectureTest(unittest.TestCase):
         for path in patches:
             self.assertRegex(path.name, r"^\d{4}-[a-z0-9-]+\.patch$")
 
+    def test_patch_hunk_line_counts_match_headers(self) -> None:
+        header_re = re.compile(
+            r"^@@ -\\d+(?:,(\\d+))? \\+\\d+(?:,(\\d+))? @@"
+        )
+
+        for path in sorted((ROOT / "patches").glob("*.patch")):
+            lines = path.read_text().splitlines()
+            index = 0
+            while index < len(lines):
+                match = header_re.match(lines[index])
+                if match is None:
+                    index += 1
+                    continue
+
+                expected_old = int(match.group(1) or 1)
+                expected_new = int(match.group(2) or 1)
+                old_count = 0
+                new_count = 0
+                header_line = index + 1
+                index += 1
+
+                while index < len(lines):
+                    line = lines[index]
+                    if line.startswith("@@ ") or line.startswith("diff --git "):
+                        break
+                    if line.startswith("\\ No newline at end of file"):
+                        index += 1
+                        continue
+                    if line.startswith("+"):
+                        new_count += 1
+                    elif line.startswith("-"):
+                        old_count += 1
+                    elif line.startswith(" "):
+                        old_count += 1
+                        new_count += 1
+                    else:
+                        self.fail(
+                            f"{path.name}:{index + 1}: malformed hunk line {line!r}"
+                        )
+                    index += 1
+
+                self.assertEqual(
+                    (old_count, new_count),
+                    (expected_old, expected_new),
+                    f"{path.name}:{header_line}: hunk line counts do not match header",
+                )
+
     def test_build_checks_each_patch_before_applying_it(self) -> None:
         build = (ROOT / "build.sh").read_text()
         self.assertIn('for patch in "$ROOT"/patches/*.patch; do', build)
