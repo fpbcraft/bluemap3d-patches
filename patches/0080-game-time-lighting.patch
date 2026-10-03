@@ -1,0 +1,537 @@
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java b/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
+--- a/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/BlueMap3DMod.java
+@@ -21,3 +21,4 @@
++import dev.duzo.bluemap3d.publish.GameTimePublisher;
+ import dev.duzo.bluemap3d.publish.HiddenBlockPack;
+ import dev.duzo.bluemap3d.publish.TileRefreshQueue;
+ import dev.duzo.bluemap3d.publish.WebRootPublisher;
+@@ -52,5 +53,6 @@
+     private volatile SceneObjectTracker tracker;
+     private volatile AssetIndex assets;
+     private volatile TileRefreshQueue refreshQueue;
++    private volatile GameTimePublisher gameTimePublisher;
+ 
+     public BlueMap3DMod(ModContainer container) {
+@@ -74,5 +76,6 @@
+             if (publisher == null) {
+                 return;
+             }
++            gameTimePublisher = GameTimePublisher.install(api);
+ 
+             // BlueMap's own directory is the parent of its web root. That is where it
+@@ -182,6 +185,10 @@
+         if (queue != null) {
+             queue.tick();
+         }
++        GameTimePublisher timePublisher = gameTimePublisher;
++        if (timePublisher != null) {
++            timePublisher.tick(event.getServer(), Config.PUBLISH_INTERVAL_TICKS.get());
++        }
+     }
+ 
+     /**
+@@ -229,4 +236,5 @@
+     private synchronized void shutdown() {
+         BlueMap3D.setTileRefresher(null);
+         refreshQueue = null;
++        gameTimePublisher = null;
+         if (tracker != null) {
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/publish/GameTimePublisher.java b/core/src/main/java/dev/duzo/bluemap3d/publish/GameTimePublisher.java
+new file mode 100644
+--- /dev/null
++++ b/core/src/main/java/dev/duzo/bluemap3d/publish/GameTimePublisher.java
+@@ -0,0 +1,147 @@
++package dev.duzo.bluemap3d.publish;
++
++import com.google.gson.Gson;
++import com.google.gson.JsonObject;
++import de.bluecolored.bluemap.api.BlueMapAPI;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.GameRules;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++
++import java.io.IOException;
++import java.io.InputStream;
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.nio.file.StandardCopyOption;
++
++/**
++ * Publishes the live Minecraft clock used by the optional BlueMap lighting sync.
++ *
++ * <p>The browser setting is intentionally opt-in. This publisher only makes the current
++ * time available; it never changes BlueMap's lighting on the server side.
++ */
++public final class GameTimePublisher {
++
++    private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/GameTime");
++    private static final Gson GSON = new Gson();
++
++    private static final String BASE = "assets/bluemap3d";
++    private static final String SCRIPT_URL = BASE + "/game-time-sync.js";
++    private static final String CORE_SCRIPT_URL = BASE + "/game-time-sync.core.js";
++    private static final String FEED_URL = BASE + "/game-time.json";
++
++    private final BlueMapAPI api;
++    private final Path webRoot;
++    private int ticksUntilPublish;
++
++    private GameTimePublisher(BlueMapAPI api, Path webRoot) {
++        this.api = api;
++        this.webRoot = webRoot;
++    }
++
++    /**
++     * Installs the stable loader and registers it with BlueMap's webapp.
++     *
++     * @return a publisher, or {@code null} if the web root cannot be prepared
++     */
++    public static GameTimePublisher install(BlueMapAPI api) {
++        Path webRoot;
++        try {
++            webRoot = api.getWebApp().getWebRoot();
++        } catch (RuntimeException e) {
++            LOGGER.warn("BlueMap did not expose a web root; game-time lighting sync is disabled", e);
++            return null;
++        }
++
++        try {
++            copyResource("game-time-sync.js", resolve(webRoot, SCRIPT_URL));
++            copyResource("game-time-sync.core.js", resolve(webRoot, CORE_SCRIPT_URL));
++        } catch (IOException e) {
++            LOGGER.warn("Could not install BlueMap game-time lighting sync", e);
++            return null;
++        }
++
++        api.getWebApp().registerScript(SCRIPT_URL);
++        return new GameTimePublisher(api, webRoot);
++    }
++
++    /** Publishes at the same cadence as the ordinary BlueMap3D live feed. */
++    public void tick(MinecraftServer server, int intervalTicks) {
++        if (ticksUntilPublish > 0) {
++            ticksUntilPublish--;
++            return;
++        }
++        ticksUntilPublish = Math.max(1, intervalTicks) - 1;
++
++        try {
++            writeFeed(server);
++        } catch (IOException | RuntimeException e) {
++            LOGGER.debug("Could not publish game-time feed: {}", e.toString());
++        }
++    }
++
++    private void writeFeed(MinecraftServer server) throws IOException {
++        JsonObject maps = new JsonObject();
++
++        for (ServerLevel level : server.getAllLevels()) {
++            try {
++                api.getWorld(level).ifPresent(world -> world.getMaps().forEach(map -> {
++                    JsonObject state = new JsonObject();
++                    state.addProperty("dayTime", level.getDayTime());
++                    state.addProperty(
++                            "daylightCycle",
++                            level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT));
++                    state.addProperty("hasSkyLight", level.dimensionType().hasSkyLight());
++                    state.addProperty("dimension", level.dimension().location().toString());
++                    maps.add(map.getId(), state);
++                }));
++            } catch (RuntimeException e) {
++                LOGGER.debug(
++                        "Could not resolve BlueMap world time for {}: {}",
++                        level.dimension().location(),
++                        e.toString());
++            }
++        }
++
++        JsonObject root = new JsonObject();
++        root.add("maps", maps);
++        byte[] bytes = GSON.toJson(root).getBytes(StandardCharsets.UTF_8);
++
++        Path target = resolve(webRoot, FEED_URL);
++        Files.createDirectories(target.getParent());
++        Path temp = target.resolveSibling(target.getFileName() + ".tmp");
++        Files.write(temp, bytes);
++        try {
++            Files.move(
++                    temp,
++                    target,
++                    StandardCopyOption.REPLACE_EXISTING,
++                    StandardCopyOption.ATOMIC_MOVE);
++        } catch (IOException e) {
++            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
++        }
++    }
++
++    private static void copyResource(String name, Path target) throws IOException {
++        Files.createDirectories(target.getParent());
++        try (InputStream in = GameTimePublisher.class
++                .getResourceAsStream("/assets/bluemap3d/web/" + name)) {
++            if (in == null) {
++                throw new IOException(name + " is missing from the mod jar");
++            }
++            Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
++        }
++    }
++
++    private static Path resolve(Path webRoot, String webRelative) {
++        Path root = webRoot.normalize();
++        Path path = root.resolve(webRelative).normalize();
++        if (!path.startsWith(root)) {
++            throw new IllegalArgumentException(
++                    "Refusing to write outside the BlueMap web root: " + webRelative);
++        }
++        return path;
++    }
++}
+diff --git a/core/src/main/resources/assets/bluemap3d/web/game-time-sync.js b/core/src/main/resources/assets/bluemap3d/web/game-time-sync.js
+new file mode 100644
+--- /dev/null
++++ b/core/src/main/resources/assets/bluemap3d/web/game-time-sync.js
+@@ -0,0 +1,19 @@
++/*
++ * Stable loader for the optional BlueMap3D game-time lighting sync.
++ *
++ * Keep this URL stable because BlueMap persists registered scripts. The real script is
++ * cache-busted so updates take effect without accumulating old registered URLs.
++ */
++(function () {
++    "use strict";
++
++    if (window.__bluemap3dGameTimeSyncLoader) {
++        return;
++    }
++    window.__bluemap3dGameTimeSyncLoader = true;
++
++    var script = document.createElement("script");
++    script.src = "assets/bluemap3d/game-time-sync.core.js?t=" + Date.now();
++    script.async = false;
++    document.body.appendChild(script);
++})();
+diff --git a/core/src/main/resources/assets/bluemap3d/web/game-time-sync.core.js b/core/src/main/resources/assets/bluemap3d/web/game-time-sync.core.js
+new file mode 100644
+--- /dev/null
++++ b/core/src/main/resources/assets/bluemap3d/web/game-time-sync.core.js
+@@ -0,0 +1,317 @@
++/*
++ * Optional BlueMap lighting sync for Minecraft's in-game clock.
++ *
++ * The switch is off by default and stored as a browser preference alongside BlueMap's
++ * own settings. Manual sunlight controls disable sync before handling the user's input.
++ */
++(function () {
++    "use strict";
++
++    var FEED_URL = "assets/bluemap3d/game-time.json";
++    var SETTING_KEY = "bluemap3d-game-time-sync";
++    var POLL_MS = 1000;
++    var APPLY_MS = 250;
++    var NIGHT_STRENGTH = 0.25;
++
++    if (window.__bluemap3dGameTimeSync) {
++        return;
++    }
++
++    var bm = window.bluemap;
++    if (!bm || !bm.mapViewer) {
++        return;
++    }
++
++    var state = {
++        enabled: false,
++        feed: null,
++        fetchedAt: 0,
++        pollTimer: null,
++        applyTimer: null,
++        manualStrength: null,
++        observer: null
++    };
++    window.__bluemap3dGameTimeSync = state;
++
++    if (bm.settings && bm.settings.useCookies && typeof bm.loadUserSetting === "function") {
++        state.enabled = !!bm.loadUserSetting(SETTING_KEY, false);
++    }
++
++    function currentMap() {
++        return bm.mapViewer.map && bm.mapViewer.map.data
++            ? bm.mapViewer.map.data
++            : null;
++    }
++
++    function saveEnabled() {
++        if (bm.settings && bm.settings.useCookies && typeof bm.saveUserSetting === "function") {
++            bm.saveUserSetting(SETTING_KEY, state.enabled);
++        }
++    }
++
++    function setSunlight(value) {
++        var uniform = bm.mapViewer.data.uniforms.sunlightStrength;
++        if (!uniform || !Number.isFinite(value)) {
++            return;
++        }
++        if (Math.abs(uniform.value - value) < 0.001) {
++            return;
++        }
++        uniform.value = value;
++        bm.mapViewer.redraw();
++    }
++
++    function dayFraction(dayTime) {
++        var time = ((dayTime % 24000) + 24000) % 24000;
++        if (time < 12000) {
++            return 1;
++        }
++        if (time < 13000) {
++            return 1 - (time - 12000) / 1000;
++        }
++        if (time < 23000) {
++            return 0;
++        }
++        return (time - 23000) / 1000;
++    }
++
++    function sampleForCurrentMap() {
++        var map = currentMap();
++        if (!map || !state.feed || !state.feed.maps) {
++            return null;
++        }
++        return state.feed.maps[map.id] || null;
++    }
++
++    function applyLighting() {
++        if (!state.enabled) {
++            return;
++        }
++
++        var map = currentMap();
++        var sample = sampleForCurrentMap();
++        if (!map || !sample || !Number.isFinite(Number(sample.dayTime))) {
++            return;
++        }
++
++        var base = Number(map.skyLight);
++        if (!Number.isFinite(base)) {
++            base = 1;
++        }
++
++        if (sample.hasSkyLight === false) {
++            setSunlight(base);
++            return;
++        }
++
++        var dayTime = Number(sample.dayTime);
++        if (sample.daylightCycle !== false && state.fetchedAt > 0) {
++            dayTime += Math.max(0, performance.now() - state.fetchedAt) / 50;
++        }
++
++        var night = Math.min(base, NIGHT_STRENGTH);
++        var target = night + (base - night) * dayFraction(dayTime);
++        setSunlight(target);
++    }
++
++    function schedulePoll(delay) {
++        if (!state.enabled) {
++            return;
++        }
++        clearTimeout(state.pollTimer);
++        state.pollTimer = setTimeout(poll, delay);
++    }
++
++    function poll() {
++        if (!state.enabled) {
++            return;
++        }
++
++        fetch(FEED_URL + "?t=" + Date.now(), {cache: "no-store"})
++            .then(function (response) {
++                if (!response.ok) {
++                    throw new Error("HTTP " + response.status);
++                }
++                return response.json();
++            })
++            .then(function (feed) {
++                state.feed = feed;
++                state.fetchedAt = performance.now();
++                applyLighting();
++            })
++            .catch(function () {
++                // BlueMap may be starting/reloading. Retrying quietly is enough.
++            })
++            .finally(function () {
++                schedulePoll(POLL_MS);
++            });
++    }
++
++    function stopTimers() {
++        clearTimeout(state.pollTimer);
++        state.pollTimer = null;
++        if (state.applyTimer) {
++            clearInterval(state.applyTimer);
++            state.applyTimer = null;
++        }
++    }
++
++    function startTimers() {
++        stopTimers();
++        poll();
++        state.applyTimer = setInterval(applyLighting, APPLY_MS);
++    }
++
++    function setEnabled(enabled, restoreManual) {
++        enabled = !!enabled;
++        if (enabled === state.enabled) {
++            updateSwitch();
++            return;
++        }
++
++        if (enabled) {
++            var uniform = bm.mapViewer.data.uniforms.sunlightStrength;
++            state.manualStrength = uniform ? uniform.value : null;
++            state.enabled = true;
++            saveEnabled();
++            startTimers();
++        } else {
++            state.enabled = false;
++            saveEnabled();
++            stopTimers();
++            if (restoreManual && Number.isFinite(state.manualStrength)) {
++                setSunlight(state.manualStrength);
++            }
++        }
++
++        updateSwitch();
++    }
++
++    function lightingGroup() {
++        if (!bm.appState || !bm.appState.menu
++                || bm.appState.menu.currentPage().id !== "settings") {
++            return null;
++        }
++
++        var marked = document.querySelector(
++                ".side-menu .group[data-bluemap3d-lighting-group='true']");
++        if (marked) {
++            return marked;
++        }
++
++        var groups = document.querySelectorAll(".side-menu .group");
++        for (var i = 0; i < groups.length; i++) {
++            var content = null;
++            for (var j = 0; j < groups[i].children.length; j++) {
++                if (groups[i].children[j].classList.contains("content")) {
++                    content = groups[i].children[j];
++                    break;
++                }
++            }
++            if (!content) {
++                continue;
++            }
++
++            if (content.querySelectorAll(".slider").length === 2
++                    && !content.querySelector(".switch-button")) {
++                groups[i].dataset.bluemap3dLightingGroup = "true";
++                return groups[i];
++            }
++        }
++
++        return null;
++    }
++
++    function updateSwitch() {
++        var control = document.querySelector(".bluemap3d-game-time-sync");
++        if (!control) {
++            return;
++        }
++        var handle = control.querySelector(".switch");
++        if (handle) {
++            handle.classList.toggle("on", state.enabled);
++        }
++        control.setAttribute("aria-checked", state.enabled ? "true" : "false");
++    }
++
++    function ensureSwitch() {
++        var group = lightingGroup();
++        if (!group || group.querySelector(".bluemap3d-game-time-sync")) {
++            updateSwitch();
++            return;
++        }
++
++        var content = group.querySelector(".content");
++        if (!content) {
++            return;
++        }
++
++        var control = document.createElement("div");
++        control.className = "switch-button bluemap3d-game-time-sync";
++        control.setAttribute("role", "switch");
++        control.setAttribute(
++                "title",
++                "Use the selected Minecraft world's clock for BlueMap lighting.");
++
++        var label = document.createElement("div");
++        label.className = "label";
++        label.textContent = "Sync lighting with in-game time";
++
++        var handle = document.createElement("div");
++        handle.className = "switch";
++
++        control.appendChild(label);
++        control.appendChild(handle);
++        control.addEventListener("click", function () {
++            setEnabled(!state.enabled, true);
++        });
++        content.appendChild(control);
++        updateSwitch();
++    }
++
++    function onManualLightingPointerDown(event) {
++        if (!state.enabled || !event.target || !event.target.closest) {
++            return;
++        }
++
++        if (event.target.closest(".day-night-switch")) {
++            setEnabled(false, false);
++            return;
++        }
++
++        var slider = event.target.closest(".slider");
++        if (!slider) {
++            return;
++        }
++        var group = lightingGroup();
++        if (group && group.contains(slider)) {
++            setEnabled(false, false);
++        }
++    }
++
++    bm.events.addEventListener("bluemapMapChanged", function () {
++        if (state.enabled) {
++            var map = currentMap();
++            state.manualStrength = map ? Number(map.skyLight) : null;
++            applyLighting();
++            schedulePoll(0);
++        }
++    });
++
++    document.addEventListener("pointerdown", onManualLightingPointerDown, true);
++
++    if (window.MutationObserver) {
++        state.observer = new MutationObserver(ensureSwitch);
++        state.observer.observe(document.getElementById("app") || document.body, {
++            childList: true,
++            subtree: true
++        });
++    }
++    ensureSwitch();
++
++    if (state.enabled) {
++        var map = currentMap();
++        state.manualStrength = map ? Number(map.skyLight) : null;
++        startTimers();
++    }
++})();
