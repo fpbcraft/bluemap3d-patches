@@ -183,7 +183,11 @@ final class JavaEntityModelSource {
     private static List<MethodNode> layerFactories(ClassNode node) {
         List<MethodNode> out = node.methods.stream()
                 .filter(method -> (method.access & Opcodes.ACC_STATIC) != 0)
-                .filter(method -> LAYER.equals(Type.getReturnType(method.desc).getInternalName()))
+                .filter(method -> {
+                    Type returnType = Type.getReturnType(method.desc);
+                    return returnType.getSort() == Type.OBJECT
+                            && LAYER.equals(returnType.getInternalName());
+                })
                 .sorted(Comparator.comparingInt(JavaEntityModelSource::factoryScore).reversed())
                 .toList();
         return out;
