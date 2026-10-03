@@ -214,7 +214,7 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
 
         @Override
         public long geometryVersion() {
-            return 2L;
+            return 3L;
         }
     }
 }
