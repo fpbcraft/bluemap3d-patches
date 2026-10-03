@@ -48,6 +48,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/EntityModelSource
    core/src/main/java/dev/duzo/bluemap3d/bake/EntityModelSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/EntityAssetMatch.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/EntityAssetMatch.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/JavaEntityModelSource.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/JavaEntityModelSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/TextureAtlas.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/TextureAtlas.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackGeometry.java" \
