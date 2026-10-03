@@ -3,6 +3,8 @@ package dev.duzo.bluemap3d.entities;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import dev.duzo.bluemap3d.bake.EntityModelSource;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -35,7 +37,50 @@ final class SurfaceMobCommands {
                 Commands.literal("bluemap3d")
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.literal("dump-mobs")
-                                .executes(context -> dump(context.getSource()))));
+                                .executes(context -> dump(context.getSource())))
+                        .then(Commands.literal("diagnose-mob")
+                                .then(Commands.argument("entity", StringArgumentType.word())
+                                        .executes(context -> diagnose(
+                                                context.getSource(),
+                                                StringArgumentType.getString(
+                                                        context, "entity"))))));
+    }
+
+    private static int diagnose(
+            net.minecraft.commands.CommandSourceStack source, String entityText) {
+        ResourceLocation entityId = ResourceLocation.tryParse(entityText);
+        if (entityId == null || !BuiltInRegistries.ENTITY_TYPE.containsKey(entityId)) {
+            source.sendFailure(Component.literal("Unknown entity id: " + entityText));
+            return 0;
+        }
+
+        List<String> lines = EntityModelSource.diagnoseEntity(entityId);
+        Path output = source.getServer()
+                .getWorldPath(LevelResource.ROOT)
+                .resolve("bluemap3d")
+                .resolve("mob-diagnostic-"
+                        + entityId.getNamespace() + "-"
+                        + entityId.getPath().replace('/', '_') + ".txt")
+                .toAbsolutePath()
+                .normalize();
+
+        try {
+            Files.createDirectories(output.getParent());
+            Files.write(
+                    output,
+                    lines,
+                    StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            source.sendFailure(Component.literal(
+                    "Could not write mob diagnostic: " + error.getMessage()));
+            return 0;
+        }
+
+        source.sendSuccess(
+                () -> Component.literal(
+                        "Wrote entity model diagnostic for " + entityId + " to " + output),
+                false);
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int dump(net.minecraft.commands.CommandSourceStack source) {
