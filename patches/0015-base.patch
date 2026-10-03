@@ -2367,7 +2367,7 @@ index 14cc6cc..3ba2e04 100644
 +                }
 +                String metadata = blockEntityData == null ? "<null>" : blockEntityData.toString();
 +                if (metadata.length() > 2000) metadata = metadata.substring(0, 2000) + "...";
-+                LOGGER.info("COPYCATS-V13 TRACE block={} state={} metadata={} sources={}",
++                LOGGER.debug("COPYCATS-V13 TRACE block={} state={} metadata={} sources={}",
 +                        blockId, state, metadata, traceSources);
 +            }
 +
