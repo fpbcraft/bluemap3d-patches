@@ -107,7 +107,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         }
 
         if (TRACED.add(id)) {
-            Logger.global.logInfo(String.format("STATIC block=%s state=%s entity=%s geometryQuads=%s emittedQuads=%s",
+            Logger.global.logDebug(String.format("STATIC block=%s state=%s entity=%s geometryQuads=%s emittedQuads=%s",
                     id,
                     block.getBlockState(),
                     entity.getId(),
