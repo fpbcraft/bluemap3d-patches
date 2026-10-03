@@ -88,7 +88,7 @@ mesh_swap_needle = '''            /* A new mesh url means the geometry version c
                         return;
                     }
                     replaceMesh(live, resource, row);
-                    console.debug(LOG, "mesh ready:", row.label || row.id,
+                    console.info(LOG, "mesh ready:", row.label || row.id,
                         resource.geometry.attributes.position.count + " verts");
                 }).catch(function (e) {
                     console.error(LOG, "could not load", row.mesh, e);
