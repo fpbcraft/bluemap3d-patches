@@ -13,7 +13,7 @@ final class ConnectedTerrainDispatchTest {
                 "diagonalfences:natures_spirit/wisteria_fence",
                 ConnectedTerrainDispatch.diagonalAlias("natures_spirit:wisteria_fence"));
         assertEquals(
-                "diagonalwalls:quark:shale_wall",
+                "diagonalwalls:quark/shale_wall",
                 ConnectedTerrainDispatch.diagonalAlias("quark:shale_wall"));
     }
 
