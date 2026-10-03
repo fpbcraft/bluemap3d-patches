@@ -111,7 +111,7 @@ public final class EntityModelSource implements BlockModelSource {
                 entity.namespace(), entity.path(), "main", effectiveMetadata)));
 
         if ("minecraft".equals(entity.namespace())) {
-            RawMesh vanilla = source.findVanillaLayer(entity, "main", metadata);
+            RawMesh vanilla = source.findVanillaLayer(entity, "main", effectiveMetadata);
             out.add("vanillaGenerated=" + (vanilla != null));
         }
 
@@ -170,11 +170,11 @@ public final class EntityModelSource implements BlockModelSource {
 
         if (!"minecraft".equals(entity.namespace())) {
             String texture = findTexture(
-                    entity.namespace(), entity.path(), "main", effectiveMetadata);
+                    entity.namespace(), entity.path(), "main", metadata);
             if (texture == null) texture = FALLBACK_TEXTURE;
 
             List<ModelQuad> javaModel = javaModels.resolve(
-                    entity.namespace(), entity.path(), effectiveMetadata, texture);
+                    entity.namespace(), entity.path(), metadata, texture);
             if (!javaModel.isEmpty()) return javaModel;
         }
 
@@ -388,7 +388,7 @@ public final class EntityModelSource implements BlockModelSource {
         float textureWidth = number(description, "texture_width", 64F);
         float textureHeight = number(description, "texture_height", 64F);
 
-        String texture = findTexture(entity.namespace(), entity.path(), "main", effectiveMetadata);
+        String texture = findTexture(entity.namespace(), entity.path(), "main", metadata);
         if (texture == null) texture = FALLBACK_TEXTURE;
 
         JsonArray bonesJson = geometry.getAsJsonArray("bones");
@@ -795,7 +795,7 @@ public final class EntityModelSource implements BlockModelSource {
         float half = width * 8F;
         float top = height * 16F;
 
-        String texture = findTexture(entity.namespace(), entity.path(), "main", effectiveMetadata);
+        String texture = findTexture(entity.namespace(), entity.path(), "main", metadata);
         if (texture == null) texture = FALLBACK_TEXTURE;
 
         float minX = -half, maxX = half;
