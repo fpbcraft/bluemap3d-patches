@@ -115,6 +115,13 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
     private static final Map<Class<?>, List<Method>> APPEARANCE_METHODS =
             new ConcurrentHashMap<>();
 
+    static Map<String, String> diagnosticMetadata(Mob mob) {
+        return appearanceMetadata(
+                mob,
+                Math.max(0.1F, mob.getBbWidth()),
+                Math.max(0.1F, mob.getBbHeight()));
+    }
+
     private static Map<String, String> appearanceMetadata(Mob mob, float width, float height) {
         Map<String, String> metadata = new HashMap<>();
         metadata.put("__bm3d_width", Float.toString(width));
