@@ -63,8 +63,9 @@ new file mode 100644
 +/**
 + * Publishes the live Minecraft clock used by the optional BlueMap lighting sync.
 + *
-+ * <p>The browser setting is intentionally opt-in. This publisher only makes the current
-+ * time available; it never changes BlueMap's lighting on the server side.
++ * <p>The browser setting is enabled by default but can be disabled per browser. This
++ * publisher only makes the current time available; it never changes BlueMap's lighting
++ * on the server side.
 + */
 +public final class GameTimePublisher {
 +
@@ -221,7 +222,7 @@ new file mode 100644
 +/*
 + * Optional BlueMap lighting sync for Minecraft's in-game clock.
 + *
-+ * The switch is off by default and stored as a browser preference alongside BlueMap's
++ * The switch is on by default and stored as a browser preference alongside BlueMap's
 + * own settings. Manual sunlight controls disable sync before handling the user's input.
 + */
 +(function () {
@@ -243,7 +244,7 @@ new file mode 100644
 +    }
 +
 +    var state = {
-+        enabled: false,
++        enabled: true,
 +        feed: null,
 +        fetchedAt: 0,
 +        pollTimer: null,
@@ -254,7 +255,7 @@ new file mode 100644
 +    window.__bluemap3dGameTimeSync = state;
 +
 +    if (bm.settings && bm.settings.useCookies && typeof bm.loadUserSetting === "function") {
-+        state.enabled = !!bm.loadUserSetting(SETTING_KEY, false);
++        state.enabled = !!bm.loadUserSetting(SETTING_KEY, true);
 +    }
 +
 +    function currentMap() {
