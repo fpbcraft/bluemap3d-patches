@@ -131,7 +131,7 @@ decodes per-part copied materials and custom geometry.
 ## In-game day/night lighting sync
 
 The patched bundle adds **Sync lighting with in-game time** to BlueMap's **Settings → Lighting**
-group. It is disabled by default and, when BlueMap browser settings are persistent, the choice
+group. It is enabled by default and, when BlueMap browser settings are persistent, the choice
 is saved per browser.
 
 When enabled, the browser reads the selected map's live server clock and drives BlueMap's
