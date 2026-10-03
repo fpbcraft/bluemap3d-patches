@@ -256,8 +256,10 @@ final class JavaEntityModelSource {
             String lower = path.toLowerCase(Locale.ROOT);
             String leaf = leaf(lower);
             if (!leaf.endsWith("model.class")
+                    && !leaf.startsWith("model")
                     && !leaf.contains("model$")
                     && !leaf.endsWith("geometry.class")
+                    && !leaf.startsWith("geometry")
                     && !leaf.contains("geometry$")) {
                 continue;
             }
@@ -473,8 +475,10 @@ final class JavaEntityModelSource {
                         }
                         String leaf = leaf(lower);
                         return leaf.endsWith("model.class")
+                                || leaf.startsWith("model")
                                 || leaf.contains("model$")
                                 || leaf.endsWith("geometry.class")
+                                || leaf.startsWith("geometry")
                                 || leaf.contains("geometry$");
                     },
                     16384);
