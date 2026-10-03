@@ -216,11 +216,30 @@ public final class AssetIndex implements Closeable {
     /** Convenience filtered listing with the same stable source order. */
     public List<String> findPaths(String prefix, Predicate<String> filter, int limit) {
         if (filter == null) return pathsUnder(prefix, limit);
-        List<String> out = new ArrayList<>();
-        for (String path : pathsUnder(prefix, Math.max(limit, 1) * 4)) {
-            if (filter.test(path)) {
-                out.add(path);
-                if (out.size() >= limit) break;
+        if (limit <= 0) return List.of();
+
+        String normalized = prefix.replace('\\', '/');
+        while (normalized.startsWith("/")) normalized = normalized.substring(1);
+        while (normalized.endsWith("/")) normalized =
+                normalized.substring(0, normalized.length() - 1);
+
+        LinkedHashSet<String> out = new LinkedHashSet<>();
+        for (Path root : roots) {
+            if (out.size() >= limit) break;
+            try {
+                Path base = normalized.isEmpty() ? root : root.resolve(normalized);
+                if (!Files.exists(base)) continue;
+
+                try (var stream = Files.walk(base)) {
+                    var iterator = stream.filter(Files::isRegularFile).iterator();
+                    while (iterator.hasNext() && out.size() < limit) {
+                        String relative = root.relativize(iterator.next())
+                                .toString().replace('\\', '/');
+                        if (filter.test(relative)) out.add(relative);
+                    }
+                }
+            } catch (IOException | RuntimeException ignored) {
+                // Continue with lower-priority roots.
             }
         }
         return List.copyOf(out);
