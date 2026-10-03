@@ -416,7 +416,7 @@ public final class SceneObjectTracker {
                         .flatMap(row -> row.groups().stream())
                         .mapToInt(group -> group.instances().size())
                         .sum();
-                LOGGER.info(
+                LOGGER.debug(
                         "Publishing {} logical 3D object(s), {} instance(s), {} bytes",
                         rows.size(),
                         instances,
