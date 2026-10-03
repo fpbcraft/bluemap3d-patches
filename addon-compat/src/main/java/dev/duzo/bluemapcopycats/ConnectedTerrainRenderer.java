@@ -114,7 +114,21 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
         });
 
         Color color = new Color();
-        delegate.render(block, variant, tileModel.initialize(), color);
+        TileModelView diagonal = tileModel.initialize();
+        delegate.render(block, variant, diagonal, color);
+        if (diagonal.getSize() == 0) return 0;
+
+        // Diagonal Blocks does not only rotate the cardinal arm: it stretches the arm's
+        // travel axis by sqrt(2) first so the rail reaches the block corner. The variant
+        // has already rotated the north arm by -y around the centre, so temporarily
+        // rotate it back, stretch local Z, then reapply the rotation.
+        float diagonalScale = (float) Math.sqrt(2.0);
+        diagonal
+                .translate(-0.5f, 0f, -0.5f)
+                .rotate(y, 0f, 1f, 0f)
+                .scale(1f, 1f, diagonalScale)
+                .rotate(-y, 0f, 1f, 0f)
+                .translate(0.5f, 0f, 0.5f);
         return 1;
     }
 
