@@ -379,7 +379,7 @@ final class JavaEntityModelSource {
         if (distance == 2 && Math.min(entity.length(), candidate.length()) >= 9) return 430;
 
         List<String> entityTokens = splitTokens(entityPath);
-        List<String> modelTokens = splitCamelTokens(model);
+        List<String> modelTokens = splitCamelTokens(classLeaf);
         int shared = 0;
         int sharedChars = 0;
         for (String token : modelTokens) {
@@ -468,11 +468,16 @@ final class JavaEntityModelSource {
                     "",
                     path -> {
                         String lower = path.toLowerCase(Locale.ROOT);
-                        return lower.endsWith(".class")
-                                && (lower.contains("model") || lower.contains("geometry"))
-                                && !lower.contains("modelgen");
+                        if (!lower.endsWith(".class") || lower.contains("modelgen")) {
+                            return false;
+                        }
+                        String leaf = leaf(lower);
+                        return leaf.endsWith("model.class")
+                                || leaf.contains("model$")
+                                || leaf.endsWith("geometry.class")
+                                || leaf.contains("geometry$");
                     },
-                    8192);
+                    16384);
             LOGGER.info("Indexed {} candidate Java entity model class(es)", modelClasses.size());
             return modelClasses;
         }
