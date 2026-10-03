@@ -100,7 +100,7 @@ public final class BitsNBobsStrutTerrainRenderer implements BlockRenderer {
         }
 
         if (TRACED.add(id)) {
-            Logger.global.logInfo(String.format(
+            Logger.global.logDebug(String.format(
                     "STATIC GIRDER block=%s connections=%s texture=%s",
                     id, connections, texture));
         }
@@ -134,7 +134,7 @@ public final class BitsNBobsStrutTerrainRenderer implements BlockRenderer {
             int index = textureGallery.get(path);
             if (index > 0) {
                 if (TRACED.add(id + "#texture")) {
-                    Logger.global.logInfo(String.format(
+                    Logger.global.logDebug(String.format(
                             "STATIC GIRDER texture block=%s resolved=%s atlasIndex=%s",
                             id, candidate, index));
                 }
