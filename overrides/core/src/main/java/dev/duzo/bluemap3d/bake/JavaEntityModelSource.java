@@ -256,7 +256,9 @@ final class JavaEntityModelSource {
             String lower = path.toLowerCase(Locale.ROOT);
             String leaf = leaf(lower);
             if (!leaf.endsWith("model.class")
-                    && !leaf.contains("model$")) {
+                    && !leaf.contains("model$")
+                    && !leaf.endsWith("geometry.class")
+                    && !leaf.contains("geometry$")) {
                 continue;
             }
             if (leaf.contains("renderer") || leaf.contains("animation")
@@ -309,7 +311,9 @@ final class JavaEntityModelSource {
         if (dollar >= 0) model = model.substring(0, dollar);
 
         String lower = model.toLowerCase(Locale.ROOT);
-        for (String suffix : List.of("entitymodel", "mobmodel", "model")) {
+        for (String suffix : List.of(
+                "entitymodel", "mobmodel", "model",
+                "entitygeometry", "mobgeometry", "geometry")) {
             if (lower.endsWith(suffix)) {
                 model = model.substring(0, model.length() - suffix.length());
                 lower = model.toLowerCase(Locale.ROOT);
@@ -422,7 +426,7 @@ final class JavaEntityModelSource {
                     path -> {
                         String lower = path.toLowerCase(Locale.ROOT);
                         return lower.endsWith(".class")
-                                && lower.contains("model")
+                                && (lower.contains("model") || lower.contains("geometry"))
                                 && !lower.contains("modelgen");
                     },
                     8192);
