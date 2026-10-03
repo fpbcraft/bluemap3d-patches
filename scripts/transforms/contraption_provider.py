@@ -117,8 +117,7 @@ def _apply_sable_integration(s: str) -> str:
 
             String traceKey = entity.getClass().getName();
             if (sableProjected.add(traceKey)) {
-                LOGGER.info(
-                        "SABLE-CONTRAPTION-DIAG type={} entity={} sublevel={} localPos={} worldPos={}",
+                LOGGER.debug(\n                        "SABLE-CONTRAPTION-DIAG type={} entity={} sublevel={} localPos={} worldPos={}",
                         traceKey, entity.getUUID(), containingSubLevel.getUniqueId(),
                         localPosition, position);
             }
