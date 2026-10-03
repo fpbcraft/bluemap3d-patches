@@ -90,7 +90,7 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
         }
 
         if (TRACED.add(id)) {
-            Logger.global.logInfo(String.format(
+            Logger.global.logDebug(String.format(
                     "CONNECTED STATIC block=%s state=%s normalVariants=%s diagonalArms=%s sideModel=%s",
                     id, block.getBlockState(), variants[0], diagonals,
                     sideModel == null ? "<missing>" : sideModel.getFormatted()));

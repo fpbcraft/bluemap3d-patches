@@ -313,7 +313,7 @@ index a98a42e..6ecb9bf 100644
 +                        && COPYCATS_MISSING_METADATA.size() < 32
 +                        && COPYCATS_MISSING_METADATA.add(blockId)) {
 +                    CompoundTag full = entry.getValue().nbt();
-+                    LOGGER.info(
++                    LOGGER.debug(
 +                            "COPYCATS-V9 CREATE metadata missing block={} full={} update={}",
 +                            blockId,
 +                            full == null ? "<null>" : full.toString(),
@@ -374,7 +374,7 @@ index a98a42e..6ecb9bf 100644
 +            if (BOGEY_V12_TRACE.add(traceKey)) {
 +                List<ModelAttachment> resolved =
 +                        BogeyStyles.attachmentsFor(style, pos, axis, state);
-+                LOGGER.info(
++                LOGGER.debug(
 +                        "BOGEY-V13 TRACE style={} block={} axis={} attachments={} models={}",
 +                        style,
 +                        blockId,
@@ -2367,7 +2367,7 @@ index 14cc6cc..3ba2e04 100644
 +                }
 +                String metadata = blockEntityData == null ? "<null>" : blockEntityData.toString();
 +                if (metadata.length() > 2000) metadata = metadata.substring(0, 2000) + "...";
-+                LOGGER.info("COPYCATS-V13 TRACE block={} state={} metadata={} sources={}",
++                LOGGER.debug("COPYCATS-V13 TRACE block={} state={} metadata={} sources={}",
 +                        blockId, state, metadata, traceSources);
 +            }
 +

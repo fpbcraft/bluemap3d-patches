@@ -112,7 +112,7 @@ final class JavaEntityModelSource {
 
                 List<ModelQuad> quads = bake(best, texture);
                 if (!quads.isEmpty()) {
-                    LOGGER.info(
+                    LOGGER.debug(
                             "Resolved Java entity model {}:{} from {}#{} ({} quads)",
                             namespace, entityPath, candidate.path(), methodName, quads.size());
                     return quads;
@@ -482,7 +482,7 @@ final class JavaEntityModelSource {
                                 || leaf.contains("geometry$");
                     },
                     16384);
-            LOGGER.info("Indexed {} candidate Java entity model class(es)", modelClasses.size());
+            LOGGER.debug("Indexed {} candidate Java entity model class(es)", modelClasses.size());
             return modelClasses;
         }
     }
