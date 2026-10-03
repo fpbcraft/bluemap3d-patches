@@ -36,6 +36,26 @@ class JavaEntityModelSourceTest {
     }
 
     @Test
+    void matchesSharedGeometryThroughServerEntitySuperclass() {
+        var metadata = java.util.Map.of(
+                "__bm3d_java_type_0", "AmericanPaintHorse",
+                "__bm3d_java_type_1", "MediumHorse");
+
+        assertTrue(JavaEntityModelSource.javaTypeHierarchyScoreForTest(
+                metadata, "MediumHorseGeometry.class") > 0);
+    }
+
+    @Test
+    void doesNotMatchUnrelatedSharedGeometryThroughHierarchy() {
+        var metadata = java.util.Map.of(
+                "__bm3d_java_type_0", "ArabianHorse",
+                "__bm3d_java_type_1", "SmallHorse");
+
+        assertEquals(0, JavaEntityModelSource.javaTypeHierarchyScoreForTest(
+                metadata, "MediumHorseGeometry.class"));
+    }
+
+    @Test
     void matchesEntitySpecificGeometryClass() {
         assertTrue(JavaEntityModelSource.javaNameScoreForTest(
                 "belgian_horse", "BelgianHorseGeometry.class") > 0);
