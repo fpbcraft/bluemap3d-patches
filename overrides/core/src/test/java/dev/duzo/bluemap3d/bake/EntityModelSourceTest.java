@@ -35,6 +35,47 @@ class EntityModelSourceTest {
                         "main") > 0);
     }
     @Test
+    void familySuffixMayBeOmittedFromGeoFilename() {
+        assertTrue(
+                EntityAssetMatch.score(
+                        "badlands_creeper",
+                        "assets/creeperoverhaul/geo/badlands.geo.json",
+                        "main") > 0);
+    }
+
+    @Test
+    void familyPrefixMaySelectSharedGeoModel() {
+        assertTrue(
+                EntityAssetMatch.score(
+                        "elokosa_follower_howler",
+                        "assets/mowziesmobs/geo/elokosa.geo.json",
+                        "main") > 0);
+    }
+
+    @Test
+    void textureDirectoryMayCarryEntityVariantName() {
+        assertTrue(
+                EntityAssetMatch.score(
+                        "ocean_creeper",
+                        "assets/creeperoverhaul/textures/entity/ocean/brown_1.png",
+                        "main") > 0);
+    }
+
+    @Test
+    void glowTextureRanksBelowMainTexture() {
+        int main = EntityAssetMatch.score(
+                "badlands_creeper",
+                "assets/creeperoverhaul/textures/entity/badlands/badlands_creeper.png",
+                "main");
+        int glow = EntityAssetMatch.score(
+                "badlands_creeper",
+                "assets/creeperoverhaul/textures/entity/badlands/badlands_creeper_glow.png",
+                "main");
+
+        assertTrue(main > glow);
+    }
+
+    @Test
     void babyAppearanceOutranksAdultGeoModel() {
         var metadata = java.util.Map.of("__bm3d_visual_age", "baby");
 
