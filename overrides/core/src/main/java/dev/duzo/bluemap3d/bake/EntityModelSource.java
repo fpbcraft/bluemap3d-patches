@@ -47,12 +47,14 @@ public final class EntityModelSource implements BlockModelSource {
             "fur", "wool", "undercoat", "outer", "outer_layer", "collar", "pattern", "eyes");
 
     private final AssetIndex assets;
+    private final JavaEntityModelSource javaModels;
     private final Map<String, RawMesh> vanilla = new HashMap<>();
     private final Map<String, List<ModelQuad>> modelCache = new HashMap<>();
     private final Map<String, BufferedImage> textureCache = new HashMap<>();
 
     public EntityModelSource(AssetIndex assets) {
         this.assets = assets;
+        this.javaModels = new JavaEntityModelSource(assets);
         loadVanillaModels();
     }
 
@@ -84,6 +86,17 @@ public final class EntityModelSource implements BlockModelSource {
         if ("minecraft".equals(entity.namespace())) {
             List<ModelQuad> exact = vanilla(entity, metadata);
             if (!exact.isEmpty()) return exact;
+        } else {
+            // Prefer a standard Java LayerDefinition when the installed mod contains one.
+            // GeckoLib model classes normally do not expose such a factory, so they fall
+            // straight through to the data-driven geo path below.
+            String texture = findTexture(
+                    entity.namespace(), entity.path(), "main", metadata);
+            if (texture == null) texture = FALLBACK_TEXTURE;
+
+            List<ModelQuad> javaModel = javaModels.resolve(
+                    entity.namespace(), entity.path(), metadata, texture);
+            if (!javaModel.isEmpty()) return javaModel;
         }
 
         List<ModelQuad> geo = geo(entity, metadata);
