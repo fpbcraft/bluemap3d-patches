@@ -10,6 +10,7 @@ import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
 import java.io.StringReader;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -79,13 +80,24 @@ public final class ConnectedTerrainDispatch {
                     new StringReader(DISPATCH_JSON),
                     de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState.class);
 
+            // Diagonal Blocks creates ids such as
+            // diagonalfences:natures_spirit/wisteria_fence without shipping a duplicate
+            // resource-pack blockstate. Point those generated ids at the original
+            // mod's blockstate before routing connected blocks through our renderer.
+            int aliases = installDiagonalAliases(paths);
+
+            // Multiple ids may now reference the same ResourcePath. Preserve the parsed
+            // originals before replacing any path with the dispatch blockstate so every
+            // alias still sees the actual fence/wall multipart definition.
+            var originalsByPath = new HashMap<>(states);
+
             int patched = 0;
             for (Map.Entry<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
                     entry : new ArrayList<>(paths.entrySet())) {
                 String id = entry.getKey();
                 if (!isConnectedBlock(id)) continue;
 
-                var original = states.get(entry.getValue());
+                var original = originalsByPath.get(entry.getValue());
                 if (original == null) continue;
 
                 ORIGINALS.put(id, original);
@@ -94,11 +106,49 @@ public final class ConnectedTerrainDispatch {
             }
 
             Logger.global.logInfo(String.format(
-                    "Connected fence/wall compatibility routed %s loaded blockstate(s)",
-                    patched));
+                    "Connected fence/wall compatibility routed %s blockstate id(s), including %s diagonal alias(es)",
+                    patched,
+                    aliases));
         } catch (ReflectiveOperationException | RuntimeException error) {
             Logger.global.logError("Failed to install connected fence/wall compatibility", error);
         }
+    }
+
+    static String diagonalAlias(String id) {
+        int colon = id.indexOf(':');
+        if (colon < 0) return null;
+
+        String namespace = id.substring(0, colon);
+        String path = id.substring(colon + 1);
+        if ("diagonalfences".equals(namespace)
+                || "diagonalwalls".equals(namespace)
+                || "diagonalwindows".equals(namespace)
+                || "copycats".equals(namespace)
+                || "create_connected".equals(namespace)) {
+            return null;
+        }
+
+        if (path.endsWith("_fence")) {
+            return "diagonalfences:" + namespace + "/" + path;
+        }
+        if (path.endsWith("_wall")) {
+            return "diagonalwalls:" + namespace + "/" + path;
+        }
+        return null;
+    }
+
+    private static int installDiagonalAliases(
+            Map<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
+                    paths) {
+        int aliases = 0;
+        for (Map.Entry<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
+                entry : new ArrayList<>(paths.entrySet())) {
+            String alias = diagonalAlias(entry.getKey());
+            if (alias == null || paths.containsKey(alias)) continue;
+            paths.put(alias, entry.getValue());
+            aliases++;
+        }
+        return aliases;
     }
 
     private static boolean isConnectedBlock(String id) {
