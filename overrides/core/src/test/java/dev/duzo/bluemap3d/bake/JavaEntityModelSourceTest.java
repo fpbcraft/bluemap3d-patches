@@ -6,6 +6,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JavaEntityModelSourceTest {
 
@@ -21,6 +22,18 @@ class JavaEntityModelSourceTest {
             "net/minecraft/client/model/geom/PartPose";
     private static final String LAYER =
             "net/minecraft/client/model/geom/builders/LayerDefinition";
+
+    @Test
+    void matchesSmallSpellingDifferencesInModelClassNames() {
+        assertTrue(JavaEntityModelSource.javaNameScoreForTest(
+                "spiky_bug", "SpikebugModel.class") > 0);
+    }
+
+    @Test
+    void doesNotGuessAmongAmbiguousSharedHorseModels() {
+        assertEquals(0, JavaEntityModelSource.javaNameScoreForTest(
+                "belgian_horse", "MediumHorseModel.class"));
+    }
 
     @Test
     void extractsBlockbenchStyleModelWithStaticPartNames() {
