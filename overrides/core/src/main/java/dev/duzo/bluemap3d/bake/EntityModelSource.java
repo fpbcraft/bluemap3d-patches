@@ -631,6 +631,8 @@ public final class EntityModelSource implements BlockModelSource {
             String texture,
             float[] positions,
             float[] uvs) {
+        if (isDegenerateQuad(positions)) return;
+
         Vector3f point = new Vector3f();
         for (int i = 0; i < 4; i++) {
             point.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
@@ -640,6 +642,20 @@ public final class EntityModelSource implements BlockModelSource {
             positions[i * 3 + 2] = point.z;
         }
         out.add(new ModelQuad(null, null, positions, uvs, texture, 0xFFFFFF));
+    }
+
+    private static boolean isDegenerateQuad(float[] positions) {
+        if (positions == null || positions.length < 12) return true;
+
+        Vector3f a = new Vector3f(
+                positions[3] - positions[0],
+                positions[4] - positions[1],
+                positions[5] - positions[2]);
+        Vector3f b = new Vector3f(
+                positions[6] - positions[0],
+                positions[7] - positions[1],
+                positions[8] - positions[2]);
+        return a.cross(b).lengthSquared() < 1.0e-10F;
     }
 
     private static void rotateAroundZYX(
