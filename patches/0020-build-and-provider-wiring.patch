@@ -88,6 +88,10 @@ diff --git a/core/build.gradle b/core/build.gradle
 +
 +
 +dependencies {
++    // ASM is already provided at runtime by NeoForge/FML. Core only needs its tree API
++    // on the compile classpath to inspect client model bytecode safely on a server.
++    compileOnly 'org.ow2.asm:asm-tree:9.7.1'
++    testImplementation 'org.ow2.asm:asm-tree:9.7.1'
 +    testImplementation platform('org.junit:junit-bom:5.11.4')
 +    testImplementation 'org.junit.jupiter:junit-jupiter'
 +    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
