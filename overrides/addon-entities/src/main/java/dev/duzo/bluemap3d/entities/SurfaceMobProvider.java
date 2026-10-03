@@ -134,6 +134,18 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
             }
         }
 
+        int javaType = 0;
+        for (Class<?> type = mob.getClass();
+                type != null
+                        && type != Mob.class
+                        && type != Object.class
+                        && javaType < 8;
+                type = type.getSuperclass()) {
+            String name = type.getSimpleName();
+            if (name == null || name.isBlank()) continue;
+            metadata.put("__bm3d_java_type_" + javaType++, name);
+        }
+
         int visual = 0;
         for (Method method : APPEARANCE_METHODS.computeIfAbsent(
                 mob.getClass(), SurfaceMobProvider::discoverAppearanceMethods)) {
