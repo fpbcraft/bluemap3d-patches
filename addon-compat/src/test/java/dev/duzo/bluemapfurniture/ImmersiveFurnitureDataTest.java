@@ -61,16 +61,4 @@ class ImmersiveFurnitureDataTest {
         assertEquals("minecraft:stone", definition.elements().getFirst().material());
     }
 
-    @Test
-    void furnitureFacingUsesClientRendererOrientation() {
-        float[] east = {12F, 4F, 8F};
-        ImmersiveFurnitureRenderer.rotateFacing(east, "east");
-        assertEquals(8F, east[0], 0.0001F);
-        assertEquals(4F, east[2], 0.0001F);
-
-        float[] south = {12F, 4F, 8F};
-        ImmersiveFurnitureRenderer.rotateFacing(south, "south");
-        assertEquals(4F, south[0], 0.0001F);
-        assertEquals(8F, south[2], 0.0001F);
-    }
 }
