@@ -267,10 +267,12 @@ final class JavaEntityModelSource {
             }
 
             int score = EntityAssetMatch.score(entityPath, path, "main")
-                    + EntityAssetMatch.appearanceScore(metadata, path);
+                    + EntityAssetMatch.appearanceScore(metadata, path)
+                    + javaTypeHierarchyScore(metadata, leaf);
             if (score <= 0) {
                 score = javaNameScore(entityPath, leaf)
-                        + EntityAssetMatch.appearanceScore(metadata, path);
+                        + EntityAssetMatch.appearanceScore(metadata, path)
+                        + javaTypeHierarchyScore(metadata, leaf);
             }
             if (score <= 0) continue;
 
@@ -297,13 +299,46 @@ final class JavaEntityModelSource {
         return out.size() <= 24 ? List.copyOf(out) : List.copyOf(out.subList(0, 24));
     }
 
-    static int javaNameScoreForTest(String entityPath, String classLeaf) {
-        return javaNameScore(entityPath, classLeaf);
+    static int javaTypeHierarchyScoreForTest(
+            Map<String, String> metadata, String classLeaf) {
+        return javaTypeHierarchyScore(metadata, classLeaf);
     }
 
-    private static int javaNameScore(String entityPath, String classLeaf) {
-        String entity = compact(entityPath);
-        String model = classLeaf == null ? "" : classLeaf;
+    private static int javaTypeHierarchyScore(
+            Map<String, String> metadata, String classLeaf) {
+        if (metadata == null || metadata.isEmpty()) return 0;
+
+        String candidate = modelFamilyName(classLeaf);
+        if (candidate.isEmpty()) return 0;
+
+        int best = 0;
+        for (Map.Entry<String, String> entry : metadata.entrySet()) {
+            if (!entry.getKey().startsWith("__bm3d_java_type_")) continue;
+            String type = compact(entry.getValue());
+            if (type.isEmpty()) continue;
+
+            int depth;
+            try {
+                depth = Integer.parseInt(
+                        entry.getKey().substring("__bm3d_java_type_".length()));
+            } catch (NumberFormatException ignored) {
+                depth = 7;
+            }
+
+            if (candidate.equals(type)) {
+                best = Math.max(best, 850 - Math.min(depth, 7) * 40);
+            } else if (candidate.contains(type) || type.contains(candidate)) {
+                if (Math.min(candidate.length(), type.length()) >= 5) {
+                    best = Math.max(best, 600 - Math.min(depth, 7) * 30);
+                }
+            }
+        }
+        return best;
+    }
+
+    private static String modelFamilyName(String classLeaf) {
+        if (classLeaf == null) return "";
+        String model = classLeaf;
         if (model.toLowerCase(Locale.ROOT).endsWith(".class")) {
             model = model.substring(0, model.length() - 6);
         }
@@ -323,8 +358,16 @@ final class JavaEntityModelSource {
         if (lower.startsWith("model") && model.length() > 5) {
             model = model.substring(5);
         }
+        return compact(model);
+    }
 
-        String candidate = compact(model);
+    static int javaNameScoreForTest(String entityPath, String classLeaf) {
+        return javaNameScore(entityPath, classLeaf);
+    }
+
+    private static int javaNameScore(String entityPath, String classLeaf) {
+        String entity = compact(entityPath);
+        String candidate = modelFamilyName(classLeaf);
         if (entity.isEmpty() || candidate.isEmpty()) return 0;
         if (candidate.equals(entity)) return 900;
         if (entity.contains(candidate) || candidate.contains(entity)) {
