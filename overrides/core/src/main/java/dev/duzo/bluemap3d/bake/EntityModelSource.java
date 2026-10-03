@@ -138,16 +138,16 @@ public final class EntityModelSource implements BlockModelSource {
             geoCandidates.addAll(source.assets.findPaths(
                     prefix,
                     candidate -> candidate.toLowerCase(Locale.ROOT).endsWith(".geo.json")
-                            && EntityAssetMatch.score(entity.path(), candidate, "main") > 0,
+                            && EntityAssetMatch.geometryScore(entity.path(), candidate, "main") > 0,
                     64));
         }
         List<String> rankedGeo = new ArrayList<>(geoCandidates);
         rankedGeo.sort(Comparator.comparingInt(
-                (String candidate) -> EntityAssetMatch.score(
+                (String candidate) -> EntityAssetMatch.geometryScore(
                         entity.path(), candidate, "main")).reversed());
         out.add("geoCandidates=" + rankedGeo.size());
         for (String candidate : rankedGeo.stream().limit(24).toList()) {
-            out.add("  [" + EntityAssetMatch.score(entity.path(), candidate, "main")
+            out.add("  [" + EntityAssetMatch.geometryScore(entity.path(), candidate, "main")
                     + "] " + candidate);
         }
 
@@ -330,7 +330,7 @@ public final class EntityModelSource implements BlockModelSource {
                     prefix,
                     pathCandidate -> pathCandidate.toLowerCase(Locale.ROOT).endsWith(".geo.json"),
                     512)) {
-                if (EntityAssetMatch.score(entity.path(), candidate, "main") > 0) {
+                if (EntityAssetMatch.geometryScore(entity.path(), candidate, "main") > 0) {
                     candidates.add(candidate);
                 }
             }
@@ -338,9 +338,9 @@ public final class EntityModelSource implements BlockModelSource {
 
         List<String> ranked = new ArrayList<>(candidates);
         ranked.removeIf(candidate ->
-                EntityAssetMatch.score(entity.path(), candidate, "main") <= 0);
+                EntityAssetMatch.geometryScore(entity.path(), candidate, "main") <= 0);
         ranked.sort(Comparator.comparingInt(
-                (String candidate) -> EntityAssetMatch.score(entity.path(), candidate, "main")
+                (String candidate) -> EntityAssetMatch.geometryScore(entity.path(), candidate, "main")
                         + EntityAssetMatch.appearanceScore(metadata, candidate))
                 .reversed());
 
@@ -446,7 +446,7 @@ public final class EntityModelSource implements BlockModelSource {
                     : string(description, "identifier", null);
             int score = identifier == null
                     ? 0
-                    : EntityAssetMatch.score(entity.path(), identifier, "main")
+                    : EntityAssetMatch.geometryScore(entity.path(), identifier, "main")
                             + EntityAssetMatch.appearanceScore(metadata, identifier);
             if (best == null || score > bestScore) {
                 best = geometry;
