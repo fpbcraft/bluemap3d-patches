@@ -74,6 +74,37 @@ final class EntityAssetMatch {
         return Math.max(score, 0);
     }
 
+    /**
+     * Geometry matching is intentionally stricter than texture matching.
+     *
+     * <p>Textures commonly carry extra variant tokens (for example
+     * {@code ocean/brown_1.png}), while a geometry file with an unrelated extra token is
+     * normally a different entity. In particular, {@code belgian_horse} must not select
+     * {@code horse_cart.geo.json} merely because both contain "horse".
+     */
+    static int geometryScore(String entityPath, String assetPath, String layer) {
+        int base = score(entityPath, assetPath, layer);
+        if (base <= 0) return 0;
+
+        String entity = compactName(leaf(entityPath));
+        String stem = compactName(assetStem(assetPath));
+        if (stem.equals(entity)
+                || stem.startsWith(entity)
+                || stem.endsWith(entity)
+                || stem.contains(entity)) {
+            return base;
+        }
+
+        Set<String> entityTokens = new HashSet<>(tokens(leaf(entityPath)));
+        List<String> meaningfulAssetTokens = assetSemanticTokens(assetPath).stream()
+                .filter(token -> !GENERIC_ASSET_TOKENS.contains(token))
+                .filter(token -> token.length() >= 3)
+                .toList();
+
+        if (meaningfulAssetTokens.isEmpty()) return 0;
+        return meaningfulAssetTokens.stream().allMatch(entityTokens::contains) ? base : 0;
+    }
+
     static int appearanceScore(Map<String, String> metadata, String candidate) {
         if (metadata == null || metadata.isEmpty() || candidate == null) return 0;
         String normalizedCandidate = compactName(candidate);
