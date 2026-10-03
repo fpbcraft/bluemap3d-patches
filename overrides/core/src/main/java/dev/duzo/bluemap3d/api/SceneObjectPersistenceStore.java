@@ -38,7 +38,7 @@ final class SceneObjectPersistenceStore {
     private static final Path FILE =
             Path.of("config", "bluemap3d", "cache", "scene-objects.json");
     private static final long SAVE_INTERVAL_NANOS = 5_000_000_000L;
-    private static final int CACHE_FORMAT_VERSION = 5;
+    private static final int CACHE_FORMAT_VERSION = 6;
 
     private static final Object LOCK = new Object();
     private static final Map<String, SavedObject> SAVED = new ConcurrentHashMap<>();
@@ -86,7 +86,12 @@ final class SceneObjectPersistenceStore {
 
                         for (JsonElement element : entries) {
                             SavedObject saved = GSON.fromJson(element, SavedObject.class);
-                            if (saved == null || !saved.valid()) continue;
+                            if (saved == null) continue;
+                            if (saved.geometryKey == null || saved.geometryKey.isBlank()) {
+                                saved.geometryKey = saved.id;
+                                dirty = true;
+                            }
+                            if (!saved.valid()) continue;
 
                             if (ScenePersistencePolicy.shouldDropForMigration(
                                     saved.provider, sourceFormat)) {
@@ -284,6 +289,7 @@ final class SceneObjectPersistenceStore {
                 SavedObject saved = new SavedObject(
                         provider,
                         id,
+                        id,
                         row.get("dimension").getAsString(),
                         row.has("label") ? row.get("label").getAsString() : null,
                         version,
@@ -354,6 +360,7 @@ final class SceneObjectPersistenceStore {
     private static final class SavedObject {
         String provider;
         String id;
+        String geometryKey;
         String dimension;
         String label;
         long version;
@@ -374,6 +381,7 @@ final class SceneObjectPersistenceStore {
         SavedObject(
                 String provider,
                 String id,
+                String geometryKey,
                 String dimension,
                 String label,
                 long version,
@@ -390,6 +398,7 @@ final class SceneObjectPersistenceStore {
                 List<SavedGroup> groups) {
             this.provider = provider;
             this.id = id;
+            this.geometryKey = geometryKey;
             this.dimension = dimension;
             this.label = label;
             this.version = version;
@@ -418,6 +427,7 @@ final class SceneObjectPersistenceStore {
             return new SavedObject(
                     provider,
                     object.id(),
+                    object.geometryKey(),
                     object.dimension().location().toString(),
                     object.label(),
                     object.geometryVersion(),
@@ -437,6 +447,7 @@ final class SceneObjectPersistenceStore {
         boolean valid() {
             return provider != null && !provider.isBlank()
                     && id != null && !id.isBlank()
+                    && geometryKey != null && !geometryKey.isBlank()
                     && dimension != null && !dimension.isBlank()
                     && Double.isFinite(x) && Double.isFinite(y) && Double.isFinite(z)
                     && Float.isFinite(qx) && Float.isFinite(qy)
@@ -472,6 +483,7 @@ final class SceneObjectPersistenceStore {
             return new SceneObject() {
                 @Override public String id() { return SavedObject.this.id; }
                 @Override public BlockVolume geometry() { return BlockVolume.EMPTY; }
+                @Override public String geometryKey() { return SavedObject.this.geometryKey; }
                 @Override public boolean canBakeGeometry() { return false; }
                 @Override public long geometryVersion() { return version; }
                 @Override public Vec3 position() { return position; }
@@ -499,6 +511,7 @@ final class SceneObjectPersistenceStore {
                     && Float.compare(sz, that.sz) == 0
                     && Objects.equals(provider, that.provider)
                     && Objects.equals(id, that.id)
+                    && Objects.equals(geometryKey, that.geometryKey)
                     && Objects.equals(dimension, that.dimension)
                     && Objects.equals(label, that.label)
                     && Objects.equals(groups, that.groups);
@@ -506,7 +519,7 @@ final class SceneObjectPersistenceStore {
 
         @Override
         public int hashCode() {
-            return Objects.hash(provider, id, dimension, label, version,
+            return Objects.hash(provider, id, geometryKey, dimension, label, version,
                     x, y, z, qx, qy, qz, qw, sx, sy, sz, groups);
         }
     }
