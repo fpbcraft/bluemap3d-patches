@@ -10,7 +10,6 @@ import de.bluecolored.bluemap.core.map.hires.TileModel;
 import de.bluecolored.bluemap.core.map.hires.TileModelView;
 import de.bluecolored.bluemap.core.map.hires.block.BlockRenderer;
 import de.bluecolored.bluemap.core.map.hires.block.BlockRendererType;
-import de.bluecolored.bluemap.core.map.hires.block.ResourceModelRenderer;
 import de.bluecolored.bluemap.core.resources.BlockColorCalculatorFactory;
 import de.bluecolored.bluemap.core.resources.ResourcePath;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
@@ -60,7 +59,6 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
     private final RenderSettings renderSettings;
     private final BlockColorCalculatorFactory.BlockColorCalculator blockColorCalculator;
     private final ConnectedTextureResourceExtension connectedTextures;
-    private final ResourceModelRenderer standardRenderer;
 
     private final VectorM3f[] corners = new VectorM3f[8];
     private final VectorM2f[] rawUvs = new VectorM2f[4];
@@ -86,7 +84,6 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
         this.blockColorCalculator = resourcePack.getColorCalculatorFactory().createCalculator();
         this.connectedTextures =
                 resourcePack.getResourcePackExtension(ConnectedTextureResourceExtension.TYPE);
-        this.standardRenderer = new ResourceModelRenderer(resourcePack, textureGallery, renderSettings);
 
         for (int i = 0; i < corners.length; i++) corners[i] = new VectorM3f(0, 0, 0);
         for (int i = 0; i < rawUvs.length; i++) rawUvs[i] = new VectorM2f(0, 0);
@@ -107,26 +104,6 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
         var original =
                 ConnectedTextureTerrainDispatch.original(block.getBlockState().getFormatted());
         if (original == null || connectedTextures == null) return;
-
-        // Create only applies GirderCTBehaviour to the vertical pole form. Routing the
-        // horizontal/cross forms through the generic CT renderer changes how their
-        // cutout girder faces are emitted and produces the transparency/culling regression
-        // visible after CT compatibility is enabled. Preserve BlueMap's stock renderer
-        // for those states and keep CT handling only for the actual connected pole.
-        if (!MetalGirderConnectedTexturePolicy.useConnectedRenderer(
-                block.getBlockState().getFormatted(),
-                block.getBlockState().getProperties())) {
-            int standardStart = blockModel.getStart();
-            original.forEach(
-                    block.getBlockState(),
-                    block.getX(),
-                    block.getY(),
-                    block.getZ(),
-                    variant -> standardRenderer.render(
-                            block, variant, blockModel.initialize(), color));
-            blockModel.initialize(standardStart);
-            return;
-        }
 
         int start = blockModel.getStart();
         original.forEach(
