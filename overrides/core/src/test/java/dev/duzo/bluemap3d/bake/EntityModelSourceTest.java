@@ -104,6 +104,40 @@ class EntityModelSourceTest {
     }
 
     @Test
+    void traderLlamaCoatOutranksDecorForMainTexture() {
+        var metadata = java.util.Map.of("__bm3d_visual_0", "gray");
+
+        int coat = EntityAssetMatch.score(
+                "trader_llama",
+                "assets/minecraft/textures/entity/llama/gray.png",
+                "main")
+                + EntityAssetMatch.appearanceScore(
+                        metadata,
+                        "assets/minecraft/textures/entity/llama/gray.png");
+        int decor = EntityAssetMatch.score(
+                "trader_llama",
+                "assets/minecraft/textures/entity/llama/decor/trader_llama.png",
+                "main")
+                + EntityAssetMatch.appearanceScore(
+                        metadata,
+                        "assets/minecraft/textures/entity/llama/decor/trader_llama.png");
+
+        assertTrue(coat > decor);
+    }
+
+    @Test
+    void llamaDecorTextureOverrideIsLayerSpecific() {
+        var metadata = java.util.Map.of(
+                "__bm3d_texture_decor",
+                "minecraft:textures/entity/llama/decor/trader_llama.png");
+
+        assertEquals(
+                "minecraft:entity/llama/decor/trader_llama",
+                EntityModelSource.exactTextureOverride(metadata, "decor"));
+        assertEquals(null, EntityModelSource.exactTextureOverride(metadata, "main"));
+    }
+
+    @Test
     void normalizesRendererTextureLocationForBlueMapLookup() {
         assertEquals(
                 "icys-better-horses:entity/horse/belgian/sabino",
