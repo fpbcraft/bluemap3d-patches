@@ -60,26 +60,26 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
             TileModelView tileModel,
             Color blockColor) {
         Object rawEntity = block.getBlockEntity();
-        String state = block.getBlockState().toString();
+        String blockStateText = block.getBlockState().toString();
         warnInfoOnce(
-                state + "#render",
-                "IMMERSIVE-FURNITURE render block=" + state
+                blockStateText + "#render",
+                "IMMERSIVE-FURNITURE render block=" + blockStateText
                         + " blockEntity="
                         + (rawEntity == null ? "<none>" : rawEntity.getClass().getName()));
 
         if (!(rawEntity instanceof ImmersiveFurnitureBlockEntity entity)) {
             warnOnce(
-                    state + "#entity",
+                    blockStateText + "#entity",
                     "Immersive Furniture renderer received unsupported/missing block entity: block="
-                            + state
+                            + blockStateText
                             + " blockEntity="
                             + (rawEntity == null ? "<none>" : rawEntity.getClass().getName()));
             return;
         }
 
         warnInfoOnce(
-                state + "#entity-data",
-                "IMMERSIVE-FURNITURE entity-data block=" + state
+                blockStateText + "#entity-data",
+                "IMMERSIVE-FURNITURE entity-data block=" + blockStateText
                         + " Furniture=" + (entity.furniture() != null)
                         + " FurnitureHash="
                         + (entity.furnitureHash() == null ? "<none>" : entity.furnitureHash())
