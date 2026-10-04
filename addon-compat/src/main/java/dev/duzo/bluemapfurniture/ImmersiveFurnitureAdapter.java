@@ -6,6 +6,7 @@ import de.bluecolored.bluemap.core.logger.Logger;
 import de.bluecolored.bluemap.core.resources.ResourcePath;
 import de.bluecolored.bluemap.core.resources.adapter.ResourcesGson;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
+import de.bluecolored.bluemap.common.serverinterface.ServerWorld;
 import de.bluecolored.bluemap.core.world.mca.MCAWorld;
 import de.bluecolored.bluemap.core.util.Key;
 import de.bluecolored.bluemap.core.world.mca.blockentity.BlockEntityType;
@@ -13,8 +14,10 @@ import de.bluecolored.bluemap.core.world.mca.blockentity.BlockEntityType;
 import java.io.StringReader;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Installs Immersive Furniture's BlueMap block-entity and renderer compatibility. */
 public final class ImmersiveFurnitureAdapter {
@@ -61,12 +64,24 @@ public final class ImmersiveFurnitureAdapter {
             return;
         }
 
-        List<Path> worldRoots = impl.blueMapService().getWorlds().values().stream()
+        Set<Path> worldRoots = new LinkedHashSet<>();
+
+        // BlueMap's configured MCA source is useful for offline/custom maps, but on a
+        // live NeoForge server the authoritative save root is the ServerWorld path.
+        // A map can be configured against a dimension/source path that does not contain
+        // level saved-data such as data/immersive_furniture.dat.
+        impl.blueMapService().getWorlds().values().stream()
                 .filter(MCAWorld.class::isInstance)
                 .map(MCAWorld.class::cast)
                 .map(MCAWorld::getWorldFolder)
-                .distinct()
-                .toList();
+                .forEach(worldRoots::add);
+
+        if (impl.plugin() != null) {
+            impl.plugin().getServerInterface().getLoadedServerWorlds().stream()
+                    .map(ServerWorld::getWorldFolder)
+                    .forEach(worldRoots::add);
+        }
+
         ImmersiveFurnitureRuntime.configureWorldRoots(worldRoots);
 
         int routed = routeFurniture(resourcePack);
