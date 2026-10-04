@@ -18,7 +18,12 @@ final class CreateConnectedTextures {
     }
 
     static Spec find(String texture, BlockState state) {
-        if (texture == null || !texture.startsWith("create:block/")) return null;
+        if (texture == null) return null;
+
+        Spec createDeco = createDeco(texture, state);
+        if (createDeco != null) return createDeco;
+
+        if (!texture.startsWith("create:block/")) return null;
         String path = texture.substring("create:block/".length());
         String block = BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
 
@@ -108,6 +113,28 @@ final class CreateConnectedTextures {
             }
         }
 
+        return null;
+    }
+
+    private static Spec createDeco(String texture, BlockState state) {
+        String prefix = "createdeco:block/palettes/";
+        if (!texture.startsWith(prefix)) return null;
+        String path = texture.substring(prefix.length());
+
+        if (path.startsWith("sheet_metal/") && path.endsWith("_sheet_metal")) {
+            return new Spec("vertical", texture + "_connected", false);
+        }
+        if (path.startsWith("catwalks/") && path.endsWith("_catwalk")) {
+            return new Spec("omnidirectional", texture + "_connected", false);
+        }
+        if (path.startsWith("windows/") && path.endsWith("_window")) {
+            return new Spec("vertical", texture + "_connected", false);
+        }
+        if (path.startsWith("shipping_containers/") && path.endsWith("_small")) {
+            String target = texture.substring(0, texture.length() - "_small".length())
+                    + ("true".equals(property(state, "large")) ? "_large" : "_medium");
+            return new Spec("rectangle", target, false);
+        }
         return null;
     }
 
