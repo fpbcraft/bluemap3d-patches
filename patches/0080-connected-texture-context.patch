@@ -1,0 +1,27 @@
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/BlockModelSource.java b/core/src/main/java/dev/duzo/bluemap3d/bake/BlockModelSource.java
+--- a/core/src/main/java/dev/duzo/bluemap3d/bake/BlockModelSource.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/BlockModelSource.java
+@@ -44,3 +44,10 @@ public interface BlockModelSource {
+     default List<ModelQuad> quadsFor(BlockState state, CompoundTag blockEntityData) {
+         return quadsFor(state);
+     }
++
++    /**
++     * Position-aware variant used by neighbour-sensitive rendering such as connected textures.
++     */
++    default List<ModelQuad> quadsFor(BlockRenderContext context) {
++        return quadsFor(context.state(), context.blockEntityData());
++    }
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java b/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java
+--- a/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/VolumeMesher.java
+@@ -104,2 +104,5 @@ public final class VolumeMesher {
+-        volume.forEachBlock((x, y, z, state) -> {
++        BlockRenderContext.BlockLookup blockLookup = volume::stateAt;
++        volume.forEachBlock((x, y, z, state) -> {
+             CompoundTag blockEntityData = volume.blockEntityDataAt(x, y, z);
++            BlockRenderContext renderContext =
++                    new BlockRenderContext(state, blockEntityData, x, y, z, blockLookup);
+@@ -131,1 +134,1 @@ public final class VolumeMesher {
+-                List<ModelQuad> got = candidate.quadsFor(state, blockEntityData);
++                List<ModelQuad> got = candidate.quadsFor(renderContext);
