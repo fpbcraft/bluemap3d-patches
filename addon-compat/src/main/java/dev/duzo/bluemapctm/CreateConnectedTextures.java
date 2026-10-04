@@ -98,7 +98,7 @@ final class CreateConnectedTextures {
             String large = properties.getOrDefault("large", "false");
             String target = path.substring(0, path.length() - "_small".length())
                     + ("true".equals(large) ? "_large" : "_medium");
-            return spec("rectangle", target);
+            return new Spec("rectangle", PREFIX + target, false);
         }
 
         if (path.startsWith("palettes/stone_types/")) {
@@ -117,10 +117,15 @@ final class CreateConnectedTextures {
     }
 
     static String typeForSheet(String texture) {
-        if (texture == null || !texture.startsWith(PREFIX) || !texture.endsWith("_connected")) {
-            return null;
-        }
+        if (texture == null || !texture.startsWith(PREFIX)) return null;
         String path = texture.substring(PREFIX.length());
+
+        if (path.startsWith("vault/vault_")
+                && (path.endsWith("_medium") || path.endsWith("_large"))) {
+            return "rectangle";
+        }
+
+        if (!path.endsWith("_connected")) return null;
 
         if ("palettes/framed_glass_connected".equals(path)) return "omnidirectional";
         if ("palettes/horizontal_framed_glass_connected".equals(path)) {
@@ -166,11 +171,6 @@ final class CreateConnectedTextures {
         if (path.contains("copper_shingles_top_connected")
                 || path.contains("copper_tiles_top_connected")) {
             return "roof";
-        }
-
-        if (path.startsWith("vault/vault_")
-                && (path.endsWith("_medium_connected") || path.endsWith("_large_connected"))) {
-            return "rectangle";
         }
 
         if (path.startsWith("palettes/stone_types/")) {
