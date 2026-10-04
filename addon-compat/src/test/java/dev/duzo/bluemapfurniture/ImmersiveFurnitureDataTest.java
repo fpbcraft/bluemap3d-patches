@@ -42,6 +42,20 @@ class ImmersiveFurnitureDataTest {
     }
 
     @Test
+    void decodesSavedDataIdentifierRegistry() {
+        var registry = ImmersiveFurnitureRuntime.registryFromNbt(Map.of(
+                "DataVersion", 3955,
+                "data", Map.of(
+                        "usageCount", Map.of("abc123", 4),
+                        "hashToIdentifier", Map.of(
+                                "abc123", 7,
+                                "lit456", 65539))));
+
+        assertEquals("abc123", registry.get(7));
+        assertEquals("lit456", registry.get(65539));
+    }
+
+    @Test
     void ignoresNonGeometryElements() {
         var definition = ImmersiveFurnitureData.decodeNbt(Map.of(
                 "Elements",
