@@ -9,7 +9,6 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -163,27 +162,7 @@ final class ImmersiveFurnitureRuntime {
 
     private static Map<Integer, String> loadRegistry(Path root) {
         Path file = root.resolve("data").resolve("immersive_furniture.dat");
-        return registryFromNbt(readCompressed(file));
-    }
-
-    static Map<Integer, String> registryFromNbt(Object raw) {
-        if (!(raw instanceof Map<?, ?> rootMap)) return Map.of();
-
-        Map<?, ?> data = map(rootMap.get("data"));
-        if (data == null) data = rootMap;
-
-        Map<?, ?> hashes = map(data.get("hashToIdentifier"));
-        if (hashes == null || hashes.isEmpty()) return Map.of();
-
-        Map<Integer, String> out = new LinkedHashMap<>();
-        for (Map.Entry<?, ?> entry : hashes.entrySet()) {
-            if (!(entry.getKey() instanceof String hash)
-                    || !(entry.getValue() instanceof Number identifier)) {
-                continue;
-            }
-            out.put(identifier.intValue(), hash);
-        }
-        return Map.copyOf(out);
+        return ImmersiveFurnitureData.decodeIdentifierRegistry(readCompressed(file));
     }
 
     private static Object readCompressed(Path file) {
