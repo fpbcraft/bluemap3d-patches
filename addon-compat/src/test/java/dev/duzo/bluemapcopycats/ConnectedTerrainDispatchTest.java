@@ -35,13 +35,10 @@ final class ConnectedTerrainDispatchTest {
     }
 
     @Test
-    void generatedWindowAliasesAreConnectedBlocks() throws Exception {
-        var method = ConnectedTerrainDispatch.class.getDeclaredMethod("isConnectedBlock", String.class);
-        method.setAccessible(true);
-
-        assertEquals(true, method.invoke(null,
+    void generatedWindowAliasesAreConnectedBlocks() {
+        assertEquals(true, ConnectedTerrainDispatch.isConnectedBlock(
                 "diagonalwindows:createdeco/industrial_iron_bars"));
-        assertEquals(true, method.invoke(null,
+        assertEquals(true, ConnectedTerrainDispatch.isConnectedBlock(
                 "diagonalwindows:createdeco/industrial_iron_bars_overlay"));
     }
 }

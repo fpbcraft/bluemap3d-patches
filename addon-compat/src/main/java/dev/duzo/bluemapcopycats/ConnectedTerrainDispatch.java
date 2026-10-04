@@ -181,7 +181,7 @@ public final class ConnectedTerrainDispatch {
         return aliases;
     }
 
-    private static boolean isConnectedBlock(String id) {
+    static boolean isConnectedBlock(String id) {
         int colon = id.indexOf(':');
         if (colon < 0) return false;
 
