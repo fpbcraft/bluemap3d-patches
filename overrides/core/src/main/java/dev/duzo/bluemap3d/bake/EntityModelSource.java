@@ -46,7 +46,8 @@ public final class EntityModelSource implements BlockModelSource {
     private static final String FALLBACK_TEXTURE = "minecraft:block/light_gray_wool";
 
     private static final List<String> EXTRA_LAYERS = List.of(
-            "fur", "wool", "undercoat", "outer", "outer_layer", "collar", "pattern", "eyes");
+            "fur", "wool", "undercoat", "outer", "outer_layer", "decor",
+            "collar", "pattern", "eyes");
 
     private final AssetIndex assets;
     private final JavaEntityModelSource javaModels;
@@ -202,6 +203,13 @@ public final class EntityModelSource implements BlockModelSource {
                 && ("wool".equals(layer)
                     || "fur".equals(layer)
                     || "undercoat".equals(layer))) {
+            return;
+        }
+
+        // Equipment/decor layers are stateful. Only render llama decor when the provider
+        // supplied the exact runtime texture; otherwise an undecorated llama could pick
+        // an arbitrary carpet texture from the asset scan.
+        if ("decor".equals(layer) && exactTextureOverride(metadata, layer) == null) {
             return;
         }
 
