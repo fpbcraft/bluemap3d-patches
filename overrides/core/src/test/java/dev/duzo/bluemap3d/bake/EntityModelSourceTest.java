@@ -53,6 +53,34 @@ class EntityModelSourceTest {
     }
 
     @Test
+    void sharedFamilyTokenCannotSelectDifferentGeoEntity() {
+        assertEquals(
+                0,
+                EntityAssetMatch.geometryScore(
+                        "belgian_horse",
+                        "assets/icys-better-horses/geo/horse_cart.geo.json",
+                        "main"));
+    }
+
+    @Test
+    void shorterSharedFamilyGeoNameStillMatchesEntity() {
+        assertTrue(
+                EntityAssetMatch.geometryScore(
+                        "badlands_creeper",
+                        "assets/creeperoverhaul/geo/badlands.geo.json",
+                        "main") > 0);
+    }
+
+    @Test
+    void entitySpecificHorseGeoStillMatches() {
+        assertTrue(
+                EntityAssetMatch.geometryScore(
+                        "belgian_horse",
+                        "assets/icys-better-horses/geo/belgian_horse.geo.json",
+                        "main") > 0);
+    }
+
+    @Test
     void textureDirectoryMayCarryEntityVariantName() {
         assertTrue(
                 EntityAssetMatch.score(

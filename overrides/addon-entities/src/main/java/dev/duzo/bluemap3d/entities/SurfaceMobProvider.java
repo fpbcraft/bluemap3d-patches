@@ -147,6 +147,14 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
             "getTexture",
             "getPuffState");
 
+    /**
+     * Optional indexed appearance conventions that need two calls to resolve a stable
+     * texture token. Kept reflective so addon-entities has no compile-time dependency on
+     * the owning mod.
+     */
+    private static final List<IndexedAppearanceConvention> INDEXED_APPEARANCE_CONVENTIONS =
+            List.of(new IndexedAppearanceConvention("bhCoat", "bhCoatSet", "coatId"));
+
     /** Reflection discovery is per entity class, not per mob per publish tick. */
     private static final Map<Class<?>, List<Method>> APPEARANCE_METHODS =
             new ConcurrentHashMap<>();
@@ -201,7 +209,35 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
             }
         }
 
+        visual = appendIndexedAppearance(mob, metadata, visual);
+
         return Map.copyOf(metadata);
+    }
+
+    private static int appendIndexedAppearance(
+            Object subject, Map<String, String> metadata, int visual) {
+        for (IndexedAppearanceConvention convention : INDEXED_APPEARANCE_CONVENTIONS) {
+            try {
+                Method indexGetter = subject.getClass().getMethod(convention.indexGetter());
+                Method paletteGetter = subject.getClass().getMethod(convention.paletteGetter());
+                if (indexGetter.getParameterCount() != 0 || paletteGetter.getParameterCount() != 0) {
+                    continue;
+                }
+
+                Object rawIndex = indexGetter.invoke(subject);
+                Object palette = paletteGetter.invoke(subject);
+                if (!(rawIndex instanceof Number index) || palette == null) continue;
+
+                Method idGetter =
+                        palette.getClass().getMethod(convention.idGetter(), int.class);
+                String token = appearanceToken(idGetter.invoke(palette, index.intValue()));
+                if (token == null || token.isBlank()) continue;
+                metadata.put("__bm3d_visual_" + visual++, token);
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                // Optional convention: absence/failure must never break generic mob publishing.
+            }
+        }
+        return visual;
     }
 
     private static List<Method> discoverAppearanceMethods(Class<?> type) {
@@ -253,6 +289,10 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
         String text = String.valueOf(value);
         if (text.length() > 96 || text.matches(".*@[0-9a-fA-F]+$")) return null;
         return text;
+    }
+
+    private record IndexedAppearanceConvention(
+            String indexGetter, String paletteGetter, String idGetter) {
     }
 
     static ResourceLocation modelLocation(ResourceLocation typeId) {
