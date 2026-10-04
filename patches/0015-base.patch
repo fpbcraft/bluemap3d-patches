@@ -2351,7 +2351,7 @@ index 14cc6cc..3ba2e04 100644
  
      private final List<BlockModelSource> sources;
      private final int maxBlocks;
-@@ -97,10 +102,37 @@ public final class VolumeMesher {
+@@ -97,10 +102,36 @@ public final class VolumeMesher {
          java.util.Set<String> unresolved = new java.util.TreeSet<>();
  
 +        BlockRenderContext.BlockLookup blockLookup = volume::stateAt;
