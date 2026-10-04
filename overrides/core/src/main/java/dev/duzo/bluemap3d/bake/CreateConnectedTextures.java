@@ -93,7 +93,7 @@ final class CreateConnectedTextures {
         if (path.startsWith("vault/vault_") && path.endsWith("_small")) {
             String target = path.substring(0, path.length() - "_small".length())
                     + ("true".equals(property(state, "large")) ? "_large" : "_medium");
-            return spec("rectangle", target);
+            return new Spec("rectangle", "create:block/" + target, false);
         }
 
         if (path.startsWith("palettes/stone_types/")) {
