@@ -25,7 +25,12 @@ final class CreateConnectedTextures {
             String blockId,
             Map<String, String> properties,
             Direction face) {
-        if (texture == null || !texture.startsWith(PREFIX)) return null;
+        if (texture == null) return null;
+
+        Spec createDeco = createDeco(texture, blockId, properties);
+        if (createDeco != null) return createDeco;
+
+        if (!texture.startsWith(PREFIX)) return null;
         String path = texture.substring(PREFIX.length());
         String blockPath = blockPath(blockId);
 
@@ -116,8 +121,53 @@ final class CreateConnectedTextures {
         return null;
     }
 
+    private static Spec createDeco(
+            String texture,
+            String blockId,
+            Map<String, String> properties) {
+        String prefix = "createdeco:block/palettes/";
+        if (!texture.startsWith(prefix)) return null;
+        String path = texture.substring(prefix.length());
+
+        if (path.startsWith("sheet_metal/") && path.endsWith("_sheet_metal")) {
+            return new Spec("vertical", texture + "_connected", false);
+        }
+        if (path.startsWith("catwalks/") && path.endsWith("_catwalk")) {
+            return new Spec("omnidirectional", texture + "_connected", false);
+        }
+        if (path.startsWith("windows/") && path.endsWith("_window")) {
+            return new Spec("vertical", texture + "_connected", false);
+        }
+        if (path.startsWith("shipping_containers/") && path.endsWith("_small")) {
+            String target = texture.substring(0, texture.length() - "_small".length())
+                    + ("true".equals(properties.getOrDefault("large", "false"))
+                            ? "_large" : "_medium");
+            return new Spec("rectangle", target, false);
+        }
+        return null;
+    }
+
     static String typeForSheet(String texture) {
-        if (texture == null || !texture.startsWith(PREFIX)) return null;
+        if (texture == null) return null;
+
+        if (texture.startsWith("createdeco:block/palettes/sheet_metal/")
+                && texture.endsWith("_sheet_metal_connected")) {
+            return "vertical";
+        }
+        if (texture.startsWith("createdeco:block/palettes/catwalks/")
+                && texture.endsWith("_catwalk_connected")) {
+            return "omnidirectional";
+        }
+        if (texture.startsWith("createdeco:block/palettes/windows/")
+                && texture.endsWith("_window_connected")) {
+            return "vertical";
+        }
+        if (texture.startsWith("createdeco:block/palettes/shipping_containers/")
+                && (texture.endsWith("_medium") || texture.endsWith("_large"))) {
+            return "rectangle";
+        }
+
+        if (!texture.startsWith(PREFIX)) return null;
         String path = texture.substring(PREFIX.length());
 
         if (path.startsWith("vault/vault_")
