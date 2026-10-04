@@ -74,13 +74,13 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
 
         int diagonals = 0;
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "north_east", "north");
+                "north_east", cardinalDirectionForDiagonal("north_east"));
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "south_east", "east");
+                "south_east", cardinalDirectionForDiagonal("south_east"));
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "south_west", "south");
+                "south_west", cardinalDirectionForDiagonal("south_west"));
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "north_west", "west");
+                "north_west", cardinalDirectionForDiagonal("north_west"));
 
         int end = tileModel.getStart();
         tileModel.initialize(start);
@@ -93,6 +93,20 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
                     "CONNECTED STATIC block=%s state=%s normalVariants=%s diagonalArms=%s",
                     id, block.getBlockState(), variants[0], diagonals));
         }
+    }
+
+    static String cardinalDirectionForDiagonal(String diagonalProperty) {
+        // Mirrors EightWayDirection.rotateClockWise() + MultipartAppender in
+        // Diagonal Blocks 1.21.1. This is intentionally not N->NE: that old mapping
+        // shifts every diagonal arm by 90 degrees and breaks thin pane/bar models.
+        return switch (diagonalProperty) {
+            case "north_east" -> "east";
+            case "south_east" -> "south";
+            case "south_west" -> "west";
+            case "north_west" -> "north";
+            default -> throw new IllegalArgumentException(
+                    "Unknown diagonal direction: " + diagonalProperty);
+        };
     }
 
     private int renderDiagonal(
@@ -120,11 +134,10 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
         delegate.render(block, variant, diagonal, color);
         if (diagonal.getSize() == 0) return 0;
 
-        // The Minecraft client applies Diagonal Blocks' -45 degree baked-quad transform
-        // before the model reaches the renderer. Here we are transforming BlueMap's
-        // already-rendered mesh, whose block-model Y rotation convention is inverted.
-        // Using -45 here mirrors every arm onto the opposite diagonal (the failure visible
-        // in static map tiles); +45 reproduces N->NE, E->SE, S->SW and W->NW in BlueMap.
+        // Diagonal Blocks first chooses the clockwise-adjacent cardinal segment
+        // (E->NE, S->SE, W->SW, N->NW), then applies its -45 degree baked-quad
+        // transform. BlueMap's model Y rotation convention is inverted at this stage,
+        // so the equivalent mesh transform here remains +45 degrees.
         float diagonalScale = (float) Math.sqrt(2.0);
         boolean scaleX = "east".equals(cardinalDirection) || "west".equals(cardinalDirection);
         diagonal
