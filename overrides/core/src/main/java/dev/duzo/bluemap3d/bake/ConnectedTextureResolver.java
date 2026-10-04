@@ -124,6 +124,7 @@ final class ConnectedTextureResolver {
                 axes,
                 (other, front, direction) ->
                         createConnects(create, face, other, context, axes, direction));
+        mask = constrainCreateCorners(mask);
         ConnectedTextureLayout.Grid grid = ConnectedTextureLayout.createGrid(create.type());
         int tile = ConnectedTextureLayout.createTile(create.type(), mask);
         String key = "create|" + create.cacheKey(context.x(), context.y(), context.z())
@@ -138,6 +139,26 @@ final class ConnectedTextureResolver {
                         grid,
                         tile,
                         false));
+    }
+
+    private static int constrainCreateCorners(int mask) {
+        if ((mask & (ConnectedTextureLayout.TOP | ConnectedTextureLayout.RIGHT))
+                != (ConnectedTextureLayout.TOP | ConnectedTextureLayout.RIGHT)) {
+            mask &= ~ConnectedTextureLayout.TOP_RIGHT;
+        }
+        if ((mask & (ConnectedTextureLayout.RIGHT | ConnectedTextureLayout.BOTTOM))
+                != (ConnectedTextureLayout.RIGHT | ConnectedTextureLayout.BOTTOM)) {
+            mask &= ~ConnectedTextureLayout.BOTTOM_RIGHT;
+        }
+        if ((mask & (ConnectedTextureLayout.BOTTOM | ConnectedTextureLayout.LEFT))
+                != (ConnectedTextureLayout.BOTTOM | ConnectedTextureLayout.LEFT)) {
+            mask &= ~ConnectedTextureLayout.BOTTOM_LEFT;
+        }
+        if ((mask & (ConnectedTextureLayout.LEFT | ConnectedTextureLayout.TOP))
+                != (ConnectedTextureLayout.LEFT | ConnectedTextureLayout.TOP)) {
+            mask &= ~ConnectedTextureLayout.TOP_LEFT;
+        }
+        return mask;
     }
 
     private boolean createConnects(
