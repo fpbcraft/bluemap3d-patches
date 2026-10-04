@@ -52,6 +52,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CreateConnectedTe
    core/src/main/java/dev/duzo/bluemap3d/bake/CreateConnectedTextures.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureResolver.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureResolver.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureDiagnostics.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureDiagnostics.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/AssetIndex.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/AssetIndex.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/EntityModelSource.java" \
