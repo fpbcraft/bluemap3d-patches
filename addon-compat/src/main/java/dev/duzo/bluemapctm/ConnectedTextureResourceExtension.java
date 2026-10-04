@@ -118,6 +118,10 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
         return fusion.containsKey(texture);
     }
 
+    int fusionCount() {
+        return fusion.size();
+    }
+
     ResourcePath<Texture> fusionMaterial(String texture, FusionSpec spec, int mask) {
         if ("pieced".equals(spec.layout()) || "overlay".equals(spec.layout())) {
             return virtualPath("fusion/" + safe(texture) + "/" + spec.layout() + "/mask/" + (mask & 0xFF));
