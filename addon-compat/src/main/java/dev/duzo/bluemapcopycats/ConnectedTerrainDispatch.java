@@ -10,6 +10,7 @@ import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
 import java.io.StringReader;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -79,13 +80,28 @@ public final class ConnectedTerrainDispatch {
                     new StringReader(DISPATCH_JSON),
                     de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState.class);
 
+            // Snapshot the parsed resources before installing any dispatch entries.
+            var originalsByPath = new HashMap<>(states);
+
+            // Diagonal Blocks creates ids such as
+            // diagonalfences:natures_spirit/wisteria_fence and
+            // diagonalwindows:createdeco/industrial_iron_bars without shipping duplicate
+            // resource-pack blockstates. Give each generated id a synthetic ResourcePath
+            // so routing it through this renderer never replaces the source blockstate.
+            int aliases = installDiagonalAliases(paths, states, originalsByPath, dispatch);
+
             int patched = 0;
             for (Map.Entry<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
                     entry : new ArrayList<>(paths.entrySet())) {
                 String id = entry.getKey();
                 if (!isConnectedBlock(id)) continue;
 
-                var original = states.get(entry.getValue());
+                var original = originalsByPath.get(entry.getValue());
+                if (original == null) {
+                    // Generated aliases use synthetic ResourcePaths, so their source
+                    // blockstate is stored in ORIGINALS by installDiagonalAliases().
+                    original = ORIGINALS.get(id);
+                }
                 if (original == null) continue;
 
                 ORIGINALS.put(id, original);
@@ -94,14 +110,78 @@ public final class ConnectedTerrainDispatch {
             }
 
             Logger.global.logInfo(String.format(
-                    "Connected fence/wall compatibility routed %s loaded blockstate(s)",
-                    patched));
+                    "Connected fence/wall compatibility routed %s blockstate id(s), including %s diagonal alias(es)",
+                    patched,
+                    aliases));
         } catch (ReflectiveOperationException | RuntimeException error) {
             Logger.global.logError("Failed to install connected fence/wall compatibility", error);
         }
     }
 
-    private static boolean isConnectedBlock(String id) {
+    static String diagonalAlias(String id) {
+        int colon = id.indexOf(':');
+        if (colon < 0) return null;
+
+        String namespace = id.substring(0, colon);
+        String path = id.substring(colon + 1);
+        if ("diagonalfences".equals(namespace)
+                || "diagonalwalls".equals(namespace)
+                || "diagonalwindows".equals(namespace)
+                || "copycats".equals(namespace)
+                || "create_connected".equals(namespace)) {
+            return null;
+        }
+
+        if (path.endsWith("_fence")) {
+            return "diagonalfences:" + namespace + "/" + path;
+        }
+        if (path.endsWith("_wall")) {
+            return "diagonalwalls:" + namespace + "/" + path;
+        }
+        if (isWindowLikePath(path)) {
+            return "diagonalwindows:" + namespace + "/" + path;
+        }
+        return null;
+    }
+
+    private static boolean isWindowLikePath(String path) {
+        // Diagonal Windows targets IronBarsBlock. Static resource packs do not expose the
+        // Java block class, so cover the conventional ids used by vanilla and Create Deco.
+        return path.endsWith("_pane")
+                || path.endsWith("_bars")
+                || path.endsWith("_bars_overlay");
+    }
+
+    private static int installDiagonalAliases(
+            Map<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
+                    paths,
+            Map<ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>,
+                    de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState> states,
+            Map<ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>,
+                    de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState> originalsByPath,
+            de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState dispatch) {
+        int aliases = 0;
+        for (Map.Entry<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
+                entry : new ArrayList<>(paths.entrySet())) {
+            String alias = diagonalAlias(entry.getKey());
+            if (alias == null || paths.containsKey(alias)) continue;
+
+            var original = originalsByPath.get(entry.getValue());
+            if (original == null) continue;
+
+            // Do not share the source ResourcePath. states is keyed by ResourcePath, so
+            // replacing a shared entry would also replace the normal (non-diagonal) block.
+            ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>
+                    aliasPath = new ResourcePath<>(alias);
+            paths.put(alias, aliasPath);
+            states.put(aliasPath, dispatch);
+            ORIGINALS.put(alias, original);
+            aliases++;
+        }
+        return aliases;
+    }
+
+    static boolean isConnectedBlock(String id) {
         int colon = id.indexOf(':');
         if (colon < 0) return false;
 
@@ -111,6 +191,15 @@ public final class ConnectedTerrainDispatch {
         // Copycats has its own per-material renderer in this addon; do not steal it.
         if ("copycats".equals(namespace) || "create_connected".equals(namespace)) {
             return false;
+        }
+
+        // Generated Diagonal Blocks ids are authoritative regardless of the source
+        // block's naming convention. This is required for IronBarsBlock-derived blocks
+        // such as createdeco:industrial_iron_bars.
+        if ("diagonalfences".equals(namespace)
+                || "diagonalwalls".equals(namespace)
+                || "diagonalwindows".equals(namespace)) {
+            return true;
         }
 
         return path.endsWith("_fence") || path.endsWith("_wall");
