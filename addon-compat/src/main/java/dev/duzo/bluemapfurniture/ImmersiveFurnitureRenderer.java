@@ -500,10 +500,12 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
     }
 
     static void rotateFacing(float[] point, String facing) {
+        // Immersive Furniture bakes block models with
+        // facing.getOpposite().toYRot(): north=0, east=90, south=180, west=270.
         double degrees = switch (facing) {
-            case "east" -> -90D;
+            case "east" -> 90D;
             case "south" -> 180D;
-            case "west" -> 90D;
+            case "west" -> 270D;
             default -> 0D;
         };
         if (degrees == 0D) return;
