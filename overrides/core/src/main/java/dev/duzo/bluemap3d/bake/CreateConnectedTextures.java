@@ -1,0 +1,121 @@
+package dev.duzo.bluemap3d.bake;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.level.block.state.BlockState;
+
+import java.util.Locale;
+
+/**
+ * Data-driven approximation of Create's built-in sprite shifts for dedicated-server baking.
+ *
+ * <p>Create deliberately leaves client sprite objects uninitialised on a dedicated server.
+ * The stable part of its contract is the resource naming scheme and CT type, so this class
+ * mirrors those declarations without loading client classes.
+ */
+final class CreateConnectedTextures {
+
+    private CreateConnectedTextures() {
+    }
+
+    static Spec find(String texture, BlockState state) {
+        if (texture == null || !texture.startsWith("create:block/")) return null;
+        String path = texture.substring("create:block/".length());
+        String block = BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
+
+        if ("palettes/framed_glass".equals(path)) {
+            if (block.contains("horizontal_framed_glass")) {
+                return spec("horizontal_kryppers", "palettes/horizontal_framed_glass");
+            }
+            if (block.contains("vertical_framed_glass")) {
+                return spec("vertical", "palettes/vertical_framed_glass");
+            }
+            return spec("omnidirectional", "palettes/framed_glass");
+        }
+
+        if ("palettes/industrial_iron_window".equals(path)) {
+            return spec("rectangle", path);
+        }
+        if ("palettes/ornate_iron_window".equals(path)) {
+            return spec("vertical", path);
+        }
+        if ("palettes/weathered_iron_window".equals(path)) {
+            // The client rotates through four visual variants. Pick a deterministic variant
+            // from position in the resolver while retaining the same connection semantics.
+            return new Spec("rectangle", "create:block/palettes/weathered_iron_window_1_connected", true);
+        }
+
+        if (path.startsWith("scaffold/")) return spec("horizontal", path);
+        if (path.endsWith("_casing") || path.endsWith("_casing_side")) {
+            if ("creative_casing".equals(path)) return spec("rectangle", path);
+            return spec("omnidirectional", path);
+        }
+
+        if ("linear_chassis_side".equals(path)
+                || "secondary_linear_chassis_side".equals(path)
+                || "linear_chassis_end".equals(path)
+                || "linear_chassis_end_sticky".equals(path)) {
+            return spec("omnidirectional", path);
+        }
+
+        if ("crafter_side".equals(path)) {
+            return spec("vertical", path);
+        }
+        if (path.endsWith("encased_cogwheel_side")) {
+            return spec("vertical", path);
+        }
+        if ("girder_pole_side".equals(path)) {
+            return spec("vertical", path);
+        }
+        if ("tunnel/brass_tunnel_top".equals(path)) {
+            return spec("vertical", path);
+        }
+
+        if ("fluid_tank".equals(path)
+                || "fluid_tank_top".equals(path)
+                || "fluid_tank_inner".equals(path)
+                || "creative_fluid_tank".equals(path)) {
+            return spec("rectangle", path);
+        }
+
+        if (path.startsWith("palettes/") && path.endsWith("_window")) {
+            return spec("vertical", path);
+        }
+
+        if (path.contains("copper_roof_top")) {
+            String connected = block.contains("shingle")
+                    ? path.replace("copper_roof_top", "copper_shingles_top")
+                    : block.contains("tile")
+                            ? path.replace("copper_roof_top", "copper_tiles_top")
+                            : null;
+            return connected == null ? null : spec("roof", connected);
+        }
+
+        return null;
+    }
+
+    private static Spec spec(String type, String path) {
+        return new Spec(type, "create:block/" + path + "_connected", false);
+    }
+
+    record Spec(String type, String sheetTexture, boolean positionVariant) {
+        String cacheKey(int x, int y, int z) {
+            if (!positionVariant) return type + "|" + sheetTexture;
+            int variant = Math.floorMod(mix(x, y, z), 4) + 1;
+            String selected = sheetTexture.replace("_1_connected", "_" + variant + "_connected");
+            return type + "|" + selected;
+        }
+
+        String sheetTexture(int x, int y, int z) {
+            if (!positionVariant) return sheetTexture;
+            int variant = Math.floorMod(mix(x, y, z), 4) + 1;
+            return sheetTexture.replace("_1_connected", "_" + variant + "_connected");
+        }
+
+        private static int mix(int x, int y, int z) {
+            int h = x * 73428767 ^ y * 912931 ^ z * 4382893;
+            h ^= h >>> 13;
+            h *= 1274126177;
+            return h ^ (h >>> 16);
+        }
+    }
+}
