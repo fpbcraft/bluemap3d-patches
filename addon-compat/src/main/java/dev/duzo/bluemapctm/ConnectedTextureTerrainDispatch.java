@@ -45,7 +45,7 @@ public final class ConnectedTextureTerrainDispatch {
     private ConnectedTextureTerrainDispatch() {
     }
 
-    static de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState
+    public static de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState
     original(String id) {
         return ORIGINALS.get(id);
     }
