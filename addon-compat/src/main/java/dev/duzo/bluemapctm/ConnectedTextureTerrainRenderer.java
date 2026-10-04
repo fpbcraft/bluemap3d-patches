@@ -400,7 +400,7 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
         }
 
         CreateConnectedTextures.Spec create =
-                CreateConnectedTextures.find(
+                connectedTextures.createSpec(
                         sourceId,
                         block.getBlockState().getFormatted(),
                         block.getBlockState().getProperties(),
@@ -473,7 +473,7 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
                                 face.getTexture().getTexturePath(model.getTextures()::get);
                         if (path == null) continue;
                         CreateConnectedTextures.Spec spec =
-                                CreateConnectedTextures.find(
+                                connectedTextures.createSpec(
                                         path.getFormatted(),
                                         candidate.getFormatted(),
                                         candidate.getProperties(),
