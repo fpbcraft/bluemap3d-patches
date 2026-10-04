@@ -21,7 +21,13 @@ import de.bluecolored.bluemap.core.world.BlockState;
 import de.bluecolored.bluemap.core.world.LightData;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -187,7 +193,7 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
             float[] b,
             float[] c,
             float[] d) {
-        Appearance appearance = appearance(element.material(), face, block);
+        Appearance appearance = appearance(element, face, block, stateFor(block));
         if (appearance == null) return 0;
 
         float[] p = {
@@ -231,9 +237,17 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
     }
 
     private Appearance appearance(
-            String materialId,
+            ImmersiveFurnitureData.Element element,
             Direction wantedFace,
-            BlockNeighborhood block) {
+            BlockNeighborhood block,
+            int state) {
+        int[] baked = element.bakedTexture(wantedFace.name().toLowerCase(java.util.Locale.ROOT), state);
+        if (baked != null) {
+            Appearance bakedAppearance = bakedAppearance(element, wantedFace, baked);
+            if (bakedAppearance != null) return bakedAppearance;
+        }
+
+        String materialId = element.material();
         String id = materialId == null || materialId.isBlank()
                 ? "minecraft:oak_log"
                 : materialId;
@@ -271,6 +285,149 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
                 selected.getTexture().getTexturePath(model.getTextures()::get);
         if (texture == null) texture = ResourcePack.MISSING_TEXTURE;
         return new Appearance(textureGallery.get(texture));
+    }
+
+    private Appearance bakedAppearance(
+            ImmersiveFurnitureData.Element element,
+            Direction face,
+            int[] pixels) {
+        int width;
+        int height;
+        float dx = Math.abs(element.to()[0] - element.from()[0]);
+        float dy = Math.abs(element.to()[1] - element.from()[1]);
+        float dz = Math.abs(element.to()[2] - element.from()[2]);
+
+        switch (face) {
+            case UP, DOWN -> {
+                width = (int) dx;
+                height = (int) dz;
+            }
+            case NORTH, SOUTH -> {
+                width = (int) dx;
+                height = (int) dy;
+            }
+            case WEST, EAST -> {
+                width = (int) dz;
+                height = (int) dy;
+            }
+            default -> {
+                return null;
+            }
+        }
+
+        if (width <= 0 || height <= 0 || pixels.length != width * height) return null;
+
+        String key = bakedTextureKey(width, height, pixels);
+        ResourcePath<Texture> path =
+                new ResourcePath<>("bluemap_immersive_furniture", "baked/" + key);
+
+        int existing = textureGallery.get(path);
+        if (existing != 0) return new Appearance(existing);
+
+        try {
+            BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            image.setRGB(0, 0, width, height, pixels, 0, width);
+
+            Texture texture = Texture.from(path, image);
+            path.setResource(texture);
+            textureGallery.put(path);
+            int textureIndex = textureGallery.get(path);
+            return textureIndex == 0 ? null : new Appearance(textureIndex);
+        } catch (IOException error) {
+            warnOnce(
+                    "baked-texture#" + key,
+                    "Could not register Immersive Furniture baked texture " + key + ": " + error);
+            return null;
+        }
+    }
+
+    static int preloadTextures(
+            TextureGallery textureGallery,
+            Iterable<ImmersiveFurnitureData.Definition> definitions) {
+        int added = 0;
+        Set<String> seen = ConcurrentHashMap.newKeySet();
+
+        for (ImmersiveFurnitureData.Definition definition : definitions) {
+            for (ImmersiveFurnitureData.Element element : definition.elements()) {
+                for (Direction face : Direction.values()) {
+                    String faceName = face.name().toLowerCase(java.util.Locale.ROOT);
+                    for (int state = 0; state <= 1; state++) {
+                        int[] pixels = element.bakedTexture(faceName, state);
+                        if (pixels == null) continue;
+
+                        int width;
+                        int height;
+                        float dx = Math.abs(element.to()[0] - element.from()[0]);
+                        float dy = Math.abs(element.to()[1] - element.from()[1]);
+                        float dz = Math.abs(element.to()[2] - element.from()[2]);
+                        switch (face) {
+                            case UP, DOWN -> {
+                                width = (int) dx;
+                                height = (int) dz;
+                            }
+                            case NORTH, SOUTH -> {
+                                width = (int) dx;
+                                height = (int) dy;
+                            }
+                            case WEST, EAST -> {
+                                width = (int) dz;
+                                height = (int) dy;
+                            }
+                            default -> {
+                                continue;
+                            }
+                        }
+
+                        if (width <= 0 || height <= 0 || pixels.length != width * height) continue;
+
+                        String key = bakedTextureKey(width, height, pixels);
+                        if (!seen.add(key)) continue;
+
+                        ResourcePath<Texture> path =
+                                new ResourcePath<>("bluemap_immersive_furniture", "baked/" + key);
+                        if (textureGallery.get(path) != 0) continue;
+
+                        try {
+                            BufferedImage image =
+                                    new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+                            image.setRGB(0, 0, width, height, pixels, 0, width);
+                            Texture texture = Texture.from(path, image);
+                            path.setResource(texture);
+                            textureGallery.put(path);
+                            added++;
+                        } catch (IOException error) {
+                            warnOnce(
+                                    "preload-baked#" + key,
+                                    "Could not preload Immersive Furniture baked texture "
+                                            + key + ": " + error);
+                        }
+                    }
+                }
+            }
+        }
+
+        return added;
+    }
+
+    private static String bakedTextureKey(int width, int height, int[] pixels) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            ByteBuffer header = ByteBuffer.allocate(8);
+            header.putInt(width);
+            header.putInt(height);
+            digest.update(header.array());
+
+            ByteBuffer pixelBytes = ByteBuffer.allocate(pixels.length * Integer.BYTES);
+            for (int pixel : pixels) pixelBytes.putInt(pixel);
+            digest.update(pixelBytes.array());
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
+    private static int stateFor(BlockNeighborhood block) {
+        return "true".equals(block.getBlockState().getProperties().get("active")) ? 1 : 0;
     }
 
     static void rotateElement(
