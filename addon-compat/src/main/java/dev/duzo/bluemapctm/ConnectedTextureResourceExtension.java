@@ -167,7 +167,9 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
             int frameWidth = -1;
             int frameHeight = -1;
             JsonElement animationElement = root.get("animation");
-            if (animationElement != null && animationElement.isJsonObject()) {
+            boolean animationPresent =
+                    animationElement != null && animationElement.isJsonObject();
+            if (animationPresent) {
                 JsonObject animation = animationElement.getAsJsonObject();
                 if (animation.has("width")) frameWidth = animation.get("width").getAsInt();
                 if (animation.has("height")) frameHeight = animation.get("height").getAsInt();
@@ -189,6 +191,7 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
                             predicate,
                             frameWidth,
                             frameHeight,
+                            animationPresent,
                             customSubTexture));
 
             if (customSubTexture) {
@@ -209,7 +212,22 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
             String source,
             BufferedImage image,
             FusionSpec spec) throws IOException {
-        Frame frame = frame(image, spec.grid(), spec.frameWidth(), spec.frameHeight());
+        Frame frame;
+        if ("full".equals(spec.layout())
+                && image.getWidth() == image.getHeight()
+                && spec.frameWidth() < 0
+                && spec.frameHeight() < 0) {
+            if (spec.animationPresent()) {
+                warnOnce(
+                        "fusion-legacy-animation:" + source,
+                        "Fusion legacy square full-layout texture " + source
+                                + " cannot be animated; matching Fusion by leaving it unmodified");
+                return List.of();
+            }
+            frame = new Frame(image.getWidth(), image.getHeight() * 6 / 8);
+        } else {
+            frame = frame(image, spec.grid(), spec.frameWidth(), spec.frameHeight());
+        }
         if (frame == null) {
             warnOnce(
                     "fusion-grid:" + source,
@@ -516,6 +534,7 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
             FusionConnectionPredicate predicate,
             int frameWidth,
             int frameHeight,
+            boolean animationPresent,
             boolean customSubTexture) {
     }
 
