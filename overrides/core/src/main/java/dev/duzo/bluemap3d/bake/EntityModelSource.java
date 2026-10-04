@@ -107,6 +107,8 @@ public final class EntityModelSource implements BlockModelSource {
         List<String> out = new ArrayList<>();
         out.add("entity=" + entityId);
         out.add("metadata=" + effectiveMetadata);
+        out.add("textureOverride(main)="
+                + effectiveMetadata.getOrDefault("__bm3d_texture_main", "<none>"));
         out.add("texture=" + String.valueOf(source.findTexture(
                 entity.namespace(), entity.path(), "main", effectiveMetadata)));
 
@@ -820,6 +822,27 @@ public final class EntityModelSource implements BlockModelSource {
             String path,
             String layer,
             Map<String, String> metadata) {
+        String exact = exactTextureOverride(metadata, layer);
+        if (exact != null) {
+            ResourceLocation exactId = ResourceLocation.tryParse(exact);
+            if (exactId != null
+                    && assets.read("assets/" + exactId.getNamespace()
+                            + "/textures/" + exactId.getPath() + ".png") != null) {
+                LOGGER.debug(
+                        "Resolved exact texture override for {}:{}#{} as {}",
+                        namespace,
+                        path,
+                        layer,
+                        exact);
+                return exact;
+            }
+            LOGGER.warn(
+                    "Ignoring missing exact texture override for {}:{}#{}: {}",
+                    namespace,
+                    path,
+                    layer,
+                    exact);
+        }
         String leaf = leaf(path);
         LinkedHashSet<String> relativeCandidates = new LinkedHashSet<>();
 
@@ -889,6 +912,26 @@ public final class EntityModelSource implements BlockModelSource {
         String resourcePath = selected.substring(root.length(), selected.length() - 4);
         LOGGER.debug("Resolved texture for {}:{}#{} from {}", namespace, path, layer, selected);
         return namespace + ":" + resourcePath;
+    }
+
+    static String exactTextureOverride(
+            Map<String, String> metadata, String layer) {
+        if (metadata == null || metadata.isEmpty()) return null;
+        String raw = metadata.get("__bm3d_texture_" + layer);
+        if (raw == null || raw.isBlank()) return null;
+
+        ResourceLocation id = ResourceLocation.tryParse(raw);
+        if (id == null) return null;
+
+        String texturePath = id.getPath();
+        if (texturePath.startsWith("textures/")) {
+            texturePath = texturePath.substring("textures/".length());
+        }
+        if (texturePath.endsWith(".png")) {
+            texturePath = texturePath.substring(0, texturePath.length() - ".png".length());
+        }
+        if (texturePath.isBlank()) return null;
+        return id.getNamespace() + ":" + texturePath;
     }
 
     private BufferedImage loadTexture(String texture) {
