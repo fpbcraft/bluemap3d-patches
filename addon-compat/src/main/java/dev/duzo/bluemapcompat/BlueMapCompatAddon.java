@@ -3,6 +3,7 @@ package dev.duzo.bluemapcompat;
 import de.bluecolored.bluemap.api.BlueMapAPI;
 import de.bluecolored.bluemap.core.logger.Logger;
 import dev.duzo.bluemapcopycats.BlueMapCopycatsCompatAddon;
+import dev.duzo.bluemapctm.ConnectedTextureTerrainAdapter;
 import dev.duzo.bluemaptrafficcraft.TrafficCraftAdapter;
 import dev.duzo.bluemapdynamictrees.DynamicTreesTerrainAdapter;
 import dev.duzo.bluemapdynamictrees.DynamicTreesTerrainDispatch;
@@ -19,6 +20,9 @@ public final class BlueMapCompatAddon implements Runnable {
 
     @Override
     public void run() {
+        // Resource-pack extensions must register before BlueMap constructs its ResourcePack.
+        ConnectedTextureTerrainAdapter.register();
+
         // Specialized adapters share this one native BlueMap addon artifact.
         new BlueMapCopycatsCompatAddon().run();
         TrafficCraftAdapter.register();
@@ -36,9 +40,13 @@ public final class BlueMapCompatAddon implements Runnable {
             // callback can replace its cached custom-renderer blockstates.
             DynamicTreesTerrainDispatch.apply(api);
             ImmersiveFurnitureAdapter.onBlueMapEnable(api);
+
+            // Install CT routing last so blockstates already claimed by a more specific
+            // compatibility renderer remain authoritative.
+            ConnectedTextureTerrainAdapter.onBlueMapEnable(api);
         });
 
         Logger.global.logInfo(
-                "BlueMap Compat loaded: config-driven rules + TrafficCraft + native Dynamic Trees terrain");
+                "BlueMap Compat loaded: config-driven rules + TrafficCraft + Dynamic Trees + Fusion/Create connected textures");
     }
 }

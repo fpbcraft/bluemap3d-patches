@@ -44,9 +44,10 @@ import java.util.Map;
  *       take the block.</li>
  * </ul>
  *
- * <p>Not handled, deliberately: {@code uvlock}, random model weights (the first is
+ * <p>Not handled, deliberately: {@code uvlock} and random model weights (the first is
  * always taken, so a server and a client can disagree on which grass variant a block
- * shows), and connected-texture mods.
+ * shows). Connected textures are resolved after ordinary model baking using local
+ * neighbour context.
  */
 public final class ResourcePackSource implements BlockModelSource {
 
@@ -54,13 +55,16 @@ public final class ResourcePackSource implements BlockModelSource {
 
     private final AssetIndex assets;
     private final ResourcePackModelResolver models;
+    private final ConnectedTextureResolver connectedTextures;
     private final Map<BlockState, List<ModelQuad>> quadCache = new HashMap<>();
     private final Map<String, List<ModelQuad>> attachmentCache = new HashMap<>();
     private final Map<String, BufferedImage> textureCache = new HashMap<>();
 
     public ResourcePackSource(AssetIndex assets) {
         this.assets = assets;
+        ConnectedTextureDiagnostics.install(assets);
         this.models = new ResourcePackModelResolver(assets, LOGGER);
+        this.connectedTextures = new ConnectedTextureResolver(assets, this::quadsFor);
     }
 
     @Override
@@ -78,7 +82,20 @@ public final class ResourcePackSource implements BlockModelSource {
     }
 
     @Override
+    public List<ModelQuad> quadsFor(BlockRenderContext context) {
+        return connectedTextures.resolve(quadsFor(context.state()), context);
+    }
+
+    @Override
     public BufferedImage texture(String texture) {
+        BufferedImage virtual = connectedTextures.virtualTexture(texture);
+        if (virtual != null) {
+            return virtual;
+        }
+        BufferedImage connectedDefault = connectedTextures.defaultTexture(texture);
+        if (connectedDefault != null) {
+            return connectedDefault;
+        }
         return textureCache.computeIfAbsent(texture, id -> {
             ResourceLocation loc = models.parse(id);
             if (loc == null) {

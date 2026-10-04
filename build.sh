@@ -42,6 +42,18 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSou
    core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/BlockRenderContext.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/BlockRenderContext.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureLayout.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureLayout.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/FusionConnectionPredicate.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/FusionConnectionPredicate.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CreateConnectedTextures.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/CreateConnectedTextures.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureResolver.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureResolver.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureDiagnostics.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureDiagnostics.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/AssetIndex.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/AssetIndex.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/EntityModelSource.java" \
@@ -108,6 +120,8 @@ cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/JavaEntityModelSo
    core/src/test/java/dev/duzo/bluemap3d/bake/JavaEntityModelSourceTest.java
 cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/TextureAtlasTest.java" \
    core/src/test/java/dev/duzo/bluemap3d/bake/TextureAtlasTest.java
+cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/ConnectedTextureLayoutTest.java" \
+   core/src/test/java/dev/duzo/bluemap3d/bake/ConnectedTextureLayoutTest.java
 mkdir -p core/src/main/resources/assets/bluemap3d/models/block
 cp "$ROOT/overrides/core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json" \
    core/src/main/resources/assets/bluemap3d/models/block/flexible_segment.json
