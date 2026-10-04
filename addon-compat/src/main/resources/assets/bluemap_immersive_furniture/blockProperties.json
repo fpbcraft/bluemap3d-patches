@@ -1,0 +1,17 @@
+{
+  "immersive_furniture:furniture": {
+    "culling": false,
+    "occluding": false,
+    "cullingIdentical": false
+  },
+  "immersive_furniture:furniture_entity": {
+    "culling": false,
+    "occluding": false,
+    "cullingIdentical": false
+  },
+  "immersive_furniture:furniture_light": {
+    "culling": false,
+    "occluding": false,
+    "cullingIdentical": false
+  }
+}
