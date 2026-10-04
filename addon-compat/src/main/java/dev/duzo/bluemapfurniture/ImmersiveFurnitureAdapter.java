@@ -87,6 +87,12 @@ public final class ImmersiveFurnitureAdapter {
 
         ImmersiveFurnitureRuntime.configureWorldRoots(worldRoots);
 
+        // Install blockstate dispatch before any texture-gallery work. BlueMap's
+        // ResourcePath values are memoized, and the furniture placeholder must never
+        // be allowed to become the active cached resource while compatibility setup is
+        // doing unrelated texture work.
+        RouteResult initialRouting = routeFurniture(resourcePack);
+
         List<ImmersiveFurnitureData.Definition> persisted =
                 ImmersiveFurnitureRuntime.persistedDefinitions();
         int bakedTextures = 0;
@@ -103,10 +109,15 @@ public final class ImmersiveFurnitureAdapter {
             }
         }
 
-        int routed = routeFurniture(resourcePack);
+        // Re-assert and verify routing after texture setup as a guard against any
+        // ResourcePath/cache lifecycle changes during BlueMap startup.
+        RouteResult finalRouting = routeFurniture(resourcePack);
         Logger.global.logInfo(String.format(
-                "Immersive Furniture compatibility ready: %s furniture blockstate(s) routed, %s baked texture(s) registered",
-                routed,
+                "Immersive Furniture compatibility ready: routed=%s/%s verified=%s/%s bakedTextures=%s",
+                initialRouting.routed(),
+                FURNITURE_BLOCKS.size(),
+                finalRouting.verified(),
+                FURNITURE_BLOCKS.size(),
                 bakedTextures));
     }
 
@@ -131,7 +142,7 @@ public final class ImmersiveFurnitureAdapter {
     }
 
     @SuppressWarnings("unchecked")
-    private static int routeFurniture(ResourcePack resourcePack) {
+    private static RouteResult routeFurniture(ResourcePack resourcePack) {
         try {
             Field statesField = ResourcePack.class.getDeclaredField("blockStates");
             Field pathsField = ResourcePack.class.getDeclaredField("blockStatePaths");
@@ -154,6 +165,7 @@ public final class ImmersiveFurnitureAdapter {
                     de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState.class);
 
             int routed = 0;
+            int verified = 0;
             for (String blockId : FURNITURE_BLOCKS) {
                 ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>
                         path = paths.get(blockId);
@@ -169,13 +181,22 @@ public final class ImmersiveFurnitureAdapter {
                 path.setResource(dispatch);
 
                 routed++;
+                if (path.getResource() == dispatch && states.get(path) == dispatch) {
+                    verified++;
+                } else {
+                    Logger.global.logWarning(
+                            "Immersive Furniture routing verification failed for " + blockId);
+                }
             }
-            return routed;
+            return new RouteResult(routed, verified);
         } catch (ReflectiveOperationException | RuntimeException error) {
             Logger.global.logError(
                     "Failed to install Immersive Furniture blockstate routing",
                     error);
-            return 0;
+            return new RouteResult(0, 0);
         }
+    }
+
+    private record RouteResult(int routed, int verified) {
     }
 }
