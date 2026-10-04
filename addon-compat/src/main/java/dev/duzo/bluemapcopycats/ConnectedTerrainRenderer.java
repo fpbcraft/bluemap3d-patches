@@ -7,7 +7,6 @@ import de.bluecolored.bluemap.core.map.hires.TileModelView;
 import de.bluecolored.bluemap.core.map.hires.block.BlockRenderer;
 import de.bluecolored.bluemap.core.map.hires.block.ResourceModelRenderer;
 import de.bluecolored.bluemap.core.resources.ResourcePath;
-import de.bluecolored.bluemap.core.resources.adapter.ResourcesGson;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.Variant;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.model.Model;
@@ -15,7 +14,6 @@ import de.bluecolored.bluemap.core.util.math.Color;
 import de.bluecolored.bluemap.core.world.BlockState;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -39,8 +37,7 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
 
     private final ResourcePack resourcePack;
     private final ResourceModelRenderer delegate;
-    private final Map<String, ResourcePath<Model>> sideModels = new ConcurrentHashMap<>();
-    private final Map<String, Variant> diagonalVariants = new ConcurrentHashMap<>();
+    private final Map<String, Variant> connectionVariants = new ConcurrentHashMap<>();
 
     public ConnectedTerrainRenderer(
             ResourcePack resourcePack,
@@ -75,14 +72,15 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
                     variants[0]++;
                 });
 
-        ResourcePath<Model> sideModel = sideModel(id, original, translated, isWall(id));
         int diagonals = 0;
-        if (sideModel != null) {
-            diagonals += renderDiagonal(block, tileModel, sideModel, "north_east", 45f);
-            diagonals += renderDiagonal(block, tileModel, sideModel, "south_east", 135f);
-            diagonals += renderDiagonal(block, tileModel, sideModel, "south_west", 225f);
-            diagonals += renderDiagonal(block, tileModel, sideModel, "north_west", 315f);
-        }
+        diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
+                "north_east", "north");
+        diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
+                "south_east", "east");
+        diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
+                "south_west", "south");
+        diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
+                "north_west", "west");
 
         int end = tileModel.getStart();
         tileModel.initialize(start);
@@ -92,53 +90,58 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
 
         if (TRACED.add(id)) {
             Logger.global.logDebug(String.format(
-                    "CONNECTED STATIC block=%s state=%s normalVariants=%s diagonalArms=%s sideModel=%s",
-                    id, block.getBlockState(), variants[0], diagonals,
-                    sideModel == null ? "<missing>" : sideModel.getFormatted()));
+                    "CONNECTED STATIC block=%s state=%s normalVariants=%s diagonalArms=%s",
+                    id, block.getBlockState(), variants[0], diagonals));
         }
     }
 
     private int renderDiagonal(
             BlockNeighborhood block,
             TileModelView tileModel,
-            ResourcePath<Model> model,
-            String property,
-            float y) {
-        if (!"true".equals(block.getBlockState().getProperties().get(property))) {
+            de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState original,
+            BlockState translated,
+            boolean wall,
+            String diagonalProperty,
+            String cardinalDirection) {
+        if (!"true".equals(block.getBlockState().getProperties().get(diagonalProperty))) {
             return 0;
         }
 
-        String key = model.getFormatted() + "@" + y;
-        Variant variant = diagonalVariants.computeIfAbsent(key, ignored -> {
-            String json = "{\"model\":\"" + model.getFormatted() + "\",\"y\":" + y + "}";
-            return ResourcesGson.INSTANCE.fromJson(new StringReader(json), Variant.class);
-        });
+        Variant variant = connectionVariant(
+                block.getBlockState().getFormatted(),
+                original,
+                translated,
+                wall,
+                cardinalDirection);
+        if (variant == null) return 0;
 
         Color color = new Color();
         TileModelView diagonal = tileModel.initialize();
         delegate.render(block, variant, diagonal, color);
         if (diagonal.getSize() == 0) return 0;
 
-        // Diagonal Blocks does not only rotate the cardinal arm: it stretches the arm's
-        // travel axis by sqrt(2) first so the rail reaches the block corner. The variant
-        // has already rotated the north arm by -y around the centre, so temporarily
-        // rotate it back, stretch local Z, then reapply the rotation.
+        // Match Diagonal Blocks' QuadUtils.rotateQuad exactly: render the actual cardinal
+        // segment (including its original blockstate variant rotation), stretch along that
+        // cardinal arm's axis by sqrt(2), then rotate the baked segment -45 degrees around
+        // the block centre. N->NE, E->SE, S->SW and W->NW all use the same -45-degree turn.
         float diagonalScale = (float) Math.sqrt(2.0);
+        boolean scaleX = "east".equals(cardinalDirection) || "west".equals(cardinalDirection);
         diagonal
-                .translate(-0.5f, 0f, -0.5f)
-                .rotate(y, 0f, 1f, 0f)
-                .scale(1f, 1f, diagonalScale)
-                .rotate(-y, 0f, 1f, 0f)
-                .translate(0.5f, 0f, 0.5f);
+                .translate(-0.5f, -0.5f, -0.5f)
+                .scale(scaleX ? diagonalScale : 1f, 1f, scaleX ? 1f : diagonalScale)
+                .rotate(-45f, 0f, 1f, 0f)
+                .translate(0.5f, 0.5f, 0.5f);
         return 1;
     }
 
-    private ResourcePath<Model> sideModel(
+    private Variant connectionVariant(
             String id,
             de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState original,
             BlockState translated,
-            boolean wall) {
-        ResourcePath<Model> cached = sideModels.get(id);
+            boolean wall,
+            String cardinalDirection) {
+        String key = id + "@" + cardinalDirection;
+        Variant cached = connectionVariants.get(key);
         if (cached != null) return cached;
 
         Map<String, String> props = new LinkedHashMap<>(translated.getProperties());
@@ -152,69 +155,30 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
             if (props.containsKey(diagonal)) props.put(diagonal, "false");
         }
 
-        // A name-based check used to accept models containing "fence", which also picks
-        // vanilla-style *_fence_post models. That is what produced the detached/crossed
-        // geometry seen for diagonal fences. Instead compare a disconnected state with
-        // a north-connected state and keep only models introduced by the connection.
         BlockState disconnected = new BlockState(id, Map.copyOf(props));
         Set<ResourcePath<Model>> disconnectedModels = new HashSet<>();
         original.forEach(disconnected, 0, 0, 0,
                 variant -> disconnectedModels.add(variant.getModel()));
 
-        props.put("north", wall ? "low" : "true");
-        BlockState northOnly = new BlockState(id, Map.copyOf(props));
+        props.put(cardinalDirection, wall ? "low" : "true");
+        BlockState cardinalOnly = new BlockState(id, Map.copyOf(props));
         List<Variant> candidates = new ArrayList<>();
-        original.forEach(northOnly, 0, 0, 0, candidates::add);
+        original.forEach(cardinalOnly, 0, 0, 0, candidates::add);
 
         ResourcePath<Model> missingPath = ResourcePack.MISSING_BLOCK_MODEL;
         Model missing = resourcePack.getModel(missingPath);
-
         for (Variant candidate : candidates) {
-            ResourcePath<Model> path = candidate.getModel();
-            if (disconnectedModels.contains(path)) continue;
+            ResourcePath<Model> modelPath = candidate.getModel();
+            if (disconnectedModels.contains(modelPath)) continue;
 
-            Model model = resourcePack.getModel(path);
+            Model model = resourcePack.getModel(modelPath);
             if (model == null || model == missing) continue;
 
-            sideModels.put(id, path);
-            return path;
-        }
-
-        // Datagen convention used by vanilla and most mods. Generated Diagonal Blocks ids
-        // point back at the source namespace/path (e.g. diagonalwindows:createdeco/foo ->
-        // createdeco:foo), so resolve that before attempting the conventional model name.
-        String assetId = sourceAssetId(id);
-        int colon = assetId.indexOf(':');
-        if (colon >= 0) {
-            String namespace = assetId.substring(0, colon);
-            String path = assetId.substring(colon + 1);
-            ResourcePath<Model> conventional =
-                    new ResourcePath<>(namespace + ":block/" + path + "_side");
-            Model model = resourcePack.getModel(conventional);
-            if (model != null && model != missing) {
-                sideModels.put(id, conventional);
-                return conventional;
-            }
+            connectionVariants.put(key, candidate);
+            return candidate;
         }
 
         return null;
-    }
-
-    private static String sourceAssetId(String id) {
-        int colon = id.indexOf(':');
-        if (colon < 0) return id;
-
-        String namespace = id.substring(0, colon);
-        if (!"diagonalfences".equals(namespace)
-                && !"diagonalwalls".equals(namespace)
-                && !"diagonalwindows".equals(namespace)) {
-            return id;
-        }
-
-        String path = id.substring(colon + 1);
-        int slash = path.indexOf('/');
-        if (slash <= 0 || slash == path.length() - 1) return id;
-        return path.substring(0, slash) + ":" + path.substring(slash + 1);
     }
 
     private static BlockState translatedState(BlockState state, boolean wall) {
