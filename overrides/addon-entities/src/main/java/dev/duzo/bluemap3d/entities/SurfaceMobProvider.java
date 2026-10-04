@@ -11,6 +11,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.animal.Sheep;
+import net.minecraft.world.entity.animal.horse.Llama;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -186,6 +187,33 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
             metadata.put("__bm3d_visual_color", sheep.getColor().getSerializedName());
             if (sheep.isSheared()) {
                 metadata.put("__bm3d_hide_wool", "true");
+            }
+        }
+
+        // Vanilla's llama renderer uses the ordinary llama coat for both llamas and
+        // trader llamas, then optionally renders ModelLayers.LLAMA_DECOR on top. Generic
+        // filename matching cannot safely infer that split because trader_llama.png is
+        // the decor texture and otherwise looks like an exact main-texture match.
+        ResourceLocation typeId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
+        if (mob instanceof Llama llama
+                && typeId != null
+                && "minecraft".equals(typeId.getNamespace())) {
+            String variant = appearanceToken(llama.getVariant());
+            if (variant != null && !variant.isBlank()) {
+                metadata.put(
+                        "__bm3d_texture_main",
+                        "minecraft:textures/entity/llama/" + variant + ".png");
+            }
+
+            if (llama.getSwag() != null) {
+                metadata.put(
+                        "__bm3d_texture_decor",
+                        "minecraft:textures/entity/llama/decor/"
+                                + llama.getSwag().getSerializedName() + ".png");
+            } else if (llama.isTraderLlama()) {
+                metadata.put(
+                        "__bm3d_texture_decor",
+                        "minecraft:textures/entity/llama/decor/trader_llama.png");
             }
         }
 

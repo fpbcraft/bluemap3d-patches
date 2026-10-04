@@ -20,7 +20,8 @@ final class EntityAssetMatch {
             "models", "model", "main", "default", "base", "normal", "replaced", "mesh", "st");
 
     private static final Set<String> MAIN_LAYER_PENALTIES = Set.of(
-            "glow", "glowmask", "emissive", "overlay", "armor", "eyes");
+            "glow", "glowmask", "emissive", "overlay", "armor", "eyes",
+            "decor", "decoration", "saddle", "markings", "collar");
 
     private EntityAssetMatch() {
     }
@@ -57,9 +58,15 @@ final class EntityAssetMatch {
             else score -= 100;
         } else if ("main".equals(layer)) {
             Set<String> assetTokens = new HashSet<>(assetSemanticTokens(assetPath));
+            Set<String> entityTokens = new HashSet<>(tokens(leaf(entityPath)));
             for (String token : MAIN_LAYER_PENALTIES) {
-                if (assetTokens.contains(token)) {
-                    score -= 180;
+                // Secondary render-layer assets must not beat a real body texture merely
+                // because their filename happens to match the registry id. Trader llamas
+                // are the canonical case: entity/llama/decor/trader_llama.png is an
+                // overlay, not the trader_llama body skin. Do not penalize a token that
+                // is itself part of the entity name (for example minecraft:glow_squid).
+                if (assetTokens.contains(token) && !entityTokens.contains(token)) {
+                    score -= 500;
                     break;
                 }
             }
