@@ -62,6 +62,7 @@ public final class ResourcePackSource implements BlockModelSource {
 
     public ResourcePackSource(AssetIndex assets) {
         this.assets = assets;
+        ConnectedTextureDiagnostics.install(assets);
         this.models = new ResourcePackModelResolver(assets, LOGGER);
         this.connectedTextures = new ConnectedTextureResolver(assets, this::quadsFor);
     }
