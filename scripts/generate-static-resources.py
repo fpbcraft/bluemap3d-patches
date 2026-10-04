@@ -67,3 +67,8 @@ write_dispatch(
     ["girder_strut", "weathered_girder_strut", "cable_girder_strut"],
     "bluemap_copycats:bits_n_bobs_girder",
 )
+write_dispatch(
+    "struts",
+    ["girder_strut_structure"],
+    "bluemap_copycats:invisible",
+)
