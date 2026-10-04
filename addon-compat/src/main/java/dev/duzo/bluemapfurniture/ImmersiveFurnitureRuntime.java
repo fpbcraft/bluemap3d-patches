@@ -68,13 +68,21 @@ final class ImmersiveFurnitureRuntime {
         List<Path> registryCandidates = worldRoots.stream()
                 .map(root -> root.resolve("data").resolve("immersive_furniture.dat"))
                 .toList();
+        List<Path> hashDirectories = worldRoots.stream()
+                .map(root -> root.resolve("immersive_furniture").resolve("hash"))
+                .toList();
+        long hashFiles = hashDirectories.stream()
+                .mapToLong(ImmersiveFurnitureRuntime::countNbtFiles)
+                .sum();
 
         Logger.global.logInfo(String.format(
-                "Immersive Furniture world data ready: roots=%s registryFiles=%s identifiers=%s candidates=%s",
+                "Immersive Furniture world data ready: roots=%s registryFiles=%s identifiers=%s hashFiles=%s candidates=%s hashDirs=%s",
                 worldRoots.size(),
                 registries,
                 mappings,
-                registryCandidates));
+                hashFiles,
+                registryCandidates,
+                hashDirectories));
     }
 
     static ImmersiveFurnitureData.Definition resolve(
@@ -168,6 +176,22 @@ final class ImmersiveFurnitureRuntime {
     private static Map<Integer, String> loadRegistry(Path root) {
         Path file = root.resolve("data").resolve("immersive_furniture.dat");
         return ImmersiveFurnitureData.decodeIdentifierRegistry(readCompressed(file));
+    }
+
+    private static long countNbtFiles(Path directory) {
+        if (directory == null || !Files.isDirectory(directory)) return 0L;
+        try (var entries = Files.list(directory)) {
+            return entries.filter(path -> path.getFileName().toString().endsWith(".nbt")).count();
+        } catch (IOException | RuntimeException error) {
+            String key = "list#" + directory;
+            if (TRACED.add(key)) {
+                Logger.global.logWarning(String.format(
+                        "Could not inspect Immersive Furniture hash directory %s: %s",
+                        directory,
+                        error));
+            }
+            return 0L;
+        }
     }
 
     private static Object readCompressed(Path file) {
