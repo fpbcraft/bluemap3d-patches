@@ -129,11 +129,12 @@ public final class ConnectedTextureTerrainDispatch {
             }
 
             Logger.global.logInfo(String.format(
-                    "Connected texture compatibility routed %s/%s static blockstate id(s); skippedCustom=%s FusionTextures=%s",
+                    "Connected texture compatibility routed %s/%s static blockstate id(s); skippedCustom=%s FusionTextures=%s discoveredCreateStyle=%s",
                     routed,
                     candidates,
                     skippedCustom,
-                    extension.fusionCount()));
+                    extension.fusionCount(),
+                    extension.discoveredCreateStyleCount()));
         } catch (ReflectiveOperationException | RuntimeException error) {
             Logger.global.logError(
                     "Failed to install connected texture terrain dispatch",
@@ -159,7 +160,12 @@ public final class ConnectedTextureTerrainDispatch {
                     if (texture == null) continue;
                     String id = texture.getFormatted();
                     if (extension.hasFusion(id)
-                            || CreateConnectedTextures.isSourceTexture(id, blockId)) {
+                            || extension.createSpec(
+                                            id,
+                                            blockId,
+                                            Map.of(),
+                                            de.bluecolored.bluemap.core.util.Direction.NORTH)
+                                    != null) {
                         return true;
                     }
                 }
