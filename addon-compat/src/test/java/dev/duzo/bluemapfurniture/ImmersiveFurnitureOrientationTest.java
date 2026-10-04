@@ -16,7 +16,7 @@ class ImmersiveFurnitureOrientationTest {
 
     private static void assertFacing(String facing, float[] expected) {
         float[] point = {8F, 8F, 0F};
-        ImmersiveFurnitureRenderer.rotateFacing(point, facing);
+        ImmersiveFurnitureTransform.rotateFacing(point, facing);
         assertArrayEquals(expected, point, 1.0e-4F);
     }
 }
