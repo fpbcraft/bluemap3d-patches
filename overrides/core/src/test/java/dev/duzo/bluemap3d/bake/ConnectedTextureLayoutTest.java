@@ -70,6 +70,23 @@ final class ConnectedTextureLayoutTest {
     }
 
     @Test
+    void createCornersRequireTheirAdjacentCardinalConnections() {
+        int topRightWithoutRight =
+                ConnectedTextureLayout.TOP | ConnectedTextureLayout.TOP_RIGHT;
+        assertEquals(
+                ConnectedTextureLayout.TOP,
+                ConnectedTextureResolver.constrainCreateCorners(topRightWithoutRight));
+
+        int validTopRight =
+                ConnectedTextureLayout.TOP
+                        | ConnectedTextureLayout.RIGHT
+                        | ConnectedTextureLayout.TOP_RIGHT;
+        assertEquals(
+                validTopRight,
+                ConnectedTextureResolver.constrainCreateCorners(validTopRight));
+    }
+
+    @Test
     void createLayoutsMatchExpectedSheetCoordinates() {
         assertEquals(
                 0,
