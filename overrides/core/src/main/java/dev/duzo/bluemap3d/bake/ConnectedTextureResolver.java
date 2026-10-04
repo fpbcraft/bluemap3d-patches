@@ -172,6 +172,15 @@ final class ConnectedTextureResolver {
             String direction) {
         if (other == null || other.isAir()) return false;
 
+        boolean rotatedPillar = current.sheetTexture(
+                        context.x(), context.y(), context.z())
+                .startsWith("createdeco:block/palettes/sheet_metal/");
+        if (rotatedPillar
+                && context.state().getBlock() == other.getBlock()
+                && !property(context.state(), "axis").equals(property(other, "axis"))) {
+            return false;
+        }
+
         int[] offset = offsetFor(direction, axes);
         int ox = context.x() + offset[0];
         int oy = context.y() + offset[1];
@@ -256,6 +265,17 @@ final class ConnectedTextureResolver {
         return type == null
                 ? Optional.empty()
                 : Optional.of(new CreateConnectedTextures.Spec(type, target, false));
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static String property(BlockState state, String name) {
+        for (net.minecraft.world.level.block.state.properties.Property property
+                : state.getProperties()) {
+            if (!property.getName().equals(name)) continue;
+            Comparable value = state.getValue(property);
+            return property.getName(value);
+        }
+        return "";
     }
 
     private List<ModelQuad> transformFusion(ModelQuad quad, FusionSpec spec, int mask) {
