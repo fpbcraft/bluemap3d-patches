@@ -33,4 +33,15 @@ final class ConnectedTerrainDispatchTest {
         assertNull(ConnectedTerrainDispatch.diagonalAlias(
                 "diagonalfences:natures_spirit/wisteria_fence"));
     }
+
+    @Test
+    void generatedWindowAliasesAreConnectedBlocks() throws Exception {
+        var method = ConnectedTerrainDispatch.class.getDeclaredMethod("isConnectedBlock", String.class);
+        method.setAccessible(true);
+
+        assertEquals(true, method.invoke(null,
+                "diagonalwindows:createdeco/industrial_iron_bars"));
+        assertEquals(true, method.invoke(null,
+                "diagonalwindows:createdeco/industrial_iron_bars_overlay"));
+    }
 }

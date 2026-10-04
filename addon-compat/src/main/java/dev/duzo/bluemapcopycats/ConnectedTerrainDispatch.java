@@ -97,6 +97,11 @@ public final class ConnectedTerrainDispatch {
                 if (!isConnectedBlock(id)) continue;
 
                 var original = originalsByPath.get(entry.getValue());
+                if (original == null) {
+                    // Generated aliases use synthetic ResourcePaths, so their source
+                    // blockstate is stored in ORIGINALS by installDiagonalAliases().
+                    original = ORIGINALS.get(id);
+                }
                 if (original == null) continue;
 
                 ORIGINALS.put(id, original);
@@ -186,6 +191,15 @@ public final class ConnectedTerrainDispatch {
         // Copycats has its own per-material renderer in this addon; do not steal it.
         if ("copycats".equals(namespace) || "create_connected".equals(namespace)) {
             return false;
+        }
+
+        // Generated Diagonal Blocks ids are authoritative regardless of the source
+        // block's naming convention. This is required for IronBarsBlock-derived blocks
+        // such as createdeco:industrial_iron_bars.
+        if ("diagonalfences".equals(namespace)
+                || "diagonalwalls".equals(namespace)
+                || "diagonalwindows".equals(namespace)) {
+            return true;
         }
 
         return path.endsWith("_fence") || path.endsWith("_wall");

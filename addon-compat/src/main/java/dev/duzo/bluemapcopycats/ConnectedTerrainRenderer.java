@@ -120,16 +120,17 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
         delegate.render(block, variant, diagonal, color);
         if (diagonal.getSize() == 0) return 0;
 
-        // Match Diagonal Blocks' QuadUtils.rotateQuad exactly: render the actual cardinal
-        // segment (including its original blockstate variant rotation), stretch along that
-        // cardinal arm's axis by sqrt(2), then rotate the baked segment -45 degrees around
-        // the block centre. N->NE, E->SE, S->SW and W->NW all use the same -45-degree turn.
+        // The Minecraft client applies Diagonal Blocks' -45 degree baked-quad transform
+        // before the model reaches the renderer. Here we are transforming BlueMap's
+        // already-rendered mesh, whose block-model Y rotation convention is inverted.
+        // Using -45 here mirrors every arm onto the opposite diagonal (the failure visible
+        // in static map tiles); +45 reproduces N->NE, E->SE, S->SW and W->NW in BlueMap.
         float diagonalScale = (float) Math.sqrt(2.0);
         boolean scaleX = "east".equals(cardinalDirection) || "west".equals(cardinalDirection);
         diagonal
                 .translate(-0.5f, -0.5f, -0.5f)
                 .scale(scaleX ? diagonalScale : 1f, 1f, scaleX ? 1f : diagonalScale)
-                .rotate(-45f, 0f, 1f, 0f)
+                .rotate(45f, 0f, 1f, 0f)
                 .translate(0.5f, 0.5f, 0.5f);
         return 1;
     }
