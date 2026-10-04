@@ -390,7 +390,13 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
                                     direction));
             ResourcePath<Texture> material =
                     connectedTextures.fusionMaterial(sourceId, fusion, mask);
-            return hasTexture(material) ? material : source;
+            if (!hasTexture(material)) return source;
+
+            if (!"pieced".equals(fusion.layout()) && !"overlay".equals(fusion.layout())) {
+                int tile = ConnectedTextureLayout.fusionTile(fusion.layout(), mask);
+                remapUvs(fusion.grid(), tile);
+            }
+            return material;
         }
 
         CreateConnectedTextures.Spec create =
@@ -412,7 +418,19 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
         int tile = ConnectedTextureLayout.createTile(create.type(), mask);
         ResourcePath<Texture> material =
                 connectedTextures.createMaterial(sheet, create.type(), tile);
-        return hasTexture(material) ? material : source;
+        if (!hasTexture(material)) return source;
+
+        remapUvs(ConnectedTextureLayout.createGrid(create.type()), tile);
+        return material;
+    }
+
+    private void remapUvs(ConnectedTextureLayout.Grid grid, int tile) {
+        int tileX = Math.floorMod(tile, grid.width());
+        int tileY = Math.floorDiv(tile, grid.width());
+        for (VectorM2f uv : uvs) {
+            uv.x = (tileX + uv.x) / grid.width();
+            uv.y = (tileY + uv.y) / grid.height();
+        }
     }
 
     private boolean createConnects(
