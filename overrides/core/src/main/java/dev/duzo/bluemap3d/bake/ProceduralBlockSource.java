@@ -415,11 +415,12 @@ public final class ProceduralBlockSource implements BlockModelSource {
         point[2] = (float) (z + centerZ);
     }
 
-    private static void rotateFurnitureFacing(float[] point, Direction facing) {
+    static void rotateFurnitureFacing(float[] point, Direction facing) {
+        // Match FurnitureBakedModelWrapper: facing.getOpposite().toYRot().
         double degrees = switch (facing) {
-            case EAST -> -90D;
+            case EAST -> 90D;
             case SOUTH -> 180D;
-            case WEST -> 90D;
+            case WEST -> 270D;
             default -> 0D;
         };
         if (degrees == 0D) return;
