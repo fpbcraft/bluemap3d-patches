@@ -1425,7 +1425,7 @@ index 701a9da..7d0c82b 100644
  import net.minecraft.world.level.block.state.BlockState;
  
  import java.awt.image.BufferedImage;
-@@ -33,6 +34,16 @@ public interface BlockModelSource {
+@@ -33,6 +34,23 @@ public interface BlockModelSource {
       */
      List<ModelQuad> quadsFor(BlockState state);
  
@@ -1437,6 +1437,13 @@ index 701a9da..7d0c82b 100644
 +     */
 +    default List<ModelQuad> quadsFor(BlockState state, CompoundTag blockEntityData) {
 +        return quadsFor(state);
++    }
++
++    /**
++     * Position-aware variant used by neighbour-sensitive rendering such as connected textures.
++     */
++    default List<ModelQuad> quadsFor(BlockRenderContext context) {
++        return quadsFor(context.state(), context.blockEntityData());
 +    }
 +
      /**
@@ -2344,11 +2351,14 @@ index 14cc6cc..3ba2e04 100644
  
      private final List<BlockModelSource> sources;
      private final int maxBlocks;
-@@ -97,10 +102,33 @@ public final class VolumeMesher {
+@@ -97,10 +102,37 @@ public final class VolumeMesher {
          java.util.Set<String> unresolved = new java.util.TreeSet<>();
  
++        BlockRenderContext.BlockLookup blockLookup = volume::stateAt;
          volume.forEachBlock((x, y, z, state) -> {
 +            CompoundTag blockEntityData = volume.blockEntityDataAt(x, y, z);
++            BlockRenderContext renderContext =
++                    new BlockRenderContext(state, blockEntityData, x, y, z, blockLookup);
 +
 +            String blockId = net.minecraft.core.registries.BuiltInRegistries.BLOCK
 +                    .getKey(state.getBlock()).toString();
@@ -2359,7 +2369,7 @@ index 14cc6cc..3ba2e04 100644
 +                for (BlockModelSource traceSource : sources) {
 +                    try {
 +                        traceSources.add(traceSource.getClass().getSimpleName() + "="
-+                                + traceSource.quadsFor(state, blockEntityData).size());
++                                + traceSource.quadsFor(renderContext).size());
 +                    } catch (RuntimeException error) {
 +                        traceSources.add(traceSource.getClass().getSimpleName() + "=ERROR:"
 +                                + error.getClass().getSimpleName());
@@ -2375,7 +2385,7 @@ index 14cc6cc..3ba2e04 100644
              List<ModelQuad> quads = List.of();
              for (BlockModelSource candidate : sources) {
 -                List<ModelQuad> got = candidate.quadsFor(state);
-+                List<ModelQuad> got = candidate.quadsFor(state, blockEntityData);
++                List<ModelQuad> got = candidate.quadsFor(renderContext);
                  if (!got.isEmpty()) {
                      source = candidate;
                      quads = got;
