@@ -141,7 +141,7 @@ final class ConnectedTextureResolver {
                         false));
     }
 
-    private static int constrainCreateCorners(int mask) {
+    static int constrainCreateCorners(int mask) {
         if ((mask & (ConnectedTextureLayout.TOP | ConnectedTextureLayout.RIGHT))
                 != (ConnectedTextureLayout.TOP | ConnectedTextureLayout.RIGHT)) {
             mask &= ~ConnectedTextureLayout.TOP_RIGHT;
