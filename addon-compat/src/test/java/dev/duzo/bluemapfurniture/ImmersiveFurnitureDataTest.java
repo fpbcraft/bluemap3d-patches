@@ -43,7 +43,7 @@ class ImmersiveFurnitureDataTest {
 
     @Test
     void decodesSavedDataIdentifierRegistry() {
-        var registry = ImmersiveFurnitureRuntime.registryFromNbt(Map.of(
+        var registry = ImmersiveFurnitureData.decodeIdentifierRegistry(Map.of(
                 "DataVersion", 3955,
                 "data", Map.of(
                         "usageCount", Map.of("abc123", 4),
