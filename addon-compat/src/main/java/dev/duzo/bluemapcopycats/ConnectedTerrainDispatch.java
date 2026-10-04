@@ -106,6 +106,7 @@ public final class ConnectedTerrainDispatch {
 
                 ORIGINALS.put(id, original);
                 states.put(entry.getValue(), dispatch);
+                entry.getValue().setResource(dispatch);
                 patched++;
             }
 
@@ -164,17 +165,24 @@ public final class ConnectedTerrainDispatch {
         for (Map.Entry<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
                 entry : new ArrayList<>(paths.entrySet())) {
             String alias = diagonalAlias(entry.getKey());
-            if (alias == null || paths.containsKey(alias)) continue;
+            if (alias == null) continue;
 
             var original = originalsByPath.get(entry.getValue());
             if (original == null) continue;
 
-            // Do not share the source ResourcePath. states is keyed by ResourcePath, so
-            // replacing a shared entry would also replace the normal (non-diagonal) block.
+            // Diagonal Blocks registers generated block ids even though those ids do not
+            // necessarily have their own resource-pack blockstate. BlueMap can therefore
+            // already have a ResourcePath for the alias that resolves to no renderer.
+            // Reuse that path if present, otherwise create one, and make the dispatch
+            // authoritative in both the backing map and the ResourcePath memoization.
             ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>
-                    aliasPath = new ResourcePath<>(alias);
-            paths.put(alias, aliasPath);
+                    aliasPath = paths.get(alias);
+            if (aliasPath == null) {
+                aliasPath = new ResourcePath<>(alias);
+                paths.put(alias, aliasPath);
+            }
             states.put(aliasPath, dispatch);
+            aliasPath.setResource(dispatch);
             ORIGINALS.put(alias, original);
             aliases++;
         }

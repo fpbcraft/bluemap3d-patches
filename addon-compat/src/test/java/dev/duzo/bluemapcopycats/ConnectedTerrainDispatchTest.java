@@ -35,6 +35,15 @@ final class ConnectedTerrainDispatchTest {
     }
 
     @Test
+    void usesDiagonalBlocksCardinalSourceForEachDiagonalArm() {
+        assertEquals("north", DiagonalDirectionMapping.cardinalFor("north_east"));
+        assertEquals("east", DiagonalDirectionMapping.cardinalFor("south_east"));
+        assertEquals("south", DiagonalDirectionMapping.cardinalFor("south_west"));
+        assertEquals("west", DiagonalDirectionMapping.cardinalFor("north_west"));
+        assertEquals(-45f, DiagonalDirectionMapping.rotationDegrees());
+    }
+
+    @Test
     void generatedWindowAliasesAreConnectedBlocks() {
         assertEquals(true, ConnectedTerrainDispatch.isConnectedBlock(
                 "diagonalwindows:createdeco/industrial_iron_bars"));

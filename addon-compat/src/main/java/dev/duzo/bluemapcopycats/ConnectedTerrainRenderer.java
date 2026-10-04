@@ -6,16 +6,13 @@ import de.bluecolored.bluemap.core.map.hires.RenderSettings;
 import de.bluecolored.bluemap.core.map.hires.TileModelView;
 import de.bluecolored.bluemap.core.map.hires.block.BlockRenderer;
 import de.bluecolored.bluemap.core.map.hires.block.ResourceModelRenderer;
-import de.bluecolored.bluemap.core.resources.ResourcePath;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.Variant;
-import de.bluecolored.bluemap.core.resources.pack.resourcepack.model.Model;
 import de.bluecolored.bluemap.core.util.math.Color;
 import de.bluecolored.bluemap.core.world.BlockState;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +34,6 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
 
     private final ResourcePack resourcePack;
     private final ResourceModelRenderer delegate;
-    private final Map<String, Variant> connectionVariants = new ConcurrentHashMap<>();
 
     public ConnectedTerrainRenderer(
             ResourcePack resourcePack,
@@ -61,26 +57,31 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
         int[] variants = {0};
 
         BlockState translated = translatedState(block.getBlockState(), isWall(id));
-        original.forEach(
-                translated,
-                block.getX(),
-                block.getY(),
-                block.getZ(),
-                variant -> {
-                    Color color = new Color();
-                    delegate.render(block, variant, tileModel.initialize(), color);
-                    variants[0]++;
-                });
+        if (isFence(id)) {
+            variants[0] += renderFenceBaseAndCardinals(
+                    block, tileModel, original, translated);
+        } else {
+            original.forEach(
+                    translated,
+                    block.getX(),
+                    block.getY(),
+                    block.getZ(),
+                    variant -> {
+                        Color color = new Color();
+                        delegate.render(block, variant, tileModel.initialize(), color);
+                        variants[0]++;
+                    });
+        }
 
         int diagonals = 0;
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "north_east", "north");
+                "north_east", DiagonalDirectionMapping.cardinalFor("north_east"));
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "south_east", "east");
+                "south_east", DiagonalDirectionMapping.cardinalFor("south_east"));
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "south_west", "south");
+                "south_west", DiagonalDirectionMapping.cardinalFor("south_west"));
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "north_west", "west");
+                "north_west", DiagonalDirectionMapping.cardinalFor("north_west"));
 
         int end = tileModel.getStart();
         tileModel.initialize(start);
@@ -107,79 +108,128 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
             return 0;
         }
 
-        Variant variant = connectionVariant(
-                block.getBlockState().getFormatted(),
+        List<Variant> variants = connectionVariants(
                 original,
                 translated,
                 wall,
-                cardinalDirection);
-        if (variant == null) return 0;
+                cardinalDirection,
+                block.getX(),
+                block.getY(),
+                block.getZ());
+        if (variants.isEmpty()) return 0;
 
-        Color color = new Color();
-        TileModelView diagonal = tileModel.initialize();
-        delegate.render(block, variant, diagonal, color);
-        if (diagonal.getSize() == 0) return 0;
+        int rendered = 0;
+        for (Variant variant : variants) {
+            Color color = new Color();
+            TileModelView diagonal = tileModel.initialize();
+            delegate.render(block, variant, diagonal, color);
+            if (diagonal.getSize() == 0) continue;
 
-        // The Minecraft client applies Diagonal Blocks' -45 degree baked-quad transform
-        // before the model reaches the renderer. Here we are transforming BlueMap's
-        // already-rendered mesh, whose block-model Y rotation convention is inverted.
-        // Using -45 here mirrors every arm onto the opposite diagonal (the failure visible
-        // in static map tiles); +45 reproduces N->NE, E->SE, S->SW and W->NW in BlueMap.
-        float diagonalScale = (float) Math.sqrt(2.0);
-        boolean scaleX = "east".equals(cardinalDirection) || "west".equals(cardinalDirection);
-        diagonal
-                .translate(-0.5f, -0.5f, -0.5f)
-                .scale(scaleX ? diagonalScale : 1f, 1f, scaleX ? 1f : diagonalScale)
-                .rotate(45f, 0f, 1f, 0f)
-                .translate(0.5f, 0.5f, 0.5f);
-        return 1;
+            // Mirror Diagonal Blocks' QuadUtils.rotateQuad() exactly: scale the source
+            // cardinal arm along its axis, then rotate it -45 degrees around block center.
+            float diagonalScale = (float) Math.sqrt(2.0);
+            boolean scaleX =
+                    "east".equals(cardinalDirection) || "west".equals(cardinalDirection);
+            diagonal
+                    .translate(-0.5f, -0.5f, -0.5f)
+                    .scale(scaleX ? diagonalScale : 1f, 1f, scaleX ? 1f : diagonalScale)
+                    .rotate(DiagonalDirectionMapping.rotationDegrees(), 0f, 1f, 0f)
+                    .translate(0.5f, 0.5f, 0.5f);
+            rendered++;
+        }
+        return rendered;
     }
 
-    private Variant connectionVariant(
-            String id,
+    private int renderFenceBaseAndCardinals(
+            BlockNeighborhood block,
+            TileModelView tileModel,
+            de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState original,
+            BlockState translated) {
+        BlockState base = disconnectedState(translated, false);
+        int rendered = 0;
+
+        List<Variant> baseVariants = variantsFor(
+                original, base, block.getX(), block.getY(), block.getZ());
+        for (Variant variant : baseVariants) {
+            Color color = new Color();
+            delegate.render(block, variant, tileModel.initialize(), color);
+            rendered++;
+        }
+
+        for (String cardinal : List.of("north", "east", "south", "west")) {
+            if (!"true".equals(translated.getProperties().get(cardinal))) continue;
+            for (Variant variant : connectionVariants(
+                    original,
+                    translated,
+                    false,
+                    cardinal,
+                    block.getX(),
+                    block.getY(),
+                    block.getZ())) {
+                Color color = new Color();
+                delegate.render(block, variant, tileModel.initialize(), color);
+                rendered++;
+            }
+        }
+
+        return rendered;
+    }
+
+    private List<Variant> connectionVariants(
             de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState original,
             BlockState translated,
             boolean wall,
-            String cardinalDirection) {
-        String key = id + "@" + cardinalDirection;
-        Variant cached = connectionVariants.get(key);
-        if (cached != null) return cached;
+            String cardinalDirection,
+            int x,
+            int y,
+            int z) {
+        BlockState disconnected = disconnectedState(translated, wall);
+        List<Variant> baseline = variantsFor(original, disconnected, x, y, z);
 
-        Map<String, String> props = new LinkedHashMap<>(translated.getProperties());
-        String disconnectedValue = wall ? "none" : "false";
-        for (String direction : List.of("north", "east", "south", "west")) {
-            props.put(direction, disconnectedValue);
+        Map<String, String> props = new LinkedHashMap<>(disconnected.getProperties());
+        props.put(cardinalDirection, wall ? "low" : "true");
+        BlockState cardinalOnly = new BlockState(disconnected.getFormatted(), Map.copyOf(props));
+        List<Variant> connected = variantsFor(original, cardinalOnly, x, y, z);
+
+        // Parsed multipart selectors keep stable Variant object identities. Subtracting
+        // the disconnected state by identity gives exactly the selector(s) introduced by
+        // enabling this cardinal arm, including multi-part custom fence/pane models.
+        List<Variant> introduced = new ArrayList<>();
+        for (Variant candidate : connected) {
+            if (!containsIdentity(baseline, candidate)) introduced.add(candidate);
         }
-        if (wall) props.put("up", "false");
+        return introduced;
+    }
+
+    private static List<Variant> variantsFor(
+            de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState original,
+            BlockState state,
+            int x,
+            int y,
+            int z) {
+        List<Variant> variants = new ArrayList<>();
+        original.forEach(state, x, y, z, variants::add);
+        return variants;
+    }
+
+    private static boolean containsIdentity(List<Variant> variants, Variant candidate) {
+        for (Variant variant : variants) {
+            if (variant == candidate) return true;
+        }
+        return false;
+    }
+
+    private static BlockState disconnectedState(BlockState state, boolean wall) {
+        Map<String, String> props = new LinkedHashMap<>(state.getProperties());
+        String disconnected = wall ? "none" : "false";
+        for (String direction : List.of("north", "east", "south", "west")) {
+            if (props.containsKey(direction)) props.put(direction, disconnected);
+        }
         for (String diagonal : List.of(
                 "north_east", "south_east", "south_west", "north_west")) {
             if (props.containsKey(diagonal)) props.put(diagonal, "false");
         }
-
-        BlockState disconnected = new BlockState(id, Map.copyOf(props));
-        Set<ResourcePath<Model>> disconnectedModels = new HashSet<>();
-        original.forEach(disconnected, 0, 0, 0,
-                variant -> disconnectedModels.add(variant.getModel()));
-
-        props.put(cardinalDirection, wall ? "low" : "true");
-        BlockState cardinalOnly = new BlockState(id, Map.copyOf(props));
-        List<Variant> candidates = new ArrayList<>();
-        original.forEach(cardinalOnly, 0, 0, 0, candidates::add);
-
-        ResourcePath<Model> missingPath = ResourcePack.MISSING_BLOCK_MODEL;
-        Model missing = resourcePack.getModel(missingPath);
-        for (Variant candidate : candidates) {
-            ResourcePath<Model> modelPath = candidate.getModel();
-            if (disconnectedModels.contains(modelPath)) continue;
-
-            Model model = resourcePack.getModel(modelPath);
-            if (model == null || model == missing) continue;
-
-            connectionVariants.put(key, candidate);
-            return candidate;
-        }
-
-        return null;
+        return new BlockState(state.getFormatted(), Map.copyOf(props));
     }
 
     private static BlockState translatedState(BlockState state, boolean wall) {
@@ -195,6 +245,13 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
             }
         }
         return new BlockState(state.getFormatted(), Map.copyOf(props));
+    }
+
+    static boolean isFence(String id) {
+        int colon = id.indexOf(':');
+        String namespace = colon >= 0 ? id.substring(0, colon) : "";
+        String path = colon >= 0 ? id.substring(colon + 1) : id;
+        return "diagonalfences".equals(namespace) || path.endsWith("_fence");
     }
 
     private static boolean isWall(String id) {
