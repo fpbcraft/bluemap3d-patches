@@ -65,11 +65,16 @@ final class ImmersiveFurnitureRuntime {
             }
         }
 
+        List<Path> registryCandidates = worldRoots.stream()
+                .map(root -> root.resolve("data").resolve("immersive_furniture.dat"))
+                .toList();
+
         Logger.global.logInfo(String.format(
-                "Immersive Furniture world data ready: roots=%s registryFiles=%s identifiers=%s",
+                "Immersive Furniture world data ready: roots=%s registryFiles=%s identifiers=%s candidates=%s",
                 worldRoots.size(),
                 registries,
-                mappings));
+                mappings,
+                registryCandidates));
     }
 
     static ImmersiveFurnitureData.Definition resolve(
