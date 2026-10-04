@@ -93,7 +93,10 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
                         FusionSpec fusionSpec = fusion.get(textureId);
 
                         try {
-                            BufferedImage image = ImageIO.read(path.toFile());
+                            BufferedImage image;
+                            try (var input = Files.newInputStream(path)) {
+                                image = ImageIO.read(input);
+                            }
                             if (image == null) return;
 
                             String createType = CreateConnectedTextures.typeForSheet(textureId);
@@ -172,8 +175,8 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
         Path base = connectedPath.resolveSibling(
                 name.substring(0, name.length() - "_connected.png".length()) + ".png");
         if (!Files.isRegularFile(base)) return null;
-        try {
-            return ImageIO.read(base.toFile());
+        try (var input = Files.newInputStream(base)) {
+            return ImageIO.read(input);
         } catch (IOException error) {
             return null;
         }
