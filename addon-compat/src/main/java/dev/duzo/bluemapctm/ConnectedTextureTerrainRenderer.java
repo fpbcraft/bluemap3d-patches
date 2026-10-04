@@ -113,7 +113,10 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
         // cutout girder faces are emitted and produces the transparency/culling regression
         // visible after CT compatibility is enabled. Preserve BlueMap's stock renderer
         // for those states and keep CT handling only for the actual connected pole.
-        if (!useConnectedRenderer(block.getBlockState())) {
+        if (!MetalGirderConnectedTexturePolicy.useConnectedRenderer(
+                block.getBlockState().getFormatted(),
+                block.getBlockState().getProperties())) {
+            int standardStart = blockModel.getStart();
             original.forEach(
                     block.getBlockState(),
                     block.getX(),
@@ -121,6 +124,7 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
                     block.getZ(),
                     variant -> standardRenderer.render(
                             block, variant, blockModel.initialize(), color));
+            blockModel.initialize(standardStart);
             return;
         }
 
@@ -137,13 +141,6 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
             color.flatten().straight();
             color.a = blockColorOpacity;
         }
-    }
-
-    static boolean useConnectedRenderer(BlockState state) {
-        if (!"create:metal_girder".equals(state.getFormatted())) return true;
-        Map<String, String> properties = state.getProperties();
-        return !"true".equals(properties.get("x"))
-                && !"true".equals(properties.get("z"));
     }
 
     private void renderVariant(Variant variant) {
