@@ -9,6 +9,7 @@ import de.bluecolored.bluemap.core.map.hires.RenderSettings;
 import de.bluecolored.bluemap.core.map.hires.TileModel;
 import de.bluecolored.bluemap.core.map.hires.TileModelView;
 import de.bluecolored.bluemap.core.map.hires.block.BlockRenderer;
+import de.bluecolored.bluemap.core.map.hires.block.BlockRendererType;
 import de.bluecolored.bluemap.core.resources.BlockColorCalculatorFactory;
 import de.bluecolored.bluemap.core.resources.ResourcePath;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
@@ -18,6 +19,7 @@ import de.bluecolored.bluemap.core.resources.pack.resourcepack.model.Face;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.model.Model;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.texture.Texture;
 import de.bluecolored.bluemap.core.util.Direction;
+import de.bluecolored.bluemap.core.util.Key;
 import de.bluecolored.bluemap.core.util.math.Color;
 import de.bluecolored.bluemap.core.util.math.MatrixM4f;
 import de.bluecolored.bluemap.core.util.math.VectorM2f;
@@ -42,7 +44,15 @@ import java.util.concurrent.ConcurrentHashMap;
 @SuppressWarnings("DuplicatedCode")
 public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
 
+    static final Key RENDERER_KEY = new Key("bluemap_ctm", "connected");
     private static final float BLOCK_SCALE = 1f / 16f;
+
+    static void register() {
+        if (BlockRendererType.REGISTRY.get(RENDERER_KEY) != null) return;
+        BlockRendererType.REGISTRY.register(new BlockRendererType.Impl(
+                RENDERER_KEY,
+                ConnectedTextureTerrainRenderer::new));
+    }
 
     private final ResourcePack resourcePack;
     private final TextureGallery textureGallery;
