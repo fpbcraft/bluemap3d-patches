@@ -260,25 +260,10 @@ final class ImmersiveFurnitureData {
             Transparency transparency,
             int x,
             int y) {
-        int argb = nativeAbgrToArgb(nativeAbgr);
-        if (transparency != Transparency.TRANSLUCENT) return argb;
-
-        int alpha = argb >>> 24 & 0xFF;
-        if (alpha == 0 || alpha == 0xFF) return argb;
-
-        // BlueMap 5.7 renders half-transparent materials with depth writes enabled.
-        // Ordered alpha-to-coverage avoids transparent furniture punching holes in
-        // other translucent terrain (notably glass floors) while preserving the
-        // approximate visual opacity.
-        int[][] bayer4 = {
-                {0, 8, 2, 10},
-                {12, 4, 14, 6},
-                {3, 11, 1, 9},
-                {15, 7, 13, 5}
-        };
-        int threshold = bayer4[Math.floorMod(y, 4)][Math.floorMod(x, 4)] * 16 + 8;
-        int normalizedAlpha = alpha > threshold ? 0xFF : 0x00;
-        return normalizedAlpha << 24 | argb & 0x00FFFFFF;
+        // NativeImage stores pixels as ABGR while BufferedImage expects ARGB.
+        // Preserve the original alpha exactly; terrain-face holes around furniture
+        // are a block-culling issue, not a texture-alpha issue.
+        return nativeAbgrToArgb(nativeAbgr);
     }
 
     private static Transparency transparency(String value) {
