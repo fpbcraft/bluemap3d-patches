@@ -104,6 +104,29 @@ class EntityModelSourceTest {
     }
 
     @Test
+    void normalizesRendererTextureLocationForBlueMapLookup() {
+        assertEquals(
+                "icys-better-horses:entity/horse/belgian/sabino",
+                EntityModelSource.exactTextureOverride(
+                        java.util.Map.of(
+                                "__bm3d_texture_main",
+                                "icys-better-horses:textures/entity/horse/belgian/sabino.png"),
+                        "main"));
+    }
+
+    @Test
+    void exactTextureOverrideIsLayerSpecific() {
+        var metadata = java.util.Map.of(
+                "__bm3d_texture_main",
+                "example:textures/entity/horse/coat.png");
+
+        assertEquals(
+                "example:entity/horse/coat",
+                EntityModelSource.exactTextureOverride(metadata, "main"));
+        assertEquals(null, EntityModelSource.exactTextureOverride(metadata, "armor"));
+    }
+
+    @Test
     void babyAppearanceOutranksAdultGeoModel() {
         var metadata = java.util.Map.of("__bm3d_visual_age", "baby");
 
