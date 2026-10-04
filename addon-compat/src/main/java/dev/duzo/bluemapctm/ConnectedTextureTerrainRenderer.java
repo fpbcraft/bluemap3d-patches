@@ -555,13 +555,18 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
             VectorM3f c2,
             VectorM3f c3) {
         VectorM3f[] positions = {c0, c1, c2, c3};
-        int[] right = uvAxis(element, positions, true);
-        int[] down = uvAxis(element, positions, false);
+        Direction face = directionOf(faceRotationVector);
+        int[] right = uvAxis(element, positions, true, face);
+        int[] down = uvAxis(element, positions, false, face);
         if (right == null || down == null) return fallbackAxes(directionOf(faceRotationVector));
         return new AxisPair(negate(down), right);
     }
 
-    private int[] uvAxis(Element element, VectorM3f[] positions, boolean uAxis) {
+    private int[] uvAxis(
+            Element element,
+            VectorM3f[] positions,
+            boolean uAxis,
+            Direction face) {
         int target = uAxis ? 0 : 1;
         int other = uAxis ? 1 : 0;
 
@@ -581,13 +586,20 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
             direction.rotateAndScale(element.getRotation().getMatrix());
             makeRotationRelative(direction);
             int[] axis = dominantAxis(direction.x, direction.y, direction.z);
-            if (axis != null) return axis;
+            if (axis != null && face != null && dotFace(axis, face) == 0) return axis;
         }
         return null;
     }
 
     private static float uv(VectorM2f uv, int component) {
         return component == 0 ? uv.x : uv.y;
+    }
+
+    private static int dotFace(int[] axis, Direction face) {
+        Vector3i vector = face.toVector();
+        return axis[0] * vector.getX()
+                + axis[1] * vector.getY()
+                + axis[2] * vector.getZ();
     }
 
     private static AxisPair fallbackAxes(Direction face) {
