@@ -19,6 +19,10 @@ final class ImmersiveFurnitureData {
         X, Y, Z
     }
 
+    enum Transparency {
+        SOLID, CUTOUT_MIPPED, CUTOUT, TRANSLUCENT
+    }
+
     record Element(
             float[] from,
             float[] to,
@@ -27,6 +31,8 @@ final class ImmersiveFurnitureData {
             int mask,
             String material,
             int emission,
+            int color,
+            Transparency transparency,
             Map<String, int[]> bakedTextures) {
         Element {
             from = from.clone();
@@ -136,6 +142,10 @@ final class ImmersiveFurnitureData {
                 integer(value(element, "Mask", "mask"), 3),
                 source,
                 integer(value(element, "Emission", "emission"), 0),
+                integer(value(element, "Color", "color"), -1),
+                transparency(material == null
+                        ? null
+                        : string(value(material, "Transparency", "transparency"))),
                 bakedTextures(
                         value(element, "BakedTexture", "bakedTexture"),
                         value(element, "BakedTextures", "bakedTextures")));
@@ -153,6 +163,7 @@ final class ImmersiveFurnitureData {
         Object material = field(element, "material");
         Object source = field(material, "source");
         String materialId = source == null ? "minecraft:oak_log" : source.toString();
+        Object transparency = field(material, "transparency");
 
         return new Element(
                 from,
@@ -162,6 +173,8 @@ final class ImmersiveFurnitureData {
                 integer(field(element, "mask"), 3),
                 materialId,
                 integer(field(element, "emission"), 0),
+                integer(field(element, "color"), -1),
+                transparency(transparency == null ? null : String.valueOf(transparency)),
                 Map.of());
     }
 
@@ -232,6 +245,49 @@ final class ImmersiveFurnitureData {
             return null;
         }
         return new float[]{nx.floatValue(), ny.floatValue(), nz.floatValue()};
+    }
+
+    static int nativeAbgrToArgb(int color) {
+        int a = color >>> 24 & 0xFF;
+        int b = color >>> 16 & 0xFF;
+        int g = color >>> 8 & 0xFF;
+        int r = color & 0xFF;
+        return a << 24 | r << 16 | g << 8 | b;
+    }
+
+    static int normalizeBakedPixel(
+            int nativeAbgr,
+            Transparency transparency,
+            int x,
+            int y) {
+        int argb = nativeAbgrToArgb(nativeAbgr);
+        if (transparency != Transparency.TRANSLUCENT) return argb;
+
+        int alpha = argb >>> 24 & 0xFF;
+        if (alpha == 0 || alpha == 0xFF) return argb;
+
+        // BlueMap 5.7 renders half-transparent materials with depth writes enabled.
+        // Ordered alpha-to-coverage avoids transparent furniture punching holes in
+        // other translucent terrain (notably glass floors) while preserving the
+        // approximate visual opacity.
+        int[][] bayer4 = {
+                {0, 8, 2, 10},
+                {12, 4, 14, 6},
+                {3, 11, 1, 9},
+                {15, 7, 13, 5}
+        };
+        int threshold = bayer4[Math.floorMod(y, 4)][Math.floorMod(x, 4)] * 16 + 8;
+        int normalizedAlpha = alpha > threshold ? 0xFF : 0x00;
+        return normalizedAlpha << 24 | argb & 0x00FFFFFF;
+    }
+
+    private static Transparency transparency(String value) {
+        if (value == null) return Transparency.SOLID;
+        try {
+            return Transparency.valueOf(value.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            return Transparency.SOLID;
+        }
     }
 
     private static Axis axis(String value) {
