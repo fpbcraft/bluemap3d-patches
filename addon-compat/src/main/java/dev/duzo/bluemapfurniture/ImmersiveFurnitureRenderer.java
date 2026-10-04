@@ -222,8 +222,11 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
         target.setUvs(second, 0F,1F, 1F,0F, 0F,0F);
         target.setMaterialIndex(first, appearance.textureIndex());
         target.setMaterialIndex(second, appearance.textureIndex());
-        target.setColor(first, 1F,1F,1F);
-        target.setColor(second, 1F,1F,1F);
+        float tintR = ((element.color() >>> 16) & 0xFF) / 255F;
+        float tintG = ((element.color() >>> 8) & 0xFF) / 255F;
+        float tintB = (element.color() & 0xFF) / 255F;
+        target.setColor(first, tintR, tintG, tintB);
+        target.setColor(second, tintR, tintG, tintB);
 
         LightData light = block.getLightData();
         int blockLight = Math.max(light.getBlockLight(), Math.min(15, element.emission()));
@@ -317,7 +320,7 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
 
         if (width <= 0 || height <= 0 || pixels.length != width * height) return null;
 
-        String key = bakedTextureKey(width, height, pixels);
+        String key = bakedTextureKey(width, height, pixels, element.transparency());
         ResourcePath<Texture> path =
                 new ResourcePath<>("bluemap_immersive_furniture", "baked/" + key);
 
@@ -325,8 +328,8 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
         if (existing != 0) return new Appearance(existing);
 
         try {
-            BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-            image.setRGB(0, 0, width, height, pixels, 0, width);
+            BufferedImage image =
+                    bakedImage(width, height, pixels, element.transparency());
 
             Texture texture = Texture.from(path, image);
             path.setResource(texture);
@@ -380,7 +383,8 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
 
                         if (width <= 0 || height <= 0 || pixels.length != width * height) continue;
 
-                        String key = bakedTextureKey(width, height, pixels);
+                        String key = bakedTextureKey(
+                                width, height, pixels, element.transparency());
                         if (!seen.add(key)) continue;
 
                         ResourcePath<Texture> path =
@@ -388,9 +392,8 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
                         if (textureGallery.get(path) != 0) continue;
 
                         try {
-                            BufferedImage image =
-                                    new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-                            image.setRGB(0, 0, width, height, pixels, 0, width);
+                            BufferedImage image = bakedImage(
+                                    width, height, pixels, element.transparency());
                             Texture texture = Texture.from(path, image);
                             path.setResource(texture);
                             textureGallery.put(path);
@@ -409,12 +412,36 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
         return added;
     }
 
-    private static String bakedTextureKey(int width, int height, int[] pixels) {
+    private static BufferedImage bakedImage(
+            int width,
+            int height,
+            int[] pixels,
+            ImmersiveFurnitureData.Transparency transparency) {
+        BufferedImage image =
+                new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        int[] argb = new int[pixels.length];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int index = x + y * width;
+                argb[index] = ImmersiveFurnitureData.normalizeBakedPixel(
+                        pixels[index], transparency, x, y);
+            }
+        }
+        image.setRGB(0, 0, width, height, argb, 0, width);
+        return image;
+    }
+
+    private static String bakedTextureKey(
+            int width,
+            int height,
+            int[] pixels,
+            ImmersiveFurnitureData.Transparency transparency) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            ByteBuffer header = ByteBuffer.allocate(8);
+            ByteBuffer header = ByteBuffer.allocate(12);
             header.putInt(width);
             header.putInt(height);
+            header.putInt(transparency.ordinal());
             digest.update(header.array());
 
             ByteBuffer pixelBytes = ByteBuffer.allocate(pixels.length * Integer.BYTES);
