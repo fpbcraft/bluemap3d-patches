@@ -13,6 +13,7 @@ import de.bluecolored.bluemap.core.util.Direction;
 import de.bluecolored.bluemap.core.util.math.Color;
 import de.bluecolored.bluemap.core.world.BlockState;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
+import dev.duzo.bluemapctm.ConnectedTextureTerrainDispatch;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +39,19 @@ final class CopycatsAppearanceResolver {
             Direction wantedFace,
             BlockNeighborhood block) {
         BlockState materialState = material.asBlockState();
-        var stateResource = resourcePack.getBlockState(materialState);
+        String materialId = materialState.getFormatted();
+
+        // Static compatibility adapters replace some ordinary blockstates with
+        // lightweight renderer-dispatch blockstates after BlueMap has baked resources.
+        // Copycats needs the copied material's real model/texture, not that dispatch
+        // placeholder, so unwrap any routed material before resolving its faces.
+        var stateResource = ConnectedTextureTerrainDispatch.original(materialId);
+        if (stateResource == null) {
+            stateResource = ConnectedTerrainDispatch.original(materialId);
+        }
+        if (stateResource == null) {
+            stateResource = resourcePack.getBlockState(materialState);
+        }
         if (stateResource == null) return null;
 
         List<Variant> variants = new ArrayList<>(2);
