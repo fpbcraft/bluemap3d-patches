@@ -19,6 +19,7 @@ import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -124,7 +125,9 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
 
     ResourcePath<Texture> fusionMaterial(String texture, FusionSpec spec, int mask) {
         if ("pieced".equals(spec.layout()) || "overlay".equals(spec.layout())) {
-            return virtualPath("fusion/" + safe(texture) + "/" + spec.layout() + "/mask/" + (mask & 0xFF));
+            return virtualPath(
+                    "fusion/" + safe(texture) + "/" + spec.layout()
+                            + "/pattern/" + compositePattern(spec.layout(), mask));
         }
         return virtualPath("fusion/" + safe(texture) + "/sheet");
     }
@@ -241,25 +244,24 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
         }
 
         List<BufferedImage> tiles = cropTiles(image, spec.grid(), frame);
-        List<Texture> output = new ArrayList<>(256);
-
-        if ("pieced".equals(spec.layout())) {
-            for (int mask = 0; mask < 256; mask++) {
-                BufferedImage composite = composePieced(tiles, mask);
-                output.add(texture(
-                        virtualPath("fusion/" + safe(source) + "/pieced/mask/" + mask),
-                        composite));
-            }
-            return output;
-        }
+        Map<String, Texture> output = new LinkedHashMap<>();
 
         for (int mask = 0; mask < 256; mask++) {
-            BufferedImage composite = composeOverlay(tiles, mask);
-            output.add(texture(
-                    virtualPath("fusion/" + safe(source) + "/overlay/mask/" + mask),
-                    composite));
+            String pattern = compositePattern(spec.layout(), mask);
+            if (output.containsKey(pattern)) continue;
+
+            BufferedImage composite = "pieced".equals(spec.layout())
+                    ? composePieced(tiles, mask)
+                    : composeOverlay(tiles, mask);
+            output.put(
+                    pattern,
+                    texture(
+                            virtualPath(
+                                    "fusion/" + safe(source) + "/" + spec.layout()
+                                            + "/pattern/" + pattern),
+                            composite));
         }
-        return output;
+        return List.copyOf(output.values());
     }
 
     private List<Texture> bakeCreate(
@@ -342,6 +344,24 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
             }
         }
         return output;
+    }
+
+    static String compositePattern(String layout, int mask) {
+        if ("pieced".equals(layout)) {
+            int whole = ConnectedTextureLayout.fusionPiecedWholeTile(mask);
+            if (whole >= 0) return "whole-" + whole;
+            return "quarters-"
+                    + ConnectedTextureLayout.fusionPiecedCornerTile(true, true, mask) + "-"
+                    + ConnectedTextureLayout.fusionPiecedCornerTile(true, false, mask) + "-"
+                    + ConnectedTextureLayout.fusionPiecedCornerTile(false, false, mask) + "-"
+                    + ConnectedTextureLayout.fusionPiecedCornerTile(false, true, mask);
+        }
+
+        List<Integer> tiles = ConnectedTextureLayout.fusionOverlayTiles(mask);
+        if (tiles.isEmpty()) return "none";
+        StringBuilder key = new StringBuilder("tiles");
+        for (int tile : tiles) key.append('-').append(tile);
+        return key.toString();
     }
 
     private static BufferedImage composePieced(List<BufferedImage> tiles, int mask) {
