@@ -14,8 +14,6 @@ import de.bluecolored.bluemap.core.world.LightData;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 import de.bluecolored.bluemap.core.logger.Logger;
 
-import java.awt.image.BufferedImage;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -109,26 +107,7 @@ public final class BitsNBobsStrutTerrainRenderer implements BlockRenderer {
     }
 
     private int textureFor(String id) {
-        String[] candidates = switch (id) {
-            case "bits_n_bobs:weathered_girder_strut" -> new String[]{
-                    "bits_n_bobs:block/weathered_girder",
-                    "bits_n_bobs:block/weathered_girder_attachment",
-                    "bits_n_bobs:block/weathered_industrial_iron_block",
-                    "create:block/industrial_iron_block"
-            };
-            case "bits_n_bobs:cable_girder_strut" -> new String[]{
-                    "bits_n_bobs:block/cable",
-                    "create:block/industrial_iron_block"
-            };
-            default -> new String[]{
-                    // The B&B item model itself uses Create's girder texture for the beam.
-                    // Prefer it over girder_attachment, which some dedicated-server resource
-                    // loads expose as a Texture.missing(...) placeholder under a valid key.
-                    "create:block/girder",
-                    "bits_n_bobs:block/girder_attachment",
-                    "create:block/industrial_iron_block"
-            };
-        };
+        String[] candidates = BitsNBobsStrutTextures.candidates(id);
 
         for (String candidate : candidates) {
             ResourcePath<Texture> path = new ResourcePath<>(candidate);
@@ -137,9 +116,6 @@ public final class BitsNBobsStrutTerrainRenderer implements BlockRenderer {
             // it returns the magenta/black missing texture when the requested path
             // does not exist. Check the loaded texture map directly instead.
             if (!resourcePack.getTextures().containsKey(path)) continue;
-
-            Texture texture = resourcePack.getTexture(path);
-            if (!isUsableTexture(texture)) continue;
 
             int index = textureGallery.get(path);
             if (index > 0) {
@@ -169,40 +145,6 @@ public final class BitsNBobsStrutTerrainRenderer implements BlockRenderer {
                 "STATIC GIRDER block=%s has no usable texture; skipping instead of rendering missing-texture cubes",
                 id));
         return -1;
-    }
-
-    private static boolean isUsableTexture(Texture texture) {
-        if (texture == null) return false;
-        try {
-            return isUsableImage(texture.getTextureImage());
-        } catch (IOException | RuntimeException error) {
-            return false;
-        }
-    }
-
-    static boolean isUsableImage(BufferedImage image) {
-        if (image == null || image.getWidth() <= 0 || image.getHeight() <= 0) return false;
-
-        int samples = 0;
-        int magenta = 0;
-        int dark = 0;
-        int stepX = Math.max(1, image.getWidth() / 16);
-        int stepY = Math.max(1, image.getHeight() / 16);
-        for (int y = 0; y < image.getHeight(); y += stepY) {
-            for (int x = 0; x < image.getWidth(); x += stepX) {
-                int rgb = image.getRGB(x, y);
-                int r = (rgb >>> 16) & 0xFF;
-                int g = (rgb >>> 8) & 0xFF;
-                int b = rgb & 0xFF;
-                samples++;
-                if (r > 150 && b > 120 && g < 100) magenta++;
-                if (r < 55 && g < 55 && b < 55) dark++;
-            }
-        }
-
-        // BlueMap's missing sprite is a magenta/black checkerboard. A valid B&B/Create
-        // metal texture can be dark, but it will not contain both colors at this ratio.
-        return !(samples > 0 && magenta * 5 > samples && dark * 5 > samples);
     }
 
     private void appendEndpoint(Vec anchor, Vec normal, int texture) {
