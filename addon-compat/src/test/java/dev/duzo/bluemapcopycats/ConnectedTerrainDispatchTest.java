@@ -36,10 +36,10 @@ final class ConnectedTerrainDispatchTest {
 
     @Test
     void usesDiagonalBlocksCardinalSourceForEachDiagonalArm() {
-        assertEquals("east", ConnectedTerrainRenderer.cardinalDirectionForDiagonal("north_east"));
-        assertEquals("south", ConnectedTerrainRenderer.cardinalDirectionForDiagonal("south_east"));
-        assertEquals("west", ConnectedTerrainRenderer.cardinalDirectionForDiagonal("south_west"));
-        assertEquals("north", ConnectedTerrainRenderer.cardinalDirectionForDiagonal("north_west"));
+        assertEquals("east", DiagonalDirectionMapping.cardinalFor("north_east"));
+        assertEquals("south", DiagonalDirectionMapping.cardinalFor("south_east"));
+        assertEquals("west", DiagonalDirectionMapping.cardinalFor("south_west"));
+        assertEquals("north", DiagonalDirectionMapping.cardinalFor("north_west"));
     }
 
     @Test
