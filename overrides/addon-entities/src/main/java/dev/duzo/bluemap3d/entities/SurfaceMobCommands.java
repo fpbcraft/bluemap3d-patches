@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import dev.duzo.bluemap3d.bake.ConnectedTextureDiagnostics;
 import dev.duzo.bluemap3d.bake.EntityModelSource;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -40,6 +41,9 @@ final class SurfaceMobCommands {
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.literal("dump-mobs")
                                 .executes(context -> dump(context.getSource())))
+                        .then(Commands.literal("dump-connected-textures")
+                                .executes(context -> ConnectedTextureDiagnostics.dump(
+                                        context.getSource())))
                         .then(Commands.literal("diagnose-mob")
                                 .then(Commands.argument("entity", StringArgumentType.word())
                                         .executes(context -> diagnose(
