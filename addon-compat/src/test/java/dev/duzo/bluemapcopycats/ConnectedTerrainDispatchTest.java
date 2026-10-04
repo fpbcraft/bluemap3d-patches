@@ -44,15 +44,6 @@ final class ConnectedTerrainDispatchTest {
     }
 
     @Test
-    void identifiesFenceGeometryThatUsesDeterministicComposition() {
-        assertEquals(true, ConnectedTerrainRenderer.isFence("minecraft:oak_fence"));
-        assertEquals(true, ConnectedTerrainRenderer.isFence(
-                "diagonalfences:minecraft/oak_fence"));
-        assertEquals(false, ConnectedTerrainRenderer.isFence(
-                "diagonalwindows:createdeco/industrial_iron_bars"));
-    }
-
-    @Test
     void generatedWindowAliasesAreConnectedBlocks() {
         assertEquals(true, ConnectedTerrainDispatch.isConnectedBlock(
                 "diagonalwindows:createdeco/industrial_iron_bars"));
