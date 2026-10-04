@@ -30,12 +30,12 @@ public final class BlueMapCompatAddon implements Runnable {
             ConfiguredModelAliasHook.install(api);
             ConfiguredTintHook.install(api);
             TrafficCraftAdapter.onBlueMapEnable(api);
-            ImmersiveFurnitureAdapter.onBlueMapEnable(api);
 
-            // Run this last. Legacy/fallback Dynamic Trees aliases may still exist in
-            // local compat config; the native renderer must reclaim those branch/root
-            // blockstates after generic aliases have been applied.
+            // Reclaim Dynamic Trees after generic aliases first, then install
+            // Immersive Furniture last so no other resource-pack mutator in this
+            // callback can replace its cached custom-renderer blockstates.
             DynamicTreesTerrainDispatch.apply(api);
+            ImmersiveFurnitureAdapter.onBlueMapEnable(api);
         });
 
         Logger.global.logInfo(
