@@ -44,6 +44,9 @@ final class SurfaceMobCommands {
                         .then(Commands.literal("dump-connected-textures")
                                 .executes(context -> ConnectedTextureDiagnostics.dump(
                                         context.getSource())))
+                        .then(Commands.literal("connected-texture-stats")
+                                .executes(context -> ConnectedTextureDiagnostics.runtimeStats(
+                                        context.getSource())))
                         .then(Commands.literal("diagnose-mob")
                                 .then(Commands.argument("entity", StringArgumentType.word())
                                         .executes(context -> diagnose(
