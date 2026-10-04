@@ -147,6 +147,18 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
             "getTexture",
             "getPuffState");
 
+    /**
+     * Optional indexed appearance conventions that need two calls to resolve a stable
+     * texture token. Kept reflective so addon-entities has no compile-time dependency on
+     * the owning mod.
+     */
+    private static final List<IndexedAppearanceConvention> INDEXED_APPEARANCE_CONVENTIONS =
+            List.of(new IndexedAppearanceConvention(
+                    "bhCoat",
+                    "bhCoatSet",
+                    "coatId",
+                    "texture"));
+
     /** Reflection discovery is per entity class, not per mob per publish tick. */
     private static final Map<Class<?>, List<Method>> APPEARANCE_METHODS =
             new ConcurrentHashMap<>();
@@ -201,7 +213,50 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
             }
         }
 
+        visual = appendIndexedAppearance(mob, metadata, visual);
+
         return Map.copyOf(metadata);
+    }
+
+    private static int appendIndexedAppearance(
+            Object subject, Map<String, String> metadata, int visual) {
+        for (IndexedAppearanceConvention convention : INDEXED_APPEARANCE_CONVENTIONS) {
+            try {
+                Method indexGetter = subject.getClass().getMethod(convention.indexGetter());
+                Method paletteGetter = subject.getClass().getMethod(convention.paletteGetter());
+                if (indexGetter.getParameterCount() != 0 || paletteGetter.getParameterCount() != 0) {
+                    continue;
+                }
+
+                Object rawIndex = indexGetter.invoke(subject);
+                Object palette = paletteGetter.invoke(subject);
+                if (!(rawIndex instanceof Number index) || palette == null) continue;
+
+                Method idGetter =
+                        palette.getClass().getMethod(convention.idGetter(), int.class);
+                String token = appearanceToken(idGetter.invoke(palette, index.intValue()));
+                if (token != null && !token.isBlank()) {
+                    metadata.put("__bm3d_visual_" + visual++, token);
+                }
+
+                // Some mods expose the same exact texture resource used by their renderer.
+                // Prefer carrying that resource through to the model source instead of
+                // asking the generic filename scorer to rediscover it. Icy's Better Horses
+                // uses BreedCoatSet#texture(coat, baby) for BhHorseRenderer#getTextureLocation.
+                if (convention.textureGetter() != null) {
+                    Method textureGetter = palette.getClass().getMethod(
+                            convention.textureGetter(), int.class, boolean.class);
+                    boolean baby = subject instanceof AgeableMob ageable && ageable.isBaby();
+                    Object texture = textureGetter.invoke(palette, index.intValue(), baby);
+                    if (texture instanceof ResourceLocation location) {
+                        metadata.put("__bm3d_texture_main", location.toString());
+                    }
+                }
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                // Optional convention: absence/failure must never break generic mob publishing.
+            }
+        }
+        return visual;
     }
 
     private static List<Method> discoverAppearanceMethods(Class<?> type) {
@@ -253,6 +308,13 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
         String text = String.valueOf(value);
         if (text.length() > 96 || text.matches(".*@[0-9a-fA-F]+$")) return null;
         return text;
+    }
+
+    private record IndexedAppearanceConvention(
+            String indexGetter,
+            String paletteGetter,
+            String idGetter,
+            String textureGetter) {
     }
 
     static ResourceLocation modelLocation(ResourceLocation typeId) {

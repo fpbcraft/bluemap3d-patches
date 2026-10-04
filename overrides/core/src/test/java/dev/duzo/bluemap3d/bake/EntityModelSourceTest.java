@@ -53,6 +53,34 @@ class EntityModelSourceTest {
     }
 
     @Test
+    void sharedFamilyTokenCannotSelectDifferentGeoEntity() {
+        assertEquals(
+                0,
+                EntityAssetMatch.geometryScore(
+                        "belgian_horse",
+                        "assets/icys-better-horses/geo/horse_cart.geo.json",
+                        "main"));
+    }
+
+    @Test
+    void shorterSharedFamilyGeoNameStillMatchesEntity() {
+        assertTrue(
+                EntityAssetMatch.geometryScore(
+                        "badlands_creeper",
+                        "assets/creeperoverhaul/geo/badlands.geo.json",
+                        "main") > 0);
+    }
+
+    @Test
+    void entitySpecificHorseGeoStillMatches() {
+        assertTrue(
+                EntityAssetMatch.geometryScore(
+                        "belgian_horse",
+                        "assets/icys-better-horses/geo/belgian_horse.geo.json",
+                        "main") > 0);
+    }
+
+    @Test
     void textureDirectoryMayCarryEntityVariantName() {
         assertTrue(
                 EntityAssetMatch.score(
@@ -73,6 +101,29 @@ class EntityModelSourceTest {
                 "main");
 
         assertTrue(main > glow);
+    }
+
+    @Test
+    void normalizesRendererTextureLocationForBlueMapLookup() {
+        assertEquals(
+                "icys-better-horses:entity/horse/belgian/sabino",
+                EntityModelSource.exactTextureOverride(
+                        java.util.Map.of(
+                                "__bm3d_texture_main",
+                                "icys-better-horses:textures/entity/horse/belgian/sabino.png"),
+                        "main"));
+    }
+
+    @Test
+    void exactTextureOverrideIsLayerSpecific() {
+        var metadata = java.util.Map.of(
+                "__bm3d_texture_main",
+                "example:textures/entity/horse/coat.png");
+
+        assertEquals(
+                "example:entity/horse/coat",
+                EntityModelSource.exactTextureOverride(metadata, "main"));
+        assertEquals(null, EntityModelSource.exactTextureOverride(metadata, "armor"));
     }
 
     @Test
