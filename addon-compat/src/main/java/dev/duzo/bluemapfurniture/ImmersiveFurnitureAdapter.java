@@ -6,11 +6,13 @@ import de.bluecolored.bluemap.core.logger.Logger;
 import de.bluecolored.bluemap.core.resources.ResourcePath;
 import de.bluecolored.bluemap.core.resources.adapter.ResourcesGson;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
+import de.bluecolored.bluemap.core.world.mca.MCAWorld;
 import de.bluecolored.bluemap.core.util.Key;
 import de.bluecolored.bluemap.core.world.mca.blockentity.BlockEntityType;
 
 import java.io.StringReader;
 import java.lang.reflect.Field;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -30,8 +32,7 @@ public final class ImmersiveFurnitureAdapter {
             {
               "variants": {
                 "": {
-                  "renderer": "bluemap_immersive_furniture:furniture",
-                  "model": "immersive_furniture:block/furniture"
+                  "renderer": "bluemap_immersive_furniture:furniture"
                 }
               }
             }
@@ -59,6 +60,14 @@ public final class ImmersiveFurnitureAdapter {
                     "Immersive Furniture compatibility could not access BlueMap resource pack");
             return;
         }
+
+        List<Path> worldRoots = impl.blueMapService().getWorlds().values().stream()
+                .filter(MCAWorld.class::isInstance)
+                .map(MCAWorld.class::cast)
+                .map(MCAWorld::getWorldFolder)
+                .distinct()
+                .toList();
+        ImmersiveFurnitureRuntime.configureWorldRoots(worldRoots);
 
         int routed = routeFurniture(resourcePack);
         Logger.global.logInfo(String.format(
