@@ -107,21 +107,7 @@ public final class BitsNBobsStrutTerrainRenderer implements BlockRenderer {
     }
 
     private int textureFor(String id) {
-        String[] candidates = switch (id) {
-            case "bits_n_bobs:weathered_girder_strut" -> new String[]{
-                    "bits_n_bobs:block/weathered_girder",
-                    "bits_n_bobs:block/weathered_girder_attachment",
-                    "bits_n_bobs:block/weathered_industrial_iron_block"
-            };
-            case "bits_n_bobs:cable_girder_strut" -> new String[]{
-                    "bits_n_bobs:block/industrial_iron_block",
-                    "bits_n_bobs:block/girder_attachment"
-            };
-            default -> new String[]{
-                    "bits_n_bobs:block/girder_attachment",
-                    "bits_n_bobs:block/industrial_iron_block"
-            };
-        };
+        String[] candidates = BitsNBobsStrutTextures.candidates(id);
 
         for (String candidate : candidates) {
             ResourcePath<Texture> path = new ResourcePath<>(candidate);

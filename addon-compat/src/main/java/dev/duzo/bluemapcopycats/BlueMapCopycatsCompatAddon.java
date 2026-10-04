@@ -19,6 +19,7 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
 
     private static final Key RENDERER_KEY = new Key("bluemap_copycats", "terrain");
     private static final Key GIRDER_RENDERER_KEY = new Key("bluemap_copycats", "bits_n_bobs_girder");
+    private static final Key INVISIBLE_RENDERER_KEY = new Key("bluemap_copycats", "invisible");
     private static final Key CONNECTED_RENDERER_KEY = new Key("bluemap_copycats", "connected");
 
     private static final List<Key> BLOCK_ENTITY_IDS = List.of(
@@ -37,6 +38,7 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
     public void run() {
         registerRenderer();
         registerGirderRenderer();
+        registerInvisibleRenderer();
         registerConnectedRenderer();
         registerBlockEntities();
         registerGirderBlockEntity();
@@ -77,6 +79,16 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
         BlockRendererType.REGISTRY.register(new BlockRendererType.Impl(
                 GIRDER_RENDERER_KEY,
                 BitsNBobsStrutTerrainRenderer::new
+        ));
+    }
+
+    private static void registerInvisibleRenderer() {
+        BlockRendererType existing = BlockRendererType.REGISTRY.get(INVISIBLE_RENDERER_KEY);
+        if (existing != null) return;
+
+        BlockRendererType.REGISTRY.register(new BlockRendererType.Impl(
+                INVISIBLE_RENDERER_KEY,
+                InvisibleTerrainRenderer::new
         ));
     }
 
