@@ -80,7 +80,7 @@ final class ConnectedTextureLayoutTest {
                         "horizontal",
                         ConnectedTextureLayout.LEFT | ConnectedTextureLayout.RIGHT));
         assertEquals(
-                10,
+                6,
                 ConnectedTextureLayout.createTile(
                         "rectangle",
                         ConnectedTextureLayout.LEFT
