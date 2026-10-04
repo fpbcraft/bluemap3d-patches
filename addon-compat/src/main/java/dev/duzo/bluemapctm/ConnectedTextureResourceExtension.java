@@ -126,14 +126,11 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
         if ("pieced".equals(spec.layout()) || "overlay".equals(spec.layout())) {
             return virtualPath("fusion/" + safe(texture) + "/" + spec.layout() + "/mask/" + (mask & 0xFF));
         }
-        int tile = ConnectedTextureLayout.fusionTile(spec.layout(), mask);
-        return virtualPath(
-                "fusion/" + safe(texture) + "/" + spec.layout() + "/tile/" + tile);
+        return virtualPath("fusion/" + safe(texture) + "/sheet");
     }
 
     ResourcePath<Texture> createMaterial(String sheet, String type, int tile) {
-        return virtualPath(
-                "create/" + safe(sheet) + "/" + type.toLowerCase(Locale.ROOT) + "/tile/" + tile);
+        return virtualPath("create/" + safe(sheet) + "/sheet");
     }
 
     private void loadFusionMetadata(Path metadataPath) {
@@ -237,8 +234,14 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
             return List.of();
         }
 
+        if (!"pieced".equals(spec.layout()) && !"overlay".equals(spec.layout())) {
+            return List.of(texture(
+                    virtualPath("fusion/" + safe(source) + "/sheet"),
+                    copyRegion(image, 0, 0, frame.width(), frame.height())));
+        }
+
         List<BufferedImage> tiles = cropTiles(image, spec.grid(), frame);
-        List<Texture> output = new ArrayList<>();
+        List<Texture> output = new ArrayList<>(256);
 
         if ("pieced".equals(spec.layout())) {
             for (int mask = 0; mask < 256; mask++) {
@@ -250,21 +253,11 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
             return output;
         }
 
-        if ("overlay".equals(spec.layout())) {
-            for (int mask = 0; mask < 256; mask++) {
-                BufferedImage composite = composeOverlay(tiles, mask);
-                output.add(texture(
-                        virtualPath("fusion/" + safe(source) + "/overlay/mask/" + mask),
-                        composite));
-            }
-            return output;
-        }
-
-        for (int tile = 0; tile < tiles.size(); tile++) {
+        for (int mask = 0; mask < 256; mask++) {
+            BufferedImage composite = composeOverlay(tiles, mask);
             output.add(texture(
-                    virtualPath(
-                            "fusion/" + safe(source) + "/" + spec.layout() + "/tile/" + tile),
-                    tiles.get(tile)));
+                    virtualPath("fusion/" + safe(source) + "/overlay/mask/" + mask),
+                    composite));
         }
         return output;
     }
@@ -284,16 +277,9 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
             return List.of();
         }
 
-        List<BufferedImage> tiles = cropTiles(image, grid, frame);
-        List<Texture> output = new ArrayList<>(tiles.size());
-        for (int tile = 0; tile < tiles.size(); tile++) {
-            output.add(texture(
-                    virtualPath(
-                            "create/" + safe(source) + "/" + type.toLowerCase(Locale.ROOT)
-                                    + "/tile/" + tile),
-                    tiles.get(tile)));
-        }
-        return output;
+        return List.of(texture(
+                virtualPath("create/" + safe(source) + "/sheet"),
+                copyRegion(image, 0, 0, frame.width(), frame.height())));
     }
 
     private static Frame frame(
