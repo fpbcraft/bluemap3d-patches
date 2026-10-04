@@ -60,23 +60,16 @@ class ImmersiveFurnitureDataTest {
     }
 
     @Test
-    void dithersOnlyTrulyTranslucentFurniturePixels() {
+    void preservesBakedAlphaForTranslucentFurniturePixels() {
         int halfRedAbgr = 0x800000FF;
 
-        int solid = ImmersiveFurnitureData.normalizeBakedPixel(
-                halfRedAbgr,
-                ImmersiveFurnitureData.Transparency.SOLID,
-                0,
-                0);
-        assertEquals(0x80FF0000, solid);
-
-        int dithered = ImmersiveFurnitureData.normalizeBakedPixel(
+        int translucent = ImmersiveFurnitureData.normalizeBakedPixel(
                 halfRedAbgr,
                 ImmersiveFurnitureData.Transparency.TRANSLUCENT,
                 0,
                 0);
-        assertTrue((dithered >>> 24) == 0 || (dithered >>> 24) == 0xFF);
-        assertEquals(0x00FF0000, dithered & 0x00FFFFFF);
+
+        assertEquals(0x80FF0000, translucent);
     }
 
     @Test
