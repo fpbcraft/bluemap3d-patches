@@ -3,6 +3,7 @@ package dev.duzo.bluemapfurniture;
 import de.bluecolored.bluemap.api.BlueMapAPI;
 import de.bluecolored.bluemap.common.api.BlueMapAPIImpl;
 import de.bluecolored.bluemap.core.logger.Logger;
+import de.bluecolored.bluemap.core.map.BmMap;
 import de.bluecolored.bluemap.core.resources.ResourcePath;
 import de.bluecolored.bluemap.core.resources.adapter.ResourcesGson;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
@@ -11,6 +12,8 @@ import de.bluecolored.bluemap.core.world.mca.MCAWorld;
 import de.bluecolored.bluemap.core.util.Key;
 import de.bluecolored.bluemap.core.world.mca.blockentity.BlockEntityType;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.io.StringReader;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
@@ -84,10 +87,27 @@ public final class ImmersiveFurnitureAdapter {
 
         ImmersiveFurnitureRuntime.configureWorldRoots(worldRoots);
 
+        List<ImmersiveFurnitureData.Definition> persisted =
+                ImmersiveFurnitureRuntime.persistedDefinitions();
+        int bakedTextures = 0;
+        for (BmMap map : impl.blueMapService().getMaps().values()) {
+            bakedTextures += ImmersiveFurnitureRenderer.preloadTextures(
+                    map.getTextureGallery(), persisted);
+            try (OutputStream out = map.getStorage().textures().write()) {
+                map.getTextureGallery().writeTexturesFile(out);
+            } catch (IOException error) {
+                Logger.global.logError(
+                        "Failed to persist Immersive Furniture textures for map '"
+                                + map.getId() + "'",
+                        error);
+            }
+        }
+
         int routed = routeFurniture(resourcePack);
         Logger.global.logInfo(String.format(
-                "Immersive Furniture compatibility ready: %s furniture blockstate(s) routed",
-                routed));
+                "Immersive Furniture compatibility ready: %s furniture blockstate(s) routed, %s baked texture(s) registered",
+                routed,
+                bakedTextures));
     }
 
     private static void registerBlockEntities() {
