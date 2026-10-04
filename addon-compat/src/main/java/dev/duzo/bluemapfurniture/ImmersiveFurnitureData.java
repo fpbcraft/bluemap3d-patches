@@ -2,6 +2,7 @@ package dev.duzo.bluemapfurniture;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -60,6 +61,26 @@ final class ImmersiveFurnitureData {
             if (element != null) elements.add(element);
         }
         return new Definition(elements);
+    }
+
+    static Map<Integer, String> decodeIdentifierRegistry(Object raw) {
+        if (!(raw instanceof Map<?, ?> rootMap)) return Map.of();
+
+        Map<?, ?> data = asMap(rootMap.get("data"));
+        if (data == null) data = rootMap;
+
+        Map<?, ?> hashes = asMap(data.get("hashToIdentifier"));
+        if (hashes == null || hashes.isEmpty()) return Map.of();
+
+        Map<Integer, String> out = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : hashes.entrySet()) {
+            if (!(entry.getKey() instanceof String hash)
+                    || !(entry.getValue() instanceof Number identifier)) {
+                continue;
+            }
+            out.put(identifier.intValue(), hash);
+        }
+        return Map.copyOf(out);
     }
 
     static Definition decodeRuntime(Object data) {
