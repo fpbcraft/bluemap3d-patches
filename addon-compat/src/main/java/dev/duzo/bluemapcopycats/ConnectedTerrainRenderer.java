@@ -120,16 +120,15 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
         delegate.render(block, variant, diagonal, color);
         if (diagonal.getSize() == 0) return 0;
 
-        // Diagonal Blocks first chooses the clockwise-adjacent cardinal segment
-        // (E->NE, S->SE, W->SW, N->NW), then applies its -45 degree baked-quad
-        // transform. BlueMap's model Y rotation convention is inverted at this stage,
-        // so the equivalent mesh transform here remains +45 degrees.
+        // Mirror Diagonal Blocks' QuadUtils.rotateQuad() exactly: scale the source
+        // cardinal arm along its axis, then rotate it -45 degrees around block center.
+        // The previous +45 transform is 90 degrees away from the client result.
         float diagonalScale = (float) Math.sqrt(2.0);
         boolean scaleX = "east".equals(cardinalDirection) || "west".equals(cardinalDirection);
         diagonal
                 .translate(-0.5f, -0.5f, -0.5f)
                 .scale(scaleX ? diagonalScale : 1f, 1f, scaleX ? 1f : diagonalScale)
-                .rotate(45f, 0f, 1f, 0f)
+                .rotate(DiagonalDirectionMapping.rotationDegrees(), 0f, 1f, 0f)
                 .translate(0.5f, 0.5f, 0.5f);
         return 1;
     }
