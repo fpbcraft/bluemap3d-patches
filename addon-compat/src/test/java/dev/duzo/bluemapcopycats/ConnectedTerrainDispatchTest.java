@@ -8,13 +8,22 @@ import org.junit.jupiter.api.Test;
 final class ConnectedTerrainDispatchTest {
 
     @Test
-    void mapsModdedFenceAndWallResourcesToDiagonalGeneratedIds() {
+    void mapsModdedConnectedResourcesToDiagonalGeneratedIds() {
         assertEquals(
                 "diagonalfences:natures_spirit/wisteria_fence",
                 ConnectedTerrainDispatch.diagonalAlias("natures_spirit:wisteria_fence"));
         assertEquals(
                 "diagonalwalls:quark/shale_wall",
                 ConnectedTerrainDispatch.diagonalAlias("quark:shale_wall"));
+        assertEquals(
+                "diagonalwindows:createdeco/industrial_iron_bars",
+                ConnectedTerrainDispatch.diagonalAlias("createdeco:industrial_iron_bars"));
+        assertEquals(
+                "diagonalwindows:createdeco/industrial_iron_bars_overlay",
+                ConnectedTerrainDispatch.diagonalAlias("createdeco:industrial_iron_bars_overlay"));
+        assertEquals(
+                "diagonalwindows:minecraft/white_stained_glass_pane",
+                ConnectedTerrainDispatch.diagonalAlias("minecraft:white_stained_glass_pane"));
     }
 
     @Test

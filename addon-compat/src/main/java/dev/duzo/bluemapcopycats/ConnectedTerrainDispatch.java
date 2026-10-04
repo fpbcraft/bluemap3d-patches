@@ -80,16 +80,15 @@ public final class ConnectedTerrainDispatch {
                     new StringReader(DISPATCH_JSON),
                     de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState.class);
 
-            // Diagonal Blocks creates ids such as
-            // diagonalfences:natures_spirit/wisteria_fence without shipping a duplicate
-            // resource-pack blockstate. Point those generated ids at the original
-            // mod's blockstate before routing connected blocks through our renderer.
-            int aliases = installDiagonalAliases(paths);
-
-            // Multiple ids may now reference the same ResourcePath. Preserve the parsed
-            // originals before replacing any path with the dispatch blockstate so every
-            // alias still sees the actual fence/wall multipart definition.
+            // Snapshot the parsed resources before installing any dispatch entries.
             var originalsByPath = new HashMap<>(states);
+
+            // Diagonal Blocks creates ids such as
+            // diagonalfences:natures_spirit/wisteria_fence and
+            // diagonalwindows:createdeco/industrial_iron_bars without shipping duplicate
+            // resource-pack blockstates. Give each generated id a synthetic ResourcePath
+            // so routing it through this renderer never replaces the source blockstate.
+            int aliases = installDiagonalAliases(paths, states, originalsByPath, dispatch);
 
             int patched = 0;
             for (Map.Entry<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
@@ -134,18 +133,44 @@ public final class ConnectedTerrainDispatch {
         if (path.endsWith("_wall")) {
             return "diagonalwalls:" + namespace + "/" + path;
         }
+        if (isWindowLikePath(path)) {
+            return "diagonalwindows:" + namespace + "/" + path;
+        }
         return null;
+    }
+
+    private static boolean isWindowLikePath(String path) {
+        // Diagonal Windows targets IronBarsBlock. Static resource packs do not expose the
+        // Java block class, so cover the conventional ids used by vanilla and Create Deco.
+        return path.endsWith("_pane")
+                || path.endsWith("_bars")
+                || path.endsWith("_bars_overlay");
     }
 
     private static int installDiagonalAliases(
             Map<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
-                    paths) {
+                    paths,
+            Map<ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>,
+                    de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState> states,
+            Map<ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>,
+                    de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState> originalsByPath,
+            de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState dispatch) {
         int aliases = 0;
         for (Map.Entry<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
                 entry : new ArrayList<>(paths.entrySet())) {
             String alias = diagonalAlias(entry.getKey());
             if (alias == null || paths.containsKey(alias)) continue;
-            paths.put(alias, entry.getValue());
+
+            var original = originalsByPath.get(entry.getValue());
+            if (original == null) continue;
+
+            // Do not share the source ResourcePath. states is keyed by ResourcePath, so
+            // replacing a shared entry would also replace the normal (non-diagonal) block.
+            ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>
+                    aliasPath = new ResourcePath<>(alias);
+            paths.put(alias, aliasPath);
+            states.put(aliasPath, dispatch);
+            ORIGINALS.put(alias, original);
             aliases++;
         }
         return aliases;

@@ -17,6 +17,7 @@ import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -141,16 +142,26 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
         if (cached != null) return cached;
 
         Map<String, String> props = new LinkedHashMap<>(translated.getProperties());
-        props.put("north", wall ? "low" : "true");
-        props.put("east", wall ? "none" : "false");
-        props.put("south", wall ? "none" : "false");
-        props.put("west", wall ? "none" : "false");
+        String disconnectedValue = wall ? "none" : "false";
+        for (String direction : List.of("north", "east", "south", "west")) {
+            props.put(direction, disconnectedValue);
+        }
         if (wall) props.put("up", "false");
         for (String diagonal : List.of(
                 "north_east", "south_east", "south_west", "north_west")) {
             if (props.containsKey(diagonal)) props.put(diagonal, "false");
         }
 
+        // A name-based check used to accept models containing "fence", which also picks
+        // vanilla-style *_fence_post models. That is what produced the detached/crossed
+        // geometry seen for diagonal fences. Instead compare a disconnected state with
+        // a north-connected state and keep only models introduced by the connection.
+        BlockState disconnected = new BlockState(id, Map.copyOf(props));
+        Set<ResourcePath<Model>> disconnectedModels = new HashSet<>();
+        original.forEach(disconnected, 0, 0, 0,
+                variant -> disconnectedModels.add(variant.getModel()));
+
+        props.put("north", wall ? "low" : "true");
         BlockState northOnly = new BlockState(id, Map.copyOf(props));
         List<Variant> candidates = new ArrayList<>();
         original.forEach(northOnly, 0, 0, 0, candidates::add);
@@ -160,22 +171,23 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
 
         for (Variant candidate : candidates) {
             ResourcePath<Model> path = candidate.getModel();
+            if (disconnectedModels.contains(path)) continue;
+
             Model model = resourcePack.getModel(path);
             if (model == null || model == missing) continue;
 
-            String formatted = path.getFormatted();
-            if (formatted.contains("side") || formatted.contains("fence")) {
-                sideModels.put(id, path);
-                return path;
-            }
+            sideModels.put(id, path);
+            return path;
         }
 
-        // Datagen convention used by vanilla and most mods. This fallback also handles
-        // blocks whose multipart conditions are too unusual for the north-only probe.
-        int colon = id.indexOf(':');
+        // Datagen convention used by vanilla and most mods. Generated Diagonal Blocks ids
+        // point back at the source namespace/path (e.g. diagonalwindows:createdeco/foo ->
+        // createdeco:foo), so resolve that before attempting the conventional model name.
+        String assetId = sourceAssetId(id);
+        int colon = assetId.indexOf(':');
         if (colon >= 0) {
-            String namespace = id.substring(0, colon);
-            String path = id.substring(colon + 1);
+            String namespace = assetId.substring(0, colon);
+            String path = assetId.substring(colon + 1);
             ResourcePath<Model> conventional =
                     new ResourcePath<>(namespace + ":block/" + path + "_side");
             Model model = resourcePack.getModel(conventional);
@@ -186,6 +198,23 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
         }
 
         return null;
+    }
+
+    private static String sourceAssetId(String id) {
+        int colon = id.indexOf(':');
+        if (colon < 0) return id;
+
+        String namespace = id.substring(0, colon);
+        if (!"diagonalfences".equals(namespace)
+                && !"diagonalwalls".equals(namespace)
+                && !"diagonalwindows".equals(namespace)) {
+            return id;
+        }
+
+        String path = id.substring(colon + 1);
+        int slash = path.indexOf('/');
+        if (slash <= 0 || slash == path.length() - 1) return id;
+        return path.substring(0, slash) + ":" + path.substring(slash + 1);
     }
 
     private static BlockState translatedState(BlockState state, boolean wall) {
