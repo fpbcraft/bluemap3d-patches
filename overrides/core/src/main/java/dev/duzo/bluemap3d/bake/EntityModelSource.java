@@ -107,6 +107,8 @@ public final class EntityModelSource implements BlockModelSource {
         List<String> out = new ArrayList<>();
         out.add("entity=" + entityId);
         out.add("metadata=" + effectiveMetadata);
+        out.add("textureOverride(main)="
+                + effectiveMetadata.getOrDefault("__bm3d_texture_main", "<none>"));
         out.add("texture=" + String.valueOf(source.findTexture(
                 entity.namespace(), entity.path(), "main", effectiveMetadata)));
 
@@ -138,16 +140,16 @@ public final class EntityModelSource implements BlockModelSource {
             geoCandidates.addAll(source.assets.findPaths(
                     prefix,
                     candidate -> candidate.toLowerCase(Locale.ROOT).endsWith(".geo.json")
-                            && EntityAssetMatch.score(entity.path(), candidate, "main") > 0,
+                            && EntityAssetMatch.geometryScore(entity.path(), candidate, "main") > 0,
                     64));
         }
         List<String> rankedGeo = new ArrayList<>(geoCandidates);
         rankedGeo.sort(Comparator.comparingInt(
-                (String candidate) -> EntityAssetMatch.score(
+                (String candidate) -> EntityAssetMatch.geometryScore(
                         entity.path(), candidate, "main")).reversed());
         out.add("geoCandidates=" + rankedGeo.size());
         for (String candidate : rankedGeo.stream().limit(24).toList()) {
-            out.add("  [" + EntityAssetMatch.score(entity.path(), candidate, "main")
+            out.add("  [" + EntityAssetMatch.geometryScore(entity.path(), candidate, "main")
                     + "] " + candidate);
         }
 
@@ -330,7 +332,7 @@ public final class EntityModelSource implements BlockModelSource {
                     prefix,
                     pathCandidate -> pathCandidate.toLowerCase(Locale.ROOT).endsWith(".geo.json"),
                     512)) {
-                if (EntityAssetMatch.score(entity.path(), candidate, "main") > 0) {
+                if (EntityAssetMatch.geometryScore(entity.path(), candidate, "main") > 0) {
                     candidates.add(candidate);
                 }
             }
@@ -338,9 +340,9 @@ public final class EntityModelSource implements BlockModelSource {
 
         List<String> ranked = new ArrayList<>(candidates);
         ranked.removeIf(candidate ->
-                EntityAssetMatch.score(entity.path(), candidate, "main") <= 0);
+                EntityAssetMatch.geometryScore(entity.path(), candidate, "main") <= 0);
         ranked.sort(Comparator.comparingInt(
-                (String candidate) -> EntityAssetMatch.score(entity.path(), candidate, "main")
+                (String candidate) -> EntityAssetMatch.geometryScore(entity.path(), candidate, "main")
                         + EntityAssetMatch.appearanceScore(metadata, candidate))
                 .reversed());
 
@@ -446,7 +448,7 @@ public final class EntityModelSource implements BlockModelSource {
                     : string(description, "identifier", null);
             int score = identifier == null
                     ? 0
-                    : EntityAssetMatch.score(entity.path(), identifier, "main")
+                    : EntityAssetMatch.geometryScore(entity.path(), identifier, "main")
                             + EntityAssetMatch.appearanceScore(metadata, identifier);
             if (best == null || score > bestScore) {
                 best = geometry;
@@ -820,6 +822,27 @@ public final class EntityModelSource implements BlockModelSource {
             String path,
             String layer,
             Map<String, String> metadata) {
+        String exact = exactTextureOverride(metadata, layer);
+        if (exact != null) {
+            ResourceLocation exactId = ResourceLocation.tryParse(exact);
+            if (exactId != null
+                    && assets.read("assets/" + exactId.getNamespace()
+                            + "/textures/" + exactId.getPath() + ".png") != null) {
+                LOGGER.debug(
+                        "Resolved exact texture override for {}:{}#{} as {}",
+                        namespace,
+                        path,
+                        layer,
+                        exact);
+                return exact;
+            }
+            LOGGER.warn(
+                    "Ignoring missing exact texture override for {}:{}#{}: {}",
+                    namespace,
+                    path,
+                    layer,
+                    exact);
+        }
         String leaf = leaf(path);
         LinkedHashSet<String> relativeCandidates = new LinkedHashSet<>();
 
@@ -889,6 +912,26 @@ public final class EntityModelSource implements BlockModelSource {
         String resourcePath = selected.substring(root.length(), selected.length() - 4);
         LOGGER.debug("Resolved texture for {}:{}#{} from {}", namespace, path, layer, selected);
         return namespace + ":" + resourcePath;
+    }
+
+    static String exactTextureOverride(
+            Map<String, String> metadata, String layer) {
+        if (metadata == null || metadata.isEmpty()) return null;
+        String raw = metadata.get("__bm3d_texture_" + layer);
+        if (raw == null || raw.isBlank()) return null;
+
+        ResourceLocation id = ResourceLocation.tryParse(raw);
+        if (id == null) return null;
+
+        String texturePath = id.getPath();
+        if (texturePath.startsWith("textures/")) {
+            texturePath = texturePath.substring("textures/".length());
+        }
+        if (texturePath.endsWith(".png")) {
+            texturePath = texturePath.substring(0, texturePath.length() - ".png".length());
+        }
+        if (texturePath.isBlank()) return null;
+        return id.getNamespace() + ":" + texturePath;
     }
 
     private BufferedImage loadTexture(String texture) {
