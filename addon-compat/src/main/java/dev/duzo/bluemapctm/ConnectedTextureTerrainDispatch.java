@@ -109,6 +109,12 @@ public final class ConnectedTextureTerrainDispatch {
                 // Fence/wall/diagonal and Copycats compatibility already owns these ids.
                 if (ConnectedTerrainDispatch.original(id) != null) continue;
 
+                // Metal girders are a cutout model. Routing them through the generic CT
+                // renderer changes their transparency/culling semantics in BlueMap 5.7.
+                // Keep the complete block on BlueMap's stock resource-model path until
+                // girder CT can be implemented without replacing that renderer.
+                if (!ConnectedTextureRoutingRules.shouldRoute(id)) continue;
+
                 var original = states.get(entry.getValue());
                 if (original == null || ORIGINALS.containsKey(id)) continue;
 
