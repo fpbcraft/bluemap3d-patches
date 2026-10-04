@@ -26,14 +26,31 @@ final class ImmersiveFurnitureData {
             float rotation,
             int mask,
             String material,
-            int emission) {
+            int emission,
+            Map<String, int[]> bakedTextures) {
         Element {
             from = from.clone();
             to = to.clone();
+            bakedTextures = copyTextures(bakedTextures);
         }
 
         boolean visible(int state) {
             return (mask & (1 << state)) != 0;
+        }
+
+        int[] bakedTexture(String face, int state) {
+            int[] texture = bakedTextures.get(face + ":" + state);
+            if (texture == null) texture = bakedTextures.get(face);
+            return texture == null ? null : texture.clone();
+        }
+
+        private static Map<String, int[]> copyTextures(Map<String, int[]> source) {
+            if (source == null || source.isEmpty()) return Map.of();
+            Map<String, int[]> copy = new LinkedHashMap<>();
+            source.forEach((key, value) -> {
+                if (key != null && value != null) copy.put(key, value.clone());
+            });
+            return Map.copyOf(copy);
         }
     }
 
@@ -118,7 +135,10 @@ final class ImmersiveFurnitureData {
                 number(value(element, "Rotation", "rotation"), 0F),
                 integer(value(element, "Mask", "mask"), 3),
                 source,
-                integer(value(element, "Emission", "emission"), 0));
+                integer(value(element, "Emission", "emission"), 0),
+                bakedTextures(
+                        value(element, "BakedTexture", "bakedTexture"),
+                        value(element, "BakedTextures", "bakedTextures")));
     }
 
     private static Element decodeRuntimeElement(Object element) {
@@ -141,7 +161,43 @@ final class ImmersiveFurnitureData {
                 number(field(element, "rotation"), 0F),
                 integer(field(element, "mask"), 3),
                 materialId,
-                integer(field(element, "emission"), 0));
+                integer(field(element, "emission"), 0),
+                Map.of());
+    }
+
+    private static Map<String, int[]> bakedTextures(Object primaryRaw, Object secondaryRaw) {
+        Map<String, int[]> out = new LinkedHashMap<>();
+        appendBakedTextures(out, primaryRaw);
+        appendBakedTextures(out, secondaryRaw);
+        return Map.copyOf(out);
+    }
+
+    private static void appendBakedTextures(Map<String, int[]> out, Object raw) {
+        if (!(raw instanceof Map<?, ?> map)) return;
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (!(entry.getKey() instanceof String key)) continue;
+            Object value = entry.getValue();
+            if (value instanceof int[] pixels) {
+                out.put(key.toLowerCase(Locale.ROOT), pixels.clone());
+                continue;
+            }
+            if (value instanceof Iterable<?> iterable) {
+                List<Integer> pixels = new ArrayList<>();
+                boolean valid = true;
+                for (Object item : iterable) {
+                    if (!(item instanceof Number number)) {
+                        valid = false;
+                        break;
+                    }
+                    pixels.add(number.intValue());
+                }
+                if (valid && !pixels.isEmpty()) {
+                    int[] array = new int[pixels.size()];
+                    for (int i = 0; i < array.length; i++) array[i] = pixels.get(i);
+                    out.put(key.toLowerCase(Locale.ROOT), array);
+                }
+            }
+        }
     }
 
     private static Object value(Map<?, ?> map, String primary, String alternate) {
