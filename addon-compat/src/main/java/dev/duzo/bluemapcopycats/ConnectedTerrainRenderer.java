@@ -61,6 +61,11 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
         int[] variants = {0};
 
         BlockState translated = translatedState(block.getBlockState(), isWall(id));
+        translated = new BlockState(
+                translated.getFormatted(),
+                DiagonalConnectionProperties.sanitize(
+                        translated.getProperties(),
+                        isWall(id)));
         original.forEach(
                 translated,
                 block.getX(),
