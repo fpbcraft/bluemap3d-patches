@@ -140,6 +140,14 @@ public final class ImmersiveFurnitureAdapter {
                 if (path == null) continue;
                 if (states.get(path) == null) continue;
                 states.put(path, dispatch);
+
+                // ResourcePath memoizes the first resolved resource. By the time BlueMap's
+                // API onEnable listeners run, the original Immersive Furniture blockstate
+                // may already have been resolved and cached on this path. Updating only the
+                // backing map would then leave rendering pinned to the stock oak-log
+                // placeholder forever.
+                path.setResource(dispatch);
+
                 routed++;
             }
             return routed;
