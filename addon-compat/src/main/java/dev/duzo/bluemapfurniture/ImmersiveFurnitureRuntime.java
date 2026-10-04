@@ -9,7 +9,6 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -164,7 +163,10 @@ final class ImmersiveFurnitureRuntime {
 
     private static Map<Integer, String> loadRegistry(Path root) {
         Path file = root.resolve("data").resolve("immersive_furniture.dat");
-        Object raw = readCompressed(file);
+        return registryFromNbt(readCompressed(file));
+    }
+
+    static Map<Integer, String> registryFromNbt(Object raw) {
         if (!(raw instanceof Map<?, ?> rootMap)) return Map.of();
 
         Map<?, ?> data = map(rootMap.get("data"));
