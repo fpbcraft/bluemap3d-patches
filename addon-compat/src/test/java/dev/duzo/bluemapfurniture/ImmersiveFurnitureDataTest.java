@@ -22,7 +22,10 @@ class ImmersiveFurnitureDataTest {
                 "Type", "element",
                 "Mask", 2,
                 "Emission", 7,
-                "Material", Map.of("Source", "minecraft:spruce_planks"));
+                "Color", 0xFFFF0000,
+                "Material", Map.of(
+                        "Source", "minecraft:spruce_planks",
+                        "Transparency", "translucent"));
 
         var definition = ImmersiveFurnitureData.decodeNbt(
                 Map.of("Elements", List.of(element)));
@@ -37,8 +40,43 @@ class ImmersiveFurnitureDataTest {
         assertEquals(22.5F, decoded.rotation());
         assertEquals("minecraft:spruce_planks", decoded.material());
         assertEquals(7, decoded.emission());
+        assertEquals(0xFFFF0000, decoded.color());
+        assertEquals(
+                ImmersiveFurnitureData.Transparency.TRANSLUCENT,
+                decoded.transparency());
         assertFalse(decoded.visible(0));
         assertTrue(decoded.visible(1));
+    }
+
+    @Test
+    void convertsNativeAbgrPixelsToArgb() {
+        // NativeImage stores 0xAABBGGRR; BufferedImage expects 0xAARRGGBB.
+        assertEquals(
+                0xFFFF0000,
+                ImmersiveFurnitureData.nativeAbgrToArgb(0xFF0000FF));
+        assertEquals(
+                0xFF0000FF,
+                ImmersiveFurnitureData.nativeAbgrToArgb(0xFFFF0000));
+    }
+
+    @Test
+    void dithersOnlyTrulyTranslucentFurniturePixels() {
+        int halfRedAbgr = 0x800000FF;
+
+        int solid = ImmersiveFurnitureData.normalizeBakedPixel(
+                halfRedAbgr,
+                ImmersiveFurnitureData.Transparency.SOLID,
+                0,
+                0);
+        assertEquals(0x80FF0000, solid);
+
+        int dithered = ImmersiveFurnitureData.normalizeBakedPixel(
+                halfRedAbgr,
+                ImmersiveFurnitureData.Transparency.TRANSLUCENT,
+                0,
+                0);
+        assertTrue((dithered >>> 24) == 0 || (dithered >>> 24) == 0xFF);
+        assertEquals(0x00FF0000, dithered & 0x00FFFFFF);
     }
 
     @Test
