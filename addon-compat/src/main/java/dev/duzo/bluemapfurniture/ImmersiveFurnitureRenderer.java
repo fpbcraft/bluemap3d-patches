@@ -59,13 +59,34 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
             Variant ignoredVariant,
             TileModelView tileModel,
             Color blockColor) {
-        if (!(block.getBlockEntity() instanceof ImmersiveFurnitureBlockEntity entity)) {
+        Object rawEntity = block.getBlockEntity();
+        String state = block.getBlockState().toString();
+        warnInfoOnce(
+                state + "#render",
+                "IMMERSIVE-FURNITURE render block=" + state
+                        + " blockEntity="
+                        + (rawEntity == null ? "<none>" : rawEntity.getClass().getName()));
+
+        if (!(rawEntity instanceof ImmersiveFurnitureBlockEntity entity)) {
             warnOnce(
-                    block.getBlockState().getFormatted() + "#entity",
-                    "Immersive Furniture block has no decoded furniture block entity: "
-                            + block.getBlockState().getFormatted());
+                    state + "#entity",
+                    "Immersive Furniture renderer received unsupported/missing block entity: block="
+                            + state
+                            + " blockEntity="
+                            + (rawEntity == null ? "<none>" : rawEntity.getClass().getName()));
             return;
         }
+
+        warnInfoOnce(
+                state + "#entity-data",
+                "IMMERSIVE-FURNITURE entity-data block=" + state
+                        + " Furniture=" + (entity.furniture() != null)
+                        + " FurnitureHash="
+                        + (entity.furnitureHash() == null ? "<none>" : entity.furnitureHash())
+                        + " offsets="
+                        + entity.subOffsetX() + ","
+                        + entity.subOffsetY() + ","
+                        + entity.subOffsetZ());
 
         ImmersiveFurnitureData.Definition definition =
                 ImmersiveFurnitureRuntime.resolve(block, entity);
@@ -318,6 +339,10 @@ public final class ImmersiveFurnitureRenderer implements BlockRenderer {
 
     private static void warnOnce(String key, String message) {
         if (WARNED.add(key)) Logger.global.logWarning(message);
+    }
+
+    private static void warnInfoOnce(String key, String message) {
+        if (WARNED.add(key)) Logger.global.logInfo(message);
     }
 
     private record Appearance(int textureIndex) {
