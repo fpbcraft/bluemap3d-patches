@@ -27,6 +27,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * On-demand inventory of connected-texture assets present in the real server modpack.
@@ -42,11 +44,79 @@ public final class ConnectedTextureDiagnostics {
     private static final int MAX_ASSET_PATHS = 500_000;
     private static volatile AssetIndex ACTIVE_ASSETS;
 
+    private static final AtomicLong MOVING_RESOLVE_CALLS = new AtomicLong();
+    private static final AtomicLong MOVING_FUSION_MATCHES = new AtomicLong();
+    private static final AtomicLong MOVING_CREATE_MATCHES = new AtomicLong();
+    private static final AtomicLong MOVING_CREATE_MISSING_SHEETS = new AtomicLong();
+    private static final Map<String, AtomicLong> MOVING_TEXTURE_MATCHES =
+            new ConcurrentHashMap<>();
+
     private ConnectedTextureDiagnostics() {
     }
 
     static void install(AssetIndex assets) {
         ACTIVE_ASSETS = assets;
+    }
+
+    static void recordMovingResolve() {
+        MOVING_RESOLVE_CALLS.incrementAndGet();
+    }
+
+    static void recordMovingFusion(String texture) {
+        MOVING_FUSION_MATCHES.incrementAndGet();
+        recordTexture("fusion|" + texture);
+    }
+
+    static void recordMovingCreate(String texture, String sheet, boolean sheetAvailable) {
+        MOVING_CREATE_MATCHES.incrementAndGet();
+        if (!sheetAvailable) MOVING_CREATE_MISSING_SHEETS.incrementAndGet();
+        recordTexture("create|" + texture + " -> " + sheet
+                + (sheetAvailable ? "" : " [missing-sheet]"));
+    }
+
+    private static void recordTexture(String key) {
+        MOVING_TEXTURE_MATCHES.computeIfAbsent(key, ignored -> new AtomicLong())
+                .incrementAndGet();
+    }
+
+    public static int runtimeStats(CommandSourceStack source) {
+        Path output = source.getServer()
+                .getWorldPath(LevelResource.ROOT)
+                .resolve("bluemap3d")
+                .resolve("connected-textures-runtime.json")
+                .toAbsolutePath()
+                .normalize();
+
+        Map<String, Long> textures = new java.util.TreeMap<>();
+        MOVING_TEXTURE_MATCHES.forEach((key, count) -> textures.put(key, count.get()));
+        RuntimeDump report = new RuntimeDump(
+                MOVING_RESOLVE_CALLS.get(),
+                MOVING_FUSION_MATCHES.get(),
+                MOVING_CREATE_MATCHES.get(),
+                MOVING_CREATE_MISSING_SHEETS.get(),
+                textures);
+
+        try {
+            Files.createDirectories(output.getParent());
+            Files.writeString(
+                    output,
+                    GSON.toJson(report) + System.lineSeparator(),
+                    StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            source.sendFailure(Component.literal(
+                    "Could not write connected-texture runtime diagnostics: " + error));
+            return 0;
+        }
+
+        source.sendSuccess(
+                () -> Component.literal(
+                        "Moving CT: resolveCalls=" + report.resolveCalls()
+                                + ", fusionMatches=" + report.fusionMatches()
+                                + ", createMatches=" + report.createMatches()
+                                + ", missingSheets=" + report.createMissingSheets()
+                                + ". Details: " + output),
+                false);
+        return Command.SINGLE_SUCCESS;
     }
 
     public static int dump(CommandSourceStack source) {
@@ -535,4 +605,12 @@ public final class ConnectedTextureDiagnostics {
                     sortedBlocks);
         }
     }
+    private record RuntimeDump(
+            long resolveCalls,
+            long fusionMatches,
+            long createMatches,
+            long createMissingSheets,
+            Map<String, Long> textures) {
+    }
+
 }
