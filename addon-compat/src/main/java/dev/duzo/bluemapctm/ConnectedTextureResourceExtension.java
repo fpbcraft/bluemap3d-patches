@@ -53,6 +53,8 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
             };
 
     private final Map<String, FusionSpec> fusion = new ConcurrentHashMap<>();
+    private final Map<String, CreateConnectedTextures.Spec> discoveredCreateStyle =
+            new ConcurrentHashMap<>();
 
     private ConnectedTextureResourceExtension() {
     }
@@ -89,12 +91,26 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
                         if (textureId == null) return;
 
                         FusionSpec fusionSpec = fusion.get(textureId);
-                        String createType = CreateConnectedTextures.typeForSheet(textureId);
-                        if (fusionSpec == null && createType == null) return;
 
                         try {
                             BufferedImage image = ImageIO.read(path.toFile());
                             if (image == null) return;
+
+                            String createType = CreateConnectedTextures.typeForSheet(textureId);
+                            if (createType == null && textureId.endsWith("_connected")) {
+                                String baseTexture = textureId.substring(
+                                        0, textureId.length() - "_connected".length());
+                                BufferedImage baseImage = readSiblingBase(path);
+                                createType = inferCreateType(baseTexture, baseImage, image);
+                                if (createType != null) {
+                                    discoveredCreateStyle.put(
+                                            baseTexture,
+                                            new CreateConnectedTextures.Spec(
+                                                    createType, textureId, false));
+                                }
+                            }
+
+                            if (fusionSpec == null && createType == null) return;
                             if (fusionSpec != null) {
                                 textures.addAll(bakeFusion(textureId, image, fusionSpec));
                             }
@@ -109,6 +125,20 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
                     });
         }
         return textures;
+    }
+
+    CreateConnectedTextures.Spec createSpec(
+            String texture,
+            String blockId,
+            Map<String, String> properties,
+            de.bluecolored.bluemap.core.util.Direction face) {
+        CreateConnectedTextures.Spec explicit =
+                CreateConnectedTextures.find(texture, blockId, properties, face);
+        return explicit != null ? explicit : discoveredCreateStyle.get(texture);
+    }
+
+    int discoveredCreateStyleCount() {
+        return discoveredCreateStyle.size();
     }
 
     FusionSpec fusionSpec(String texture) {
@@ -134,6 +164,68 @@ public final class ConnectedTextureResourceExtension implements ResourcePackExte
 
     ResourcePath<Texture> createMaterial(String sheet, String type, int tile) {
         return virtualPath("create/" + safe(sheet) + "/sheet");
+    }
+
+    private static BufferedImage readSiblingBase(Path connectedPath) {
+        String name = connectedPath.getFileName().toString();
+        if (!name.endsWith("_connected.png")) return null;
+        Path base = connectedPath.resolveSibling(
+                name.substring(0, name.length() - "_connected.png".length()) + ".png");
+        if (!Files.isRegularFile(base)) return null;
+        try {
+            return ImageIO.read(base.toFile());
+        } catch (IOException error) {
+            return null;
+        }
+    }
+
+    static String inferCreateType(
+            String baseTexture,
+            BufferedImage base,
+            BufferedImage connected) {
+        if (base == null || connected == null
+                || base.getWidth() <= 0 || base.getHeight() <= 0
+                || connected.getWidth() % base.getWidth() != 0
+                || connected.getHeight() % base.getHeight() != 0) {
+            return null;
+        }
+
+        int x = connected.getWidth() / base.getWidth();
+        int y = connected.getHeight() / base.getHeight();
+        if (x != y) return null;
+
+        String path = baseTexture.toLowerCase(Locale.ROOT);
+        if (x == 8) return "omnidirectional";
+
+        if (x == 4) {
+            if (path.contains("roof")) return "roof";
+            if (path.contains("tank")
+                    || path.contains("vault")
+                    || path.contains("pillar")
+                    || path.contains("barrel")
+                    || path.contains("cannon")
+                    || path.contains("battery")
+                    || path.contains("girder")
+                    || path.contains("accumulator")
+                    || path.contains("display")) {
+                return "rectangle";
+            }
+            return null;
+        }
+
+        if (x == 2) {
+            if (path.contains("scaffold")) return "horizontal";
+            if (path.contains("window")
+                    || path.contains("sheet_metal")
+                    || path.contains("encased_cogwheel_side")
+                    || path.contains("girder_pole_side")
+                    || path.contains("crafter_side")
+                    || path.contains("/layered/")) {
+                return "vertical";
+            }
+        }
+
+        return null;
     }
 
     private void loadFusionMetadata(Path metadataPath) {
