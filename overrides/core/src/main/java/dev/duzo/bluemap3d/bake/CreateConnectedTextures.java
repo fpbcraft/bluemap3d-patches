@@ -90,11 +90,40 @@ final class CreateConnectedTextures {
             return connected == null ? null : spec("roof", connected);
         }
 
+        if (path.startsWith("vault/vault_") && path.endsWith("_small")) {
+            String target = path.substring(0, path.length() - "_small".length())
+                    + ("true".equals(property(state, "large")) ? "_large" : "_medium");
+            return spec("rectangle", target);
+        }
+
+        if (path.startsWith("palettes/stone_types/")) {
+            if (path.contains("/layered/")) {
+                return spec("horizontal_kryppers", path);
+            }
+            if (path.contains("/pillar/")) {
+                return spec("rectangle", path);
+            }
+            if (path.contains("/cap/")) {
+                return spec("omnidirectional", path);
+            }
+        }
+
         return null;
     }
 
     private static Spec spec(String type, String path) {
         return new Spec(type, "create:block/" + path + "_connected", false);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static String property(BlockState state, String name) {
+        for (net.minecraft.world.level.block.state.properties.Property property
+                : state.getProperties()) {
+            if (!property.getName().equals(name)) continue;
+            Comparable value = state.getValue(property);
+            return property.getName(value);
+        }
+        return "";
     }
 
     record Spec(String type, String sheetTexture, boolean positionVariant) {
