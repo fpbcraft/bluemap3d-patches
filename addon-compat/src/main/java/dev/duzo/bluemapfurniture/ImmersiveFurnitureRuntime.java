@@ -85,6 +85,36 @@ final class ImmersiveFurnitureRuntime {
                 hashDirectories));
     }
 
+    static List<ImmersiveFurnitureData.Definition> persistedDefinitions() {
+        List<ImmersiveFurnitureData.Definition> out = new java.util.ArrayList<>();
+        Set<Path> seen = new LinkedHashSet<>();
+        for (Path root : worldRoots) {
+            Path directory = root.resolve("immersive_furniture").resolve("hash");
+            if (!Files.isDirectory(directory)) continue;
+            try (var files = Files.list(directory)) {
+                for (Path file : files
+                        .filter(Files::isRegularFile)
+                        .filter(path -> path.getFileName().toString().endsWith(".nbt"))
+                        .toList()) {
+                    Path normalized = file.toAbsolutePath().normalize();
+                    if (!seen.add(normalized)) continue;
+                    ImmersiveFurnitureData.Definition definition =
+                            ImmersiveFurnitureData.decodeNbt(readCompressed(file));
+                    if (definition != null && !definition.isEmpty()) out.add(definition);
+                }
+            } catch (IOException | RuntimeException error) {
+                String key = "scan#" + directory;
+                if (TRACED.add(key)) {
+                    Logger.global.logWarning(String.format(
+                            "Could not preload Immersive Furniture hash directory %s: %s",
+                            directory,
+                            error));
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
     static ImmersiveFurnitureData.Definition resolve(
             BlockNeighborhood block, ImmersiveFurnitureBlockEntity entity) {
         ImmersiveFurnitureData.Definition inline =
