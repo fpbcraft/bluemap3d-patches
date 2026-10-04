@@ -6,16 +6,21 @@ final class DiagonalDirectionMapping {
     }
 
     static String cardinalFor(String diagonalProperty) {
-        // Mirrors EightWayDirection.rotateClockWise() + MultipartAppender in
-        // Diagonal Blocks 1.21.1. The source segment is the clockwise-adjacent
-        // cardinal arm, not the cardinal arm with the same first compass word.
+        // MultipartAppender creates each diagonal selector from the cardinal selector
+        // whose direction.rotateClockWise() equals that diagonal:
+        // N->NE, E->SE, S->SW, W->NW.
         return switch (diagonalProperty) {
-            case "north_east" -> "east";
-            case "south_east" -> "south";
-            case "south_west" -> "west";
-            case "north_west" -> "north";
+            case "north_east" -> "north";
+            case "south_east" -> "east";
+            case "south_west" -> "south";
+            case "north_west" -> "west";
             default -> throw new IllegalArgumentException(
                     "Unknown diagonal direction: " + diagonalProperty);
         };
+    }
+
+    static float rotationDegrees() {
+        // QuadUtils.ROTATION_ANGLE in Diagonal Blocks 1.21.1 is exactly -45 degrees.
+        return -45f;
     }
 }
