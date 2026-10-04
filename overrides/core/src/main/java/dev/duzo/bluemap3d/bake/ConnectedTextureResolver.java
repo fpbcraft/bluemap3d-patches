@@ -47,6 +47,8 @@ final class ConnectedTextureResolver {
     private final AssetIndex assets;
     private final Function<BlockState, List<ModelQuad>> baseQuads;
     private final Map<String, Optional<FusionSpec>> fusionSpecs = new ConcurrentHashMap<>();
+    private final Map<String, Optional<CreateConnectedTextures.Spec>> createStyleSpecs =
+            new ConcurrentHashMap<>();
     private final Map<String, BufferedImage> rawTextures = new ConcurrentHashMap<>();
     private final Map<String, BufferedImage> virtualTextures = new ConcurrentHashMap<>();
     private final Map<TransformKey, List<ModelQuad>> transformed = new ConcurrentHashMap<>();
@@ -111,7 +113,7 @@ final class ConnectedTextureResolver {
             return transformFusion(quad, fusion, mask);
         }
 
-        CreateConnectedTextures.Spec create = CreateConnectedTextures.find(
+        CreateConnectedTextures.Spec create = createSpec(
                 quad.texture(), context.state());
         if (create == null) return List.of(quad);
 
@@ -181,7 +183,7 @@ final class ConnectedTextureResolver {
                     : neighbourQuad.cullFace();
             if (neighbourFace != face) continue;
             CreateConnectedTextures.Spec candidate =
-                    CreateConnectedTextures.find(neighbourQuad.texture(), other);
+                    createSpec(neighbourQuad.texture(), other);
             if (candidate == null) continue;
 
             if (candidate.type().equals(current.type())) {
@@ -192,6 +194,68 @@ final class ConnectedTextureResolver {
             }
         }
         return false;
+    }
+
+    private CreateConnectedTextures.Spec createSpec(
+            String texture, BlockState state) {
+        CreateConnectedTextures.Spec explicit =
+                CreateConnectedTextures.find(texture, state);
+        if (explicit != null) return explicit;
+
+        Optional<CreateConnectedTextures.Spec> cached =
+                createStyleSpecs.computeIfAbsent(texture, this::inferCreateStyleSpec);
+        return cached.orElse(null);
+    }
+
+    private Optional<CreateConnectedTextures.Spec> inferCreateStyleSpec(String texture) {
+        BufferedImage base = rawTexture(texture);
+        String target = texture + "_connected";
+        BufferedImage connected = rawTexture(target);
+        if (base == null || connected == null
+                || base.getWidth() <= 0 || base.getHeight() <= 0
+                || connected.getWidth() % base.getWidth() != 0
+                || connected.getHeight() % base.getHeight() != 0) {
+            return Optional.empty();
+        }
+
+        int x = connected.getWidth() / base.getWidth();
+        int y = connected.getHeight() / base.getHeight();
+        if (x != y) return Optional.empty();
+
+        String path = texture.toLowerCase(Locale.ROOT);
+        String type = null;
+        if (x == 8) {
+            type = "omnidirectional";
+        } else if (x == 4) {
+            if (path.contains("roof")) {
+                type = "roof";
+            } else if (path.contains("tank")
+                    || path.contains("vault")
+                    || path.contains("pillar")
+                    || path.contains("barrel")
+                    || path.contains("cannon")
+                    || path.contains("battery")
+                    || path.contains("girder")
+                    || path.contains("accumulator")
+                    || path.contains("display")) {
+                type = "rectangle";
+            }
+        } else if (x == 2) {
+            if (path.contains("scaffold")) {
+                type = "horizontal";
+            } else if (path.contains("window")
+                    || path.contains("sheet_metal")
+                    || path.contains("encased_cogwheel_side")
+                    || path.contains("girder_pole_side")
+                    || path.contains("crafter_side")
+                    || path.contains("/layered/")) {
+                type = "vertical";
+            }
+        }
+
+        return type == null
+                ? Optional.empty()
+                : Optional.of(new CreateConnectedTextures.Spec(type, target, false));
     }
 
     private List<ModelQuad> transformFusion(ModelQuad quad, FusionSpec spec, int mask) {
