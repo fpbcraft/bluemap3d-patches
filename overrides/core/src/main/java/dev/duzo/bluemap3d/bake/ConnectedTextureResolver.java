@@ -61,6 +61,7 @@ final class ConnectedTextureResolver {
     }
 
     List<ModelQuad> resolve(List<ModelQuad> input, BlockRenderContext context) {
+        ConnectedTextureDiagnostics.recordMovingResolve();
         if (input.isEmpty()) return input;
         List<ModelQuad> out = null;
 
@@ -103,6 +104,7 @@ final class ConnectedTextureResolver {
 
         FusionSpec fusion = fusionSpec(quad.texture());
         if (fusion != null) {
+            ConnectedTextureDiagnostics.recordMovingFusion(quad.texture());
             int mask = connectionMask(
                     context,
                     face,
@@ -118,7 +120,10 @@ final class ConnectedTextureResolver {
         if (create == null) return List.of(quad);
 
         String sheet = create.sheetTexture(context.x(), context.y(), context.z());
-        if (rawTexture(sheet) == null) return List.of(quad);
+        boolean sheetAvailable = rawTexture(sheet) != null;
+        ConnectedTextureDiagnostics.recordMovingCreate(
+                quad.texture(), sheet, sheetAvailable);
+        if (!sheetAvailable) return List.of(quad);
 
         int mask = connectionMask(
                 context,
