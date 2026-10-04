@@ -74,13 +74,13 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
 
         int diagonals = 0;
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "north_east", cardinalDirectionForDiagonal("north_east"));
+                "north_east", DiagonalDirectionMapping.cardinalFor("north_east"));
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "south_east", cardinalDirectionForDiagonal("south_east"));
+                "south_east", DiagonalDirectionMapping.cardinalFor("south_east"));
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "south_west", cardinalDirectionForDiagonal("south_west"));
+                "south_west", DiagonalDirectionMapping.cardinalFor("south_west"));
         diagonals += renderDiagonal(block, tileModel, original, translated, isWall(id),
-                "north_west", cardinalDirectionForDiagonal("north_west"));
+                "north_west", DiagonalDirectionMapping.cardinalFor("north_west"));
 
         int end = tileModel.getStart();
         tileModel.initialize(start);
@@ -93,20 +93,6 @@ public final class ConnectedTerrainRenderer implements BlockRenderer {
                     "CONNECTED STATIC block=%s state=%s normalVariants=%s diagonalArms=%s",
                     id, block.getBlockState(), variants[0], diagonals));
         }
-    }
-
-    static String cardinalDirectionForDiagonal(String diagonalProperty) {
-        // Mirrors EightWayDirection.rotateClockWise() + MultipartAppender in
-        // Diagonal Blocks 1.21.1. This is intentionally not N->NE: that old mapping
-        // shifts every diagonal arm by 90 degrees and breaks thin pane/bar models.
-        return switch (diagonalProperty) {
-            case "north_east" -> "east";
-            case "south_east" -> "south";
-            case "south_west" -> "west";
-            case "north_west" -> "north";
-            default -> throw new IllegalArgumentException(
-                    "Unknown diagonal direction: " + diagonalProperty);
-        };
     }
 
     private int renderDiagonal(
