@@ -32,6 +32,7 @@ The build produces two installable JARs:
    - generic history eligibility for persistent scene providers
    - trains/bogeys
    - moving Copycats / Create Connected material support
+   - neighbour-aware Fusion 1.21 and Create connected textures on moving/Sable volumes
    - procedural and dynamic-texture adapters
    - config-driven moving tint rules
 
@@ -40,11 +41,20 @@ The build produces two installable JARs:
    - hot-reloaded server-local compatibility rules
    - Copycats+ / Create Connected copied-material adapter
    - Bits & Bobs girders and connected/diagonal fence-wall adapter
+   - native static Fusion 1.21 connected textures (full/simple/horizontal/vertical/compact/pieced/overlay + built-in predicates)
+   - native static Create connected textures for casings, windows/glass, scaffolds, chassis, tanks, vaults, copper roofs and palette stone CT families
    - TrafficCraft block-entity decoding and dynamic sign textures
 
 The former Copycats, foliage and TrafficCraft compatibility artifacts are consolidated into
 `bluemap-compat`. Specialized Java still exists where needed, but it is organized as an
 adapter inside the single addon rather than published as another JAR.
+
+Connected textures are resolved from the installed mod/resource-pack assets at load time.
+The addon does **not** generate or require a separate BlueMap resource pack. Fusion's
+built-in connection predicates and layouts are evaluated from `.png.mcmeta`; Create's
+client-only sprite-shift registry is mirrored from its stable 1.21.1 resource conventions.
+Third-party Fusion predicate types are intentionally fail-closed, and non-base nested
+`sub_texture` processors keep their source pixels/layout but are not executed as client code.
 
 ## Config-driven compatibility
 
