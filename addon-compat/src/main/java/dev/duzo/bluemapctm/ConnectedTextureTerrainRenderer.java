@@ -439,10 +439,24 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
             BlockState other,
             boolean frontOccluding,
             Direction worldFace) {
-        if (other == null || other.isAir() || frontOccluding) return false;
+        if (other == null || other.isAir()) return false;
 
         BlockState own = block.getBlockState();
+        boolean rotatedPillar = sourceTexture.startsWith(
+                "createdeco:block/palettes/sheet_metal/");
+        if (frontOccluding
+                && (!rotatedPillar
+                        || sameAxis(own.getProperties().get("axis"), worldFace))) {
+            return false;
+        }
+
         if (own.getFormatted().equals(other.getFormatted())) {
+            if (rotatedPillar
+                    && !java.util.Objects.equals(
+                            own.getProperties().get("axis"),
+                            other.getProperties().get("axis"))) {
+                return false;
+            }
             if (sourceTexture.contains("/scaffold/")) {
                 return "true".equals(own.getProperties().get("bottom"))
                         && "true".equals(other.getProperties().get("bottom"));
@@ -454,6 +468,15 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
         // the same casing sprite shift. Compare semantic CT sheets as a server-side
         // equivalent of Create's client CasingConnectivity registry.
         return createSemanticSpecs(other).contains(current.semanticKey());
+    }
+
+    private static boolean sameAxis(String stateAxis, Direction face) {
+        if (stateAxis == null || face == null) return false;
+        return switch (face) {
+            case EAST, WEST -> "x".equals(stateAxis);
+            case UP, DOWN -> "y".equals(stateAxis);
+            case NORTH, SOUTH -> "z".equals(stateAxis);
+        };
     }
 
     private Set<String> createSemanticSpecs(BlockState state) {
