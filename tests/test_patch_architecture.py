@@ -130,7 +130,12 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("CONTRAPTION-REMOVAL-DIAG", removal)
         self.assertIn("reason != Entity.RemovalReason.DISCARDED", removal)
         self.assertIn("dimensionPrefix + objectId", persistence)
-        self.assertIn("CONTRAPTION-WORLD-DIAG", (ROOT / "scripts/transforms/contraption_provider.py").read_text())
+        transform = (ROOT / "scripts/transforms/contraption_provider.py").read_text()
+        self.assertIn("CONTRAPTION-WORLD-DIAG", transform)
+        self.assertIn("BlueMapAPI.getInstance()", transform)
+        self.assertIn("invalidateChunkCache", transform)
+        self.assertIn("getChunkAtBlock", transform)
+        self.assertIn('mca[airOrWater={},sameBlock={},other={},unavailable={}]', transform)
 
     def test_mca_region_boundaries_use_floor_division(self) -> None:
         queue = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java").read_text()
