@@ -114,9 +114,6 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegmen
 mkdir -p core/src/test/java/dev/duzo/bluemap3d/api
 cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/api/ScenePersistencePolicyTest.java" \
    core/src/test/java/dev/duzo/bluemap3d/api/ScenePersistencePolicyTest.java
-mkdir -p core/src/test/java/dev/duzo/bluemap3d/publish
-cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/publish/TileRefreshQueueTest.java" \
-   core/src/test/java/dev/duzo/bluemap3d/publish/TileRefreshQueueTest.java
 mkdir -p core/src/test/java/dev/duzo/bluemap3d/bake
 cp "$ROOT/overrides/core/src/test/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryTest.java" \
    core/src/test/java/dev/duzo/bluemap3d/bake/ResourcePackGeometryTest.java
