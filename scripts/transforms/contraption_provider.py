@@ -74,8 +74,7 @@ def _apply_sable_integration(s: str) -> str:
             + '\n    private final Set<String> sableProjected = ConcurrentHashMap.newKeySet();'
             + '\n\n    /** Last known child contraptions for Sable ships, retained when their live entity unloads. */'
             + '\n    private final Map<ServerLevel, Map<String, SableContraptionCache>> sableContraptionCaches = new ConcurrentHashMap<>();'
-            + '\n\n    /** Positive deletion evidence consumed by generic scene persistence. */'
-            + '\n    private final Map<ServerLevel, Set<String>> deletedContraptionIds = new ConcurrentHashMap<>();'
+
             + '\n\n    /** ControlledContraptionEntity controller position, used only to invalidate disassembled cached rotors. */'
             + '\n    private static final Field CONTROLLER_POS_FIELD = controllerPosField();'
             + '\n\n    /** Persistent last-known Sable child snapshots, separate from user-editable compatibility config. */'
@@ -485,26 +484,18 @@ def _apply_sable_integration(s: str) -> str:
         clear_needle,
         '''    @Override
     public Collection<String> deletedObjectIds(ServerLevel level) {
-        Set<String> deleted = deletedContraptionIds.get(level);
-        if (deleted == null || deleted.isEmpty()) return List.of();
-
-        List<String> result = List.copyOf(deleted);
-        deleted.removeAll(result);
-        return result;
+        return ContraptionDeletionTracker.drain(level);
     }
 
     private void markContraptionDeleted(ServerLevel level, String objectId) {
-        if (objectId == null || objectId.isBlank()) return;
-        deletedContraptionIds
-                .computeIfAbsent(level, ignored -> ConcurrentHashMap.newKeySet())
-                .add(objectId);
+        ContraptionDeletionTracker.record(level, objectId);
     }
 
     public void clear() {
         savePersistentSableCaches();
         carriageCaches.clear();
         sableContraptionCaches.clear();
-        deletedContraptionIds.clear();
+        ContraptionDeletionTracker.clear();
         sablePersistentLoaded.clear();
         terrainFootprints.clear();
     }''',
