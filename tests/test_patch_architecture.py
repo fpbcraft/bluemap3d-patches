@@ -136,6 +136,9 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("invalidateChunkCache", transform)
         self.assertIn("getChunkAtBlock", transform)
         self.assertIn('mca[airOrWater={},sameBlock={},other={},unavailable={}]', transform)
+        self.assertIn("CONTRAPTION-ENTITY-RENDERER-DIAG", transform)
+        self.assertIn("create:stationary_contraption", transform)
+        self.assertIn("registeredRendererTypes", transform)
 
     def test_mca_region_boundaries_use_floor_division(self) -> None:
         queue = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java").read_text()
