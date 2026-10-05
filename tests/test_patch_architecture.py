@@ -112,7 +112,10 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("TileRefreshQueue.java", build)
         self.assertIn("level.save(null, true, false)", transform)
         self.assertIn("terrainPersistTicks", transform)
-        self.assertIn("scheduleMapUpdateTask(map, tiles, true)", queue)
+        self.assertIn("scheduleMapUpdateTask(map, regions, true)", queue)
+        self.assertIn("worldRegionFor(pos)", queue)
+        self.assertIn("Math.floorDiv(pos.getX(), 512)", queue)
+        self.assertIn("pendingTiles", queue)
         self.assertIn("deliverCompletedRenders()", queue)
         self.assertIn("renderQueueSize() != 0", queue)
 
