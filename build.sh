@@ -106,6 +106,9 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectPersist
    core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectPersistenceStore.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/ScenePersistencePolicy.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/ScenePersistencePolicy.java
+mkdir -p core/src/main/java/dev/duzo/bluemap3d/publish
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java" \
+   core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegment.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegment.java
 mkdir -p core/src/test/java/dev/duzo/bluemap3d/api
