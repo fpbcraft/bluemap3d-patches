@@ -129,6 +129,8 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("previous == source", persistence)
         self.assertIn("CONTRAPTION-REMOVAL-DIAG", removal)
         self.assertIn("reason != Entity.RemovalReason.DISCARDED", removal)
+        self.assertIn("dimensionPrefix + objectId", persistence)
+        self.assertIn("CONTRAPTION-WORLD-DIAG", (ROOT / "scripts/transforms/contraption_provider.py").read_text())
 
     def test_mca_region_boundaries_use_floor_division(self) -> None:
         queue = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java").read_text()
