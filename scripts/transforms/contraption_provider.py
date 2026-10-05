@@ -499,6 +499,7 @@ def _apply_sable_integration(s: str) -> str:
         sablePersistentLoaded.clear();
         terrainFootprints.clear();
         terrainPersistTicks.clear();
+        terrainWorldStateDiagnosed.clear();
     }''',
         1,
     )
@@ -533,6 +534,8 @@ def _apply_terrain_invalidation(s: str) -> str:
             + '\n    private final Map<ServerLevel, Map<String, Footprint>> terrainFootprints = new ConcurrentHashMap<>();'
             + '\n\n    /** Last game tick whose changed Create terrain was persisted for BlueMap. */'
             + '\n    private final Map<ServerLevel, Long> terrainPersistTicks = new ConcurrentHashMap<>();'
+            + '\n\n    /** Live Create entities whose source-world block state has already been diagnosed. */'
+            + '\n    private final Set<String> terrainWorldStateDiagnosed = ConcurrentHashMap.newKeySet();'
             + '\n\n    /** Inclusive X/Z footprint of a contraption in the real world. */'
             + '\n    private record Footprint(int minX, int minZ, int maxX, int maxZ, int y) {}'
             + '\n\n    private static final int MAX_TERRAIN_REFRESH_SAMPLES = 64;',
@@ -574,6 +577,7 @@ def _apply_terrain_invalidation(s: str) -> str:
                 // terrain, so only track ordinary Create assemblies here.
                 if (liveSubLevel == null) {
                     terrainContraptions.add(object.id());
+                    diagnoseAssemblyWorldState(level, entity, object.id());
                     trackTerrainFootprint(
                             level,
                             object.id(),
@@ -671,7 +675,65 @@ def _apply_terrain_invalidation(s: str) -> str:
     terrain_methods_anchor = '''    /** Builds the {@link SceneObject} both contraption paths return, differing only in id. */'''
     if terrain_methods_anchor not in s:
         raise SystemExit("ContraptionProvider terrain helper insertion point not found")
-    terrain_methods = r'''    private void trackTerrainFootprint(
+    terrain_methods = r'''    private void diagnoseAssemblyWorldState(
+            ServerLevel level,
+            AbstractContraptionEntity entity,
+            String objectId) {
+        String diagnosticKey = level.dimension().location() + "/" + entity.getUUID();
+        if (!terrainWorldStateDiagnosed.add(diagnosticKey)) return;
+
+        Contraption contraption = entity.getContraption();
+        if (contraption == null || contraption.anchor == null
+                || contraption.getBlocks() == null || contraption.getBlocks().isEmpty()) {
+            LOGGER.info(
+                    "CONTRAPTION-WORLD-DIAG id={} type={} dimension={} blocks=0 state=unavailable",
+                    objectId, entity.getClass().getName(), level.dimension().location());
+            return;
+        }
+
+        int total = 0;
+        int air = 0;
+        int sameBlock = 0;
+        int other = 0;
+        List<String> nonAirExamples = new ArrayList<>();
+
+        for (var block : contraption.getBlocks().values()) {
+            BlockPos sourcePos = contraption.anchor.offset(block.pos());
+            var actual = level.getBlockState(sourcePos);
+            total++;
+
+            if (actual.isAir()) {
+                air++;
+                continue;
+            }
+
+            if (actual.getBlock() == block.state().getBlock()) {
+                sameBlock++;
+            } else {
+                other++;
+            }
+
+            if (nonAirExamples.size() < 5) {
+                nonAirExamples.add(
+                        sourcePos + " actual=" + actual + " expected=" + block.state());
+            }
+        }
+
+        LOGGER.info(
+                "CONTRAPTION-WORLD-DIAG id={} type={} dimension={} anchor={} blocks={} "
+                        + "air={} sameBlock={} other={} nonAirExamples={}",
+                objectId,
+                entity.getClass().getName(),
+                level.dimension().location(),
+                contraption.anchor,
+                total,
+                air,
+                sameBlock,
+                other,
+                nonAirExamples);
+    }
+
+    private void trackTerrainFootprint(
             ServerLevel level,
             String objectId,
             Footprint assemblyFootprint,
