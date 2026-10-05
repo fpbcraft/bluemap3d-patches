@@ -184,7 +184,7 @@ public final class TileRefreshQueue implements BlueMap3D.TileRefresher {
         });
     }
 
-    static Vector2i worldRegionFor(BlockPos pos) {
+    private static Vector2i worldRegionFor(BlockPos pos) {
         // Minecraft/BlueMap MCA regions are 32x32 chunks = 512x512 blocks. floorDiv is
         // intentional: negative block coordinates belong to negative region coordinates.
         return new Vector2i(
