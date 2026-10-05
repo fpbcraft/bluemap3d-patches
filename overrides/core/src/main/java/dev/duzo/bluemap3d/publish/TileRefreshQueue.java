@@ -37,10 +37,15 @@ public final class TileRefreshQueue implements BlueMap3D.TileRefresher {
     private static final int FLUSH_INTERVAL_TICKS = 40;
 
     private final BlueMapAPI api;
-    /** Pending tiles per map id. Guarded by itself. */
-    private final Map<String, Set<Vector2i>> pending = new HashMap<>();
-    /** Tiles whose forced BlueMap render has been scheduled but not yet completed. */
-    private final Map<String, Set<Vector2i>> rendering = new HashMap<>();
+    /**
+     * Pending MCA world-regions per map id. BlueMap's scheduleMapUpdateTask(map, regions, ...)
+     * API expects region coordinates, not tile coordinates.
+     */
+    private final Map<String, Set<Vector2i>> pendingRegions = new HashMap<>();
+    /** Browser-visible map tiles corresponding to pending region refreshes. Guarded with pendingRegions. */
+    private final Map<String, Set<Vector2i>> pendingTiles = new HashMap<>();
+    /** Browser tiles whose forced BlueMap render has been scheduled but not yet completed. */
+    private final Map<String, Set<Vector2i>> renderingTiles = new HashMap<>();
     /** Tiles queued since the browser was last told, per map id. Guarded by itself. */
     private final Map<String, Set<Vector2i>> undelivered = new HashMap<>();
     private int ticks;
@@ -108,11 +113,15 @@ public final class TileRefreshQueue implements BlueMap3D.TileRefresher {
                 return;
             }
             Vector3i position = new Vector3i(pos.getX(), pos.getY(), pos.getZ());
-            synchronized (pending) {
+            Vector2i region = worldRegionFor(pos);
+            synchronized (pendingRegions) {
                 for (BlueMapMap map : world.getMaps()) {
-                    // posToTile is the map's own conversion, so it accounts for that map's
-                    // tile size and offset rather than assuming BlueMap's defaults.
-                    pending.computeIfAbsent(map.getId(), key -> new HashSet<>())
+                    // RenderManager.scheduleMapUpdateTask(map, Collection<Vector2i>, ...)
+                    // takes MCA world-region coordinates. Keep those separate from the
+                    // map tile coordinates the browser needs to evict after rendering.
+                    pendingRegions.computeIfAbsent(map.getId(), key -> new HashSet<>())
+                            .add(region);
+                    pendingTiles.computeIfAbsent(map.getId(), key -> new HashSet<>())
                             .add(map.posToTile(position));
                 }
             }
@@ -130,42 +139,64 @@ public final class TileRefreshQueue implements BlueMap3D.TileRefresher {
         }
         ticks = 0;
 
-        Map<String, Set<Vector2i>> batch;
-        synchronized (pending) {
-            if (pending.isEmpty()) {
+        Map<String, Set<Vector2i>> regionBatch;
+        Map<String, Set<Vector2i>> tileBatch;
+        synchronized (pendingRegions) {
+            if (pendingRegions.isEmpty()) {
                 return;
             }
-            batch = new HashMap<>(pending);
-            pending.clear();
+            regionBatch = new HashMap<>(pendingRegions);
+            tileBatch = new HashMap<>(pendingTiles);
+            pendingRegions.clear();
+            pendingTiles.clear();
         }
 
-        batch.forEach((mapId, tiles) -> {
+        regionBatch.forEach((mapId, regions) -> {
+            Set<Vector2i> tiles = tileBatch.getOrDefault(mapId, Set.of());
             try {
                 api.getMap(mapId).ifPresentOrElse(map -> {
-                    // An explicit BlueMap3D refresh means the caller knows the tile is stale.
-                    // Force rendering instead of relying on BlueMap's saved chunk hash.
-                    boolean scheduled = api.getRenderManager().scheduleMapUpdateTask(map, tiles, true);
+                    // An explicit BlueMap3D refresh means the caller knows the terrain is
+                    // stale. BlueMap expects MCA region coordinates here and will render
+                    // every affected hires tile inside those regions.
+                    boolean scheduled = api.getRenderManager()
+                            .scheduleMapUpdateTask(map, regions, true);
                     if (scheduled) {
-                        synchronized (rendering) {
-                            rendering.computeIfAbsent(mapId, key -> new HashSet<>()).addAll(tiles);
+                        synchronized (renderingTiles) {
+                            renderingTiles.computeIfAbsent(mapId, key -> new HashSet<>())
+                                    .addAll(tiles);
                         }
                     } else {
-                        // Render manager rejected the task (for example while stopped). Keep
-                        // the request so the next flush can retry rather than losing it.
-                        synchronized (pending) {
-                            pending.computeIfAbsent(mapId, key -> new HashSet<>()).addAll(tiles);
-                        }
+                        requeue(mapId, regions, tiles);
                     }
-                    LOGGER.info("Queued {} tile(s) on map '{}' for forced re-render "
-                                    + "(accepted={}, renderQueue={})",
-                            tiles.size(), mapId, scheduled,
+                    LOGGER.info("Queued {} world-region(s) / {} browser tile(s) on map '{}' "
+                                    + "for forced re-render (accepted={}, renderQueue={})",
+                            regions.size(), tiles.size(), mapId, scheduled,
                             api.getRenderManager().renderQueueSize());
-                }, () -> LOGGER.warn("No BlueMap map called '{}'; {} tile(s) not re-rendered",
-                        mapId, tiles.size()));
+                }, () -> {
+                    requeue(mapId, regions, tiles);
+                    LOGGER.warn("No BlueMap map called '{}'; {} world-region(s) not re-rendered",
+                            mapId, regions.size());
+                });
             } catch (RuntimeException e) {
+                requeue(mapId, regions, tiles);
                 LOGGER.warn("Could not schedule a map update for '{}': {}", mapId, e.toString());
             }
         });
+    }
+
+    static Vector2i worldRegionFor(BlockPos pos) {
+        // Minecraft/BlueMap MCA regions are 32x32 chunks = 512x512 blocks. floorDiv is
+        // intentional: negative block coordinates belong to negative region coordinates.
+        return new Vector2i(
+                Math.floorDiv(pos.getX(), 512),
+                Math.floorDiv(pos.getZ(), 512));
+    }
+
+    private void requeue(String mapId, Set<Vector2i> regions, Set<Vector2i> tiles) {
+        synchronized (pendingRegions) {
+            pendingRegions.computeIfAbsent(mapId, key -> new HashSet<>()).addAll(regions);
+            pendingTiles.computeIfAbsent(mapId, key -> new HashSet<>()).addAll(tiles);
+        }
     }
 
     /**
@@ -180,10 +211,10 @@ public final class TileRefreshQueue implements BlueMap3D.TileRefresher {
         if (api.getRenderManager().renderQueueSize() != 0) return;
 
         Map<String, Set<Vector2i>> completed;
-        synchronized (rendering) {
-            if (rendering.isEmpty()) return;
-            completed = new HashMap<>(rendering);
-            rendering.clear();
+        synchronized (renderingTiles) {
+            if (renderingTiles.isEmpty()) return;
+            completed = new HashMap<>(renderingTiles);
+            renderingTiles.clear();
         }
 
         synchronized (undelivered) {
