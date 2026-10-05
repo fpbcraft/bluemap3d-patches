@@ -147,12 +147,15 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
 
         Set<String> present = new HashSet<>(liveIds);
         present.addAll(cachedIds);
+        String dimension = level.dimension().location().toString();
+        String dimensionPrefix = dimension + "|";
 
         for (String objectId : present) {
             ObjectSource source = liveIds.contains(objectId)
                     ? ObjectSource.LIVE
                     : ObjectSource.PERSISTED;
-            ObjectSource previous = createObjectSources.put(objectId, source);
+            String sourceKey = dimensionPrefix + objectId;
+            ObjectSource previous = createObjectSources.put(sourceKey, source);
             if (previous == source) continue;
 
             SceneObject object = merged.get(objectId);
@@ -165,9 +168,11 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
                     object == null ? "unknown" : object.position());
         }
 
-        for (String objectId : Set.copyOf(createObjectSources.keySet())) {
+        for (String sourceKey : Set.copyOf(createObjectSources.keySet())) {
+            if (!sourceKey.startsWith(dimensionPrefix)) continue;
+            String objectId = sourceKey.substring(dimensionPrefix.length());
             if (present.contains(objectId)) continue;
-            ObjectSource previous = createObjectSources.remove(objectId);
+            ObjectSource previous = createObjectSources.remove(sourceKey);
             LOGGER.info(
                     "CONTRAPTION-SOURCE-DIAG source=ABSENT previous={} id={} dimension={}",
                     previous, objectId, level.dimension().location());
