@@ -38,12 +38,12 @@ def apply() -> None:
 def _apply_sable_integration(s: str) -> str:
     """Add Sable projection, child persistence, and positive deletion semantics."""
     import_needle = 'import dev.duzo.bluemap3d.api.SceneObjectProvider;'
-            + '\nimport de.bluecolored.bluemap.api.BlueMapAPI;'
     if import_needle not in s:
         raise SystemExit("ContraptionProvider Sable import insertion point not found")
     s = s.replace(
         import_needle,
         import_needle
+            + '\nimport de.bluecolored.bluemap.api.BlueMapAPI;'
             + '\nimport dev.duzo.bluemap3d.compat.CompatRegistry;'
             + '\nimport dev.ryanhcode.sable.Sable;'
             + '\nimport dev.ryanhcode.sable.api.sublevel.SubLevelContainer;'
