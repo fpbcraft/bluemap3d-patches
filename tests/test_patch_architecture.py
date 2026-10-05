@@ -119,6 +119,23 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("deliverCompletedRenders()", queue)
         self.assertIn("renderQueueSize() != 0", queue)
 
+    def test_mca_region_boundaries_use_floor_division(self) -> None:
+        queue = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java").read_text()
+
+        self.assertIn("Math.floorDiv(pos.getX(), 512)", queue)
+        self.assertIn("Math.floorDiv(pos.getZ(), 512)", queue)
+
+        cases = {
+            0: 0,
+            511: 0,
+            512: 1,
+            -1: -1,
+            -512: -1,
+            -513: -2,
+        }
+        for block, region in cases.items():
+            self.assertEqual(block // 512, region)
+
     def test_patch_driver_stays_small_and_delegates_create_transform(self) -> None:
         script = (ROOT / "scripts" / "patch-upstream.py").read_text()
         transform = (ROOT / "scripts" / "transforms" / "contraption_provider.py").read_text()
