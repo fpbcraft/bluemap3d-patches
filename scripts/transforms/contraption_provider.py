@@ -501,6 +501,7 @@ def _apply_sable_integration(s: str) -> str:
         terrainFootprints.clear();
         terrainPersistTicks.clear();
         terrainWorldStateDiagnosed.clear();
+        nativeEntityRendererDiagnosed.clear();
     }''',
         1,
     )
@@ -537,6 +538,8 @@ def _apply_terrain_invalidation(s: str) -> str:
             + '\n    private final Map<ServerLevel, Long> terrainPersistTicks = new ConcurrentHashMap<>();'
             + '\n\n    /** Live Create entities whose source-world block state has already been diagnosed. */'
             + '\n    private final Set<String> terrainWorldStateDiagnosed = ConcurrentHashMap.newKeySet();'
+            + '\n\n    /** BlueMap native entity-renderer/resource diagnostic runs once per map. */'
+            + '\n    private final Set<String> nativeEntityRendererDiagnosed = ConcurrentHashMap.newKeySet();'
             + '\n\n    /** Inclusive X/Z footprint of a contraption in the real world. */'
             + '\n    private record Footprint(int minX, int minZ, int maxX, int maxZ, int y) {}'
             + '\n\n    private static final int MAX_TERRAIN_REFRESH_SAMPLES = 64;',
@@ -581,6 +584,7 @@ def _apply_terrain_invalidation(s: str) -> str:
                     // BlueMap reads saved MCA data, so flush first and then compare the
                     // exact same source coordinates through both world views.
                     persistTerrainOnce(level);
+                    diagnoseNativeEntityRenderer(level);
                     diagnoseAssemblyWorldState(level, entity, object.id());
                     trackTerrainFootprint(
                             level,
@@ -679,7 +683,69 @@ def _apply_terrain_invalidation(s: str) -> str:
     terrain_methods_anchor = '''    /** Builds the {@link SceneObject} both contraption paths return, differing only in id. */'''
     if terrain_methods_anchor not in s:
         raise SystemExit("ContraptionProvider terrain helper insertion point not found")
-    terrain_methods = r'''    private void diagnoseAssemblyWorldState(
+    terrain_methods = r'''    private void diagnoseNativeEntityRenderer(ServerLevel level) {
+        try {
+            var api = BlueMapAPI.getInstance().orElse(null);
+            if (api == null) return;
+
+            for (var apiMap : api.getMaps()) {
+                if (!apiMap.getWorld().equals(api.getWorld(level).orElse(null))) continue;
+                if (!nativeEntityRendererDiagnosed.add(apiMap.getId())) continue;
+
+                Object coreMap = apiMap.getClass().getMethod("map").invoke(apiMap);
+                Object resourcePack = coreMap.getClass().getMethod("getResourcePack").invoke(coreMap);
+                Object entityStates = resourcePack.getClass().getMethod("getEntityStates").invoke(resourcePack);
+
+                Object matchingState = null;
+                String matchingStateKey = null;
+                if (entityStates instanceof Map<?, ?> states) {
+                    for (var entry : states.entrySet()) {
+                        if ("create:stationary_contraption".equals(String.valueOf(entry.getKey()))) {
+                            matchingStateKey = String.valueOf(entry.getKey());
+                            matchingState = entry.getValue();
+                            break;
+                        }
+                    }
+                }
+
+                List<String> partRenderers = new ArrayList<>();
+                if (matchingState != null) {
+                    Object parts = matchingState.getClass().getMethod("getParts").invoke(matchingState);
+                    int length = java.lang.reflect.Array.getLength(parts);
+                    for (int i = 0; i < length; i++) {
+                        Object part = java.lang.reflect.Array.get(parts, i);
+                        Object renderer = part.getClass().getMethod("getRenderer").invoke(part);
+                        Object key = renderer.getClass().getMethod("getKey").invoke(renderer);
+                        partRenderers.add(key + " via " + renderer.getClass().getName());
+                    }
+                }
+
+                Class<?> typeClass = Class.forName(
+                        "de.bluecolored.bluemap.core.map.hires.entity.EntityRendererType");
+                Object registry = typeClass.getField("REGISTRY").get(null);
+                Object values = registry.getClass().getMethod("values").invoke(registry);
+                List<String> registered = new ArrayList<>();
+                if (values instanceof Iterable<?> iterable) {
+                    for (Object type : iterable) {
+                        Object key = type.getClass().getMethod("getKey").invoke(type);
+                        registered.add(key + " via " + type.getClass().getName());
+                    }
+                }
+
+                LOGGER.info(
+                        "CONTRAPTION-ENTITY-RENDERER-DIAG map={} stateKey={} "
+                                + "partRenderers={} registeredRendererTypes={}",
+                        apiMap.getId(),
+                        matchingStateKey == null ? "<absent>" : matchingStateKey,
+                        partRenderers,
+                        registered);
+            }
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            LOGGER.warn("CONTRAPTION-ENTITY-RENDERER-DIAG failed: {}", error.toString());
+        }
+    }
+
+    private void diagnoseAssemblyWorldState(
             ServerLevel level,
             AbstractContraptionEntity entity,
             String objectId) {
