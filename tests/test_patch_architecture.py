@@ -93,6 +93,17 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertNotIn("BlueMap3DMod procedural import insertion point", script)
         self.assertNotIn("BlueMap3DMod procedural source insertion point", script)
 
+    def test_create_removal_tracking_is_wired_into_distribution(self) -> None:
+        build = (ROOT / "build.sh").read_text()
+        mixins = (ROOT / "overrides/addon-create/src/main/resources/bluemap3d_create.mixins.json").read_text()
+        transform = (ROOT / "scripts/transforms/contraption_provider.py").read_text()
+
+        self.assertIn("ContraptionDeletionTracker.java", build)
+        self.assertIn("ContraptionRemovalMixin.java", build)
+        self.assertIn('"ContraptionRemovalMixin"', mixins)
+        self.assertIn("ContraptionDeletionTracker.drain(level)", transform)
+        self.assertIn("ContraptionDeletionTracker.record(level, objectId)", transform)
+
     def test_patch_driver_stays_small_and_delegates_create_transform(self) -> None:
         script = (ROOT / "scripts" / "patch-upstream.py").read_text()
         transform = (ROOT / "scripts" / "transforms" / "contraption_provider.py").read_text()
