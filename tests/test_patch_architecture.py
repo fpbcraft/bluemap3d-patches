@@ -104,6 +104,18 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("ContraptionDeletionTracker.drain(level)", transform)
         self.assertIn("ContraptionDeletionTracker.record(level, objectId)", transform)
 
+    def test_terrain_refresh_waits_for_saved_world_and_completed_render(self) -> None:
+        build = (ROOT / "build.sh").read_text()
+        transform = (ROOT / "scripts/transforms/contraption_provider.py").read_text()
+        queue = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java").read_text()
+
+        self.assertIn("TileRefreshQueue.java", build)
+        self.assertIn("level.save(null, true, false)", transform)
+        self.assertIn("terrainPersistTicks", transform)
+        self.assertIn("scheduleMapUpdateTask(map, tiles, true)", queue)
+        self.assertIn("deliverCompletedRenders()", queue)
+        self.assertIn("renderQueueSize() != 0", queue)
+
     def test_patch_driver_stays_small_and_delegates_create_transform(self) -> None:
         script = (ROOT / "scripts" / "patch-upstream.py").read_text()
         transform = (ROOT / "scripts" / "transforms" / "contraption_provider.py").read_text()
