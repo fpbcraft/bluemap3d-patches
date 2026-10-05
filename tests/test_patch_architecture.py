@@ -119,6 +119,17 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("deliverCompletedRenders()", queue)
         self.assertIn("renderQueueSize() != 0", queue)
 
+    def test_create_duplicate_diagnostics_are_transition_based(self) -> None:
+        persistence = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/api/PersistentSceneObjectProvider.java").read_text()
+        removal = (ROOT / "overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/ContraptionRemovalMixin.java").read_text()
+
+        self.assertIn("CONTRAPTION-SOURCE-DIAG", persistence)
+        self.assertIn("ObjectSource.LIVE", persistence)
+        self.assertIn("ObjectSource.PERSISTED", persistence)
+        self.assertIn("previous == source", persistence)
+        self.assertIn("CONTRAPTION-REMOVAL-DIAG", removal)
+        self.assertIn("reason != Entity.RemovalReason.DISCARDED", removal)
+
     def test_mca_region_boundaries_use_floor_division(self) -> None:
         queue = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java").read_text()
 
