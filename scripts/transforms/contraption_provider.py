@@ -38,6 +38,7 @@ def apply() -> None:
 def _apply_sable_integration(s: str) -> str:
     """Add Sable projection, child persistence, and positive deletion semantics."""
     import_needle = 'import dev.duzo.bluemap3d.api.SceneObjectProvider;'
+            + '\nimport de.bluecolored.bluemap.api.BlueMapAPI;'
     if import_needle not in s:
         raise SystemExit("ContraptionProvider Sable import insertion point not found")
     s = s.replace(
@@ -577,6 +578,9 @@ def _apply_terrain_invalidation(s: str) -> str:
                 // terrain, so only track ordinary Create assemblies here.
                 if (liveSubLevel == null) {
                     terrainContraptions.add(object.id());
+                    // BlueMap reads saved MCA data, so flush first and then compare the
+                    // exact same source coordinates through both world views.
+                    persistTerrainOnce(level);
                     diagnoseAssemblyWorldState(level, entity, object.id());
                     trackTerrainFootprint(
                             level,
@@ -695,33 +699,55 @@ def _apply_terrain_invalidation(s: str) -> str:
         int air = 0;
         int sameBlock = 0;
         int other = 0;
-        List<String> nonAirExamples = new ArrayList<>();
+        int mcaAirOrWater = 0;
+        int mcaSameBlock = 0;
+        int mcaOther = 0;
+        int mcaUnavailable = 0;
+        List<String> examples = new ArrayList<>();
 
         for (var block : contraption.getBlocks().values()) {
             BlockPos sourcePos = contraption.anchor.offset(block.pos());
             var actual = level.getBlockState(sourcePos);
+            String expectedId = BuiltInRegistries.BLOCK.getKey(block.state().getBlock()).toString();
+            String mcaState = blueMapMcaBlockState(level, sourcePos);
             total++;
 
             if (actual.isAir()) {
                 air++;
-                continue;
-            }
-
-            if (actual.getBlock() == block.state().getBlock()) {
+            } else if (actual.getBlock() == block.state().getBlock()) {
                 sameBlock++;
             } else {
                 other++;
             }
 
-            if (nonAirExamples.size() < 5) {
-                nonAirExamples.add(
-                        sourcePos + " actual=" + actual + " expected=" + block.state());
+            if (mcaState == null) {
+                mcaUnavailable++;
+            } else if (mcaState.startsWith("minecraft:air[")
+                    || mcaState.startsWith("minecraft:cave_air[")
+                    || mcaState.startsWith("minecraft:void_air[")
+                    || mcaState.startsWith("minecraft:water[")) {
+                mcaAirOrWater++;
+            } else if (mcaState.startsWith(expectedId + "[")) {
+                mcaSameBlock++;
+            } else {
+                mcaOther++;
+            }
+
+            boolean liveIsExpected = actual.getBlock() == block.state().getBlock();
+            boolean mcaIsExpected = mcaState != null && mcaState.startsWith(expectedId + "[");
+            if (examples.size() < 8 && (liveIsExpected != mcaIsExpected || !actual.isAir())) {
+                examples.add(
+                        sourcePos
+                                + " live=" + actual
+                                + " mca=" + (mcaState == null ? "<unavailable>" : mcaState)
+                                + " expected=" + block.state());
             }
         }
 
         LOGGER.info(
                 "CONTRAPTION-WORLD-DIAG id={} type={} dimension={} anchor={} blocks={} "
-                        + "air={} sameBlock={} other={} nonAirExamples={}",
+                        + "live[air={},sameBlock={},other={}] "
+                        + "mca[airOrWater={},sameBlock={},other={},unavailable={}] examples={}",
                 objectId,
                 entity.getClass().getName(),
                 level.dimension().location(),
@@ -730,7 +756,48 @@ def _apply_terrain_invalidation(s: str) -> str:
                 air,
                 sameBlock,
                 other,
-                nonAirExamples);
+                mcaAirOrWater,
+                mcaSameBlock,
+                mcaOther,
+                mcaUnavailable,
+                examples);
+    }
+
+    /**
+     * Reads the same decoded MCA chunk object BlueMap's terrain renderer uses.
+     *
+     * This intentionally goes through reflection: BlueMap3D compiles against the public
+     * BlueMap API only, while BlueMapWorldImpl.world() and core World/Chunk live in
+     * bluemap-common/core. At runtime those classes are present in the BlueMap mod.
+     */
+    private static String blueMapMcaBlockState(ServerLevel level, BlockPos pos) {
+        try {
+            var api = BlueMapAPI.getInstance().orElse(null);
+            if (api == null) return null;
+
+            var apiWorld = api.getWorld(level).orElse(null);
+            if (apiWorld == null) return null;
+
+            Object coreWorld = apiWorld.getClass().getMethod("world").invoke(apiWorld);
+
+            // Bypass any decoded-chunk snapshot left by an earlier render before reading.
+            coreWorld.getClass()
+                    .getMethod("invalidateChunkCache", int.class, int.class)
+                    .invoke(coreWorld, pos.getX() >> 4, pos.getZ() >> 4);
+
+            Object chunk = coreWorld.getClass()
+                    .getMethod("getChunkAtBlock", int.class, int.class)
+                    .invoke(coreWorld, pos.getX(), pos.getZ());
+            Object state = chunk.getClass()
+                    .getMethod("getBlockState", int.class, int.class, int.class)
+                    .invoke(chunk, pos.getX(), pos.getY(), pos.getZ());
+            return state == null ? null : state.toString();
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            LOGGER.warn(
+                    "CONTRAPTION-MCA-DIAG failed at {} in {}: {}",
+                    pos, level.dimension().location(), error.toString());
+            return null;
+        }
     }
 
     private void trackTerrainFootprint(
