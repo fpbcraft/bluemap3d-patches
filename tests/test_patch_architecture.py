@@ -119,9 +119,10 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("deliverCompletedRenders()", queue)
         self.assertIn("renderQueueSize() != 0", queue)
 
-    def test_create_duplicate_diagnostics_are_transition_based(self) -> None:
+    def test_create_persistence_and_diagnostics_are_transition_based(self) -> None:
         persistence = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/api/PersistentSceneObjectProvider.java").read_text()
         removal = (ROOT / "overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/ContraptionRemovalMixin.java").read_text()
+        transform = (ROOT / "scripts/transforms/contraption_provider.py").read_text()
 
         self.assertIn("CONTRAPTION-SOURCE-DIAG", persistence)
         self.assertIn("ObjectSource.LIVE", persistence)
@@ -130,15 +131,15 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("CONTRAPTION-REMOVAL-DIAG", removal)
         self.assertIn("reason != Entity.RemovalReason.DISCARDED", removal)
         self.assertIn("dimensionPrefix + objectId", persistence)
-        transform = (ROOT / "scripts/transforms/contraption_provider.py").read_text()
-        self.assertIn("CONTRAPTION-WORLD-DIAG", transform)
-        self.assertIn("BlueMapAPI.getInstance()", transform)
-        self.assertIn("invalidateChunkCache", transform)
-        self.assertIn("getChunkAtBlock", transform)
-        self.assertIn('mca[airOrWater={},sameBlock={},other={},unavailable={}]', transform)
-        self.assertIn("CONTRAPTION-ENTITY-RENDERER-DIAG", transform)
-        self.assertIn("create:stationary_contraption", transform)
-        self.assertIn("registeredRendererTypes", transform)
+
+        # Provider enumeration is used both by BlueMap3D publishing and Player History.
+        # It must never persist the Minecraft level on every poll. Terrain persistence
+        # belongs only to refreshFootprint(), which runs on assembly/disassembly transitions.
+        self.assertEqual(transform.count("persistTerrainOnce(level);"), 1)
+        self.assertNotIn("diagnoseAssemblyWorldState", transform)
+        self.assertNotIn("diagnoseNativeEntityRenderer", transform)
+        self.assertNotIn("CONTRAPTION-WORLD-DIAG", transform)
+        self.assertNotIn("CONTRAPTION-ENTITY-RENDERER-DIAG", transform)
 
     def test_mca_region_boundaries_use_floor_division(self) -> None:
         queue = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java").read_text()
