@@ -43,6 +43,7 @@ public final class EclipticSeasonsAdapter {
         polling = null;
         lastState = null;
         SeasonalTintBridge.reset();
+        SeasonalSnowSurface.reset();
         if (executor != null) executor.shutdownNow();
     }
 
@@ -60,12 +61,18 @@ public final class EclipticSeasonsAdapter {
                     SeasonState previous = lastState;
                     lastState = next;
                     if (previous == null || !previous.solarTerm().equals(next.solarTerm())) {
+                        SeasonalSnowSurface.reset();
                         try {
                             SeasonalTintBridge.capture(server, next.solarTerm());
                         } catch (ReflectiveOperationException | LinkageError failure) {
                             Logger.global.logWarning("Unable to capture Ecliptic seasonal tint palette: " + failure);
                             SeasonalTintBridge.reset();
                         }
+                    }
+                    try {
+                        SeasonalSnowSurface.drain(server);
+                    } catch (ReflectiveOperationException | LinkageError failure) {
+                        Logger.global.logWarning("Unable to sample Ecliptic snow coverage: " + failure);
                     }
                     if (previous == null || previous.equals(next)) return;
 
