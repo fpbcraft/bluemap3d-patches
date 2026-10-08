@@ -24,6 +24,24 @@ final class CopycatsTransformTest {
     }
 
     @Test
+    void slopeHighEdgePointsTowardBlockFacingInAllFourDirections() {
+        // Procedural Copycats slopes rise along +Z before facing rotation.
+        String[] facings = {"south", "west", "north", "east"};
+        int[] rotations = {0, 90, 180, 270};
+        float[][] expected = {
+                {8, 16, 16},  // south
+                {0, 16, 8},   // west
+                {8, 16, 0},   // north
+                {16, 16, 8}   // east
+        };
+        for (int i = 0; i < facings.length; i++) {
+            float[] highEdgeMidpoint = {8, 16, 16};
+            new CopycatsTransform().rotateY(rotations[i]).apply(highEdgeMidpoint);
+            assertArrayEquals(expected[i], highEdgeMidpoint, facings[i]);
+        }
+    }
+
+    @Test
     void negativeQuarterTurnUsesEquivalentPositiveTurns() {
         float[] point = {1, 2, 3};
         new CopycatsTransform().rotateY(-90).apply(point);
