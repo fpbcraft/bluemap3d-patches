@@ -42,6 +42,7 @@ public final class EclipticSeasonsAdapter {
         ScheduledExecutorService executor = polling;
         polling = null;
         lastState = null;
+        SeasonalTintBridge.reset();
         if (executor != null) executor.shutdownNow();
     }
 
@@ -58,6 +59,14 @@ public final class EclipticSeasonsAdapter {
                     SeasonState next = current.get();
                     SeasonState previous = lastState;
                     lastState = next;
+                    if (previous == null || !previous.solarTerm().equals(next.solarTerm())) {
+                        try {
+                            SeasonalTintBridge.capture(server, next.solarTerm());
+                        } catch (ReflectiveOperationException | LinkageError failure) {
+                            Logger.global.logWarning("Unable to capture Ecliptic seasonal tint palette: " + failure);
+                            SeasonalTintBridge.reset();
+                        }
+                    }
                     if (previous == null || previous.equals(next)) return;
 
                     Logger.global.logInfo("Ecliptic solar term changed: " + previous.solarTerm()
