@@ -46,6 +46,7 @@ public final class CopycatsSpecialSource implements BlockModelSource {
             case "copycats:copycat_vertical_half_layer" -> verticalHalfLayer(state, metadata);
             case "copycats:copycat_flat_pane" -> flatPane(state, metadata);
             case "copycats:copycat_vertical_stairs" -> verticalStairs(state, metadata);
+            case "copycats:copycat_slope" -> slope(state, metadata);
             case "copycats:copycat_slope_layer" -> slopeLayer(state, metadata);
             case "copycats:copycat_slab" -> copycatsSlab(state, metadata);
             case "create_connected:copycat_slab" -> connectedSlab(state, metadata);
@@ -78,6 +79,7 @@ public final class CopycatsSpecialSource implements BlockModelSource {
                 || id.equals("copycats:copycat_vertical_half_layer")
                 || id.equals("copycats:copycat_flat_pane")
                 || id.equals("copycats:copycat_vertical_stairs")
+                || id.equals("copycats:copycat_slope")
                 || id.equals("copycats:copycat_slope_layer")
                 || id.equals("copycats:copycat_slab")
                 || id.equals("create_connected:copycat_slab");
@@ -307,6 +309,12 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     // Copycat Slope Layer
     // -------------------------------------------------------------------------
 
+    private List<ModelQuad> slope(BlockState state, CompoundTag metadata) {
+        BlockState material = materialFor(metadata, null);
+        if (!usable(material)) return List.of();
+        return slopePrism(state, material, 0, 16);
+    }
+
     private List<ModelQuad> slopeLayer(BlockState state, CompoundTag metadata) {
         BlockState material = materialFor(metadata, null);
         if (!usable(material)) return List.of();
@@ -315,7 +323,11 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         if (layer <= 0) return List.of();
         float minHeight = layer <= 4 ? 0 : (layer - 4) * 4f;
         float maxHeight = layer <= 4 ? layer * 4f : 16f;
+        return slopePrism(state, material, minHeight, maxHeight);
+    }
 
+    private List<ModelQuad> slopePrism(
+            BlockState state, BlockState material, float minHeight, float maxHeight) {
         Transform transform = new Transform()
                 .rotateY(yRotation(stringProperty(state, "facing")))
                 .flipY("top".equals(stringProperty(state, "half")));
