@@ -2,6 +2,7 @@ package dev.duzo.bluemapseasons;
 
 import de.bluecolored.bluemap.api.BlueMapAPI;
 import de.bluecolored.bluemap.api.BlueMapMap;
+import de.bluecolored.bluemap.api.BlueMapWorld;
 import de.bluecolored.bluemap.core.logger.Logger;
 
 import java.util.Optional;
@@ -62,9 +63,13 @@ public final class EclipticSeasonsAdapter {
                     Logger.global.logInfo("Ecliptic solar term changed: " + previous.solarTerm()
                             + " -> " + next.solarTerm());
                     if (!policy.shouldRefresh(previous, next)) return;
-                    for (BlueMapMap map : api.getMaps()) {
-                        // Avoid rebuilding Nether/End terrain for Overworld-only seasonal transitions.
-                        if (!map.getWorld().getId().contains("overworld")) continue;
+                    Object overworld = server.getClass().getMethod("overworld").invoke(server);
+                    Optional<BlueMapWorld> world = api.getWorld(overworld);
+                    if (world.isEmpty()) {
+                        Logger.global.logWarning("Ecliptic Seasons: BlueMap Overworld not found; skipping forced refresh");
+                        return;
+                    }
+                    for (BlueMapMap map : world.get().getMaps()) {
                         api.getRenderManager().scheduleMapUpdateTask(map, true);
                     }
                 } catch (ReflectiveOperationException | RuntimeException error) {
