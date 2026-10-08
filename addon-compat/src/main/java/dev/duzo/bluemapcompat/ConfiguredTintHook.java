@@ -8,6 +8,7 @@ import de.bluecolored.bluemap.core.util.math.Color;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 
 import dev.duzo.bluemapseasons.SeasonalTintBridge;
+import dev.duzo.bluemapseasons.SeasonalSnowSurface;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -137,7 +138,7 @@ final class ConfiguredTintHook {
         }
         // Explicit configured tints retain precedence; Ecliptic colors apply only to
         // the normal block-color path and only where the server reports a biome palette.
-        return SeasonalTintBridge.tint(blockId, block, target);
+        return SeasonalSnowSurface.apply(blockId, block, SeasonalTintBridge.tint(blockId, block, target));
     }
 
     private Integer resolveTint(
