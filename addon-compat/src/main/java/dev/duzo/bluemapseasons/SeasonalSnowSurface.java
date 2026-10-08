@@ -55,6 +55,7 @@ public final class SeasonalSnowSurface {
     static boolean snowCandidate(String id) {
         // Refuse foliage, fluids, transparent models and explicitly snowy blockstates:
         // those require geometry/texture-specific handling.
+        id = id.contains("[") ? id.substring(0, id.indexOf('[')) : id;
         return id.equals("minecraft:grass_block") || id.equals("minecraft:dirt")
                 || id.equals("minecraft:coarse_dirt") || id.equals("minecraft:podzol")
                 || id.equals("minecraft:mycelium") || id.equals("minecraft:stone")
