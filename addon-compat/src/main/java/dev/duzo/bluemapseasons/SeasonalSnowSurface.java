@@ -35,8 +35,9 @@ public final class SeasonalSnowSurface {
         cache.clear();
     }
 
-    public static Color apply(String blockId, BlockNeighborhood block, Color color) {
-        if (!Boolean.parseBoolean(System.getProperty("bluemap.compat.ecliptic.snow", "true"))) return color;
+    public static boolean isSnowy(BlockNeighborhood block) {
+        String blockId = block.getBlockState().getFormatted();
+        if (!Boolean.parseBoolean(System.getProperty("bluemap.compat.ecliptic.snow", "true"))) return false;
         if (!snowCandidate(blockId)) return color;
         // This prevents an expensive cross-thread world lookup for most ordinary blocks.
         if (block.getNeighborBlock(0, 1, 0).getBlockState() == null) return color;
@@ -49,7 +50,7 @@ public final class SeasonalSnowSurface {
             if (queued.size() < MAX_PENDING && queued.add(pos)) pending.offer(pos);
             return color;
         }
-        return snowy ? snowTint(color) : color;
+        return Boolean.TRUE.equals(snowy);
     }
 
     static boolean snowCandidate(String id) {
@@ -62,18 +63,9 @@ public final class SeasonalSnowSurface {
                 || id.equals("minecraft:gravel");
     }
 
-    static Color snowTint(Color color) {
-        color.straight();
-        final float mix = 0.90f;
-        color.r = color.r * (1 - mix) + mix;
-        color.g = color.g * (1 - mix) + mix;
-        color.b = color.b * (1 - mix) + mix;
-        return color;
-    }
-
     /** Called on the server thread by the existing calendar poll. */
     static void drain(Object server) throws ReflectiveOperationException {
-        if (!Boolean.getBoolean("bluemap.compat.ecliptic.snow")) return;
+        if (!Boolean.parseBoolean(System.getProperty("bluemap.compat.ecliptic.snow", "true"))) return;
         if (cache.size() >= MAX_CACHED) {
             reset(); // Bounded memory; old positions will be sampled again on demand.
         }
