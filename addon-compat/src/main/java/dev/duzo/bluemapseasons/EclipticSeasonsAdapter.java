@@ -20,12 +20,22 @@ public final class EclipticSeasonsAdapter {
     private static final AtomicBoolean ENABLED = new AtomicBoolean();
     private static volatile ScheduledExecutorService polling;
     private static volatile SeasonState lastState;
+    private static volatile SeasonalLayer layer;
+    private static final java.util.concurrent.atomic.AtomicLong GENERATION = new java.util.concurrent.atomic.AtomicLong();
 
     private EclipticSeasonsAdapter() {}
 
     public static void onEnable(BlueMapAPI api) {
         if (!EclipticSeasonsBridge.isAvailable() || !ENABLED.compareAndSet(false, true)) return;
 
+        if (SeasonalLayer.enabled()) {
+            try { layer = new SeasonalLayer(api); }
+            catch (java.io.IOException failure) {
+                ENABLED.set(false);
+                Logger.global.logWarning("Cannot start seasonal layer: " + failure);
+                return;
+            }
+        }
         SeasonRefreshPolicy policy = SeasonRefreshPolicy.parse(System.getProperty(POLICY_PROPERTY, "off"));
         ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "BlueMap-Ecliptic-Seasons");
@@ -33,30 +43,47 @@ public final class EclipticSeasonsAdapter {
             return thread;
         });
         polling = executor;
-        executor.scheduleWithFixedDelay(() -> poll(api, policy), 0, 60, TimeUnit.SECONDS);
+        long generation = GENERATION.incrementAndGet();
+        executor.scheduleWithFixedDelay(() -> poll(api, policy, generation), 0, 10, TimeUnit.SECONDS);
         Logger.global.logInfo("Ecliptic Seasons detected; BlueMap seasonal refresh policy: " + policy);
     }
 
     public static void onDisable() {
         ENABLED.set(false);
+        GENERATION.incrementAndGet();
         ScheduledExecutorService executor = polling;
         polling = null;
         lastState = null;
         SeasonalTintBridge.reset();
+        SeasonalLayer previousLayer = layer;
+        layer = null;
+        if (previousLayer != null) previousLayer.close();
         if (executor != null) executor.shutdownNow();
     }
 
-    private static void poll(BlueMapAPI api, SeasonRefreshPolicy policy) {
-        if (!ENABLED.get()) return;
+    private static void poll(BlueMapAPI api, SeasonRefreshPolicy policy, long generation) {
+        if (!ENABLED.get() || GENERATION.get() != generation) return;
         try {
             Object server = EclipticSeasonsBridge.getServer();
             if (server == null) return;
             EclipticSeasonsBridge.executeOnServer(server, () -> {
-                if (!ENABLED.get()) return;
+                if (!ENABLED.get() || GENERATION.get() != generation) return;
                 try {
                     Optional<SeasonState> current = EclipticSeasonsBridge.read(server);
-                    if (current.isEmpty()) return;
+                    if (current.isEmpty()) {
+                        if (layer != null) layer.clear();
+                        SeasonalTintBridge.reset();
+                        return;
+                    }
                     SeasonState next = current.get();
+                    if (layer != null) {
+                        try { layer.capture(server, next.solarTerm()); }
+                        catch (ReflectiveOperationException | RuntimeException | LinkageError failure) {
+                            layer.clear();
+                            Logger.global.logWarning("Cannot capture dynamic seasonal state: " + failure);
+                        }
+                        return;
+                    }
                     SeasonState previous = lastState;
                     lastState = next;
                     if (previous == null || !previous.solarTerm().equals(next.solarTerm())) {

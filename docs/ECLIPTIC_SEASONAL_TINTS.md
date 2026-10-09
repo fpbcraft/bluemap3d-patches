@@ -1,5 +1,8 @@
 # Ecliptic Seasons: seasonal terrain tint (stacked slice)
 
+The default now uses the [dynamic saved-world layer](ECLIPTIC_DYNAMIC_LAYER.md).
+The baked-tint behaviour below applies only with `-Dbluemap.compat.ecliptic.dynamic=false`.
+
 Depends on PR #74. The original calendar watcher reads the Ecliptic solar term on the Minecraft server thread. This slice additionally captures the **biome-specific** Ecliptic `SolarTermColor` values into an immutable map and publishes it to BlueMap render workers. No Ecliptic client code is required at runtime.
 
 The existing native `ConfiguredTintHook` is extended to blend a season-dependent grass/foliage palette over the normal BlueMap color path. Explicit compatibility rules retain priority over this fallback.
