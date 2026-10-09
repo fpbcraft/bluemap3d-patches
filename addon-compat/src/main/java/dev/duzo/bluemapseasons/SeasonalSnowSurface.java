@@ -36,7 +36,7 @@ public final class SeasonalSnowSurface {
     }
 
     public static Color apply(String blockId, BlockNeighborhood block, Color color) {
-        if (!Boolean.getBoolean("bluemap.compat.ecliptic.snow")) return color;
+        if (!Boolean.parseBoolean(System.getProperty("bluemap.compat.ecliptic.snow", "true"))) return color;
         if (!snowCandidate(blockId)) return color;
         // This prevents an expensive cross-thread world lookup for most ordinary blocks.
         if (block.getNeighborBlock(0, 1, 0).getBlockState() == null) return color;
