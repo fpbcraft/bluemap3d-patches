@@ -1,0 +1,41 @@
+<!doctype html><html><head><script type="importmap">{"imports":{"three":"/three.js"}}</script></head><body>
+<script type="module">
+import * as THREE from 'three';
+import {HIRES_VERTEX_SHADER} from './fixtures/HiresVertexShader.js';
+import {HIRES_FRAGMENT_SHADER} from './fixtures/HiresFragmentShader.js';
+import {LOWRES_VERTEX_SHADER} from './fixtures/LowresVertexShader.js';
+import {LOWRES_FRAGMENT_SHADER} from './fixtures/LowresFragmentShader.js';
+const renderer=new THREE.WebGLRenderer({antialias:false});renderer.setSize(32,32);document.body.appendChild(renderer.domElement);
+const camera=new THREE.OrthographicCamera(-16,16,16,-16,0.1,200);camera.position.set(16,100,16);camera.up.set(0,0,-1);camera.lookAt(16,65,16);
+const tex=(bytes,w=1,h=1)=>{const t=new THREE.DataTexture(new Uint8Array(bytes),w,h);t.needsUpdate=true;return t;};
+const white=tex([255,255,255,255]);
+const uniforms={distance:{value:1200},sunlightStrength:{value:1},ambientLight:{value:0},chunkBorders:{value:false},
+ textureImage:{value:white},animationFrameHeight:{value:1},animationFrameIndex:{value:0},animationInterpolationFrameIndex:{value:0},animationInterpolation:{value:0}};
+const mat=new THREE.ShaderMaterial({vertexShader:HIRES_VERTEX_SHADER,fragmentShader:HIRES_FRAGMENT_SHADER,uniforms,vertexColors:true});
+const geom=new THREE.PlaneGeometry(32,32);geom.rotateX(-Math.PI/2);geom.translate(16,65,16);geom.clearGroups();geom.addGroup(0,6,0);
+const n=geom.attributes.position.count;
+geom.setAttribute('color',new THREE.Float32BufferAttribute(Array.from({length:n},()=>[64/255,128/255,32/255]).flat(),3));
+for(const [name,v] of [['ao',1],['sunlight',15],['blocklight',0]]) geom.setAttribute(name,new THREE.Float32BufferAttribute(Array(n).fill(v),1));
+const high=new THREE.Mesh(geom,[mat,mat.clone()]);high.userData.tileType='hires';
+const highScene=new THREE.Scene();highScene.add(high);
+const lowTex=tex([64,128,32,255, 0,0,64,255],1,2);
+const lowUniforms={...uniforms,textureImage:{value:lowTex},tileSize:{value:new THREE.Vector2(32,32)},textureSize:{value:new THREE.Vector2(32,64)},lodScale:{value:1},lod:{value:1},voidColor:{value:new THREE.Color()},hiresTileMap:{value:{map:white,translate:new THREE.Vector2(),scale:new THREE.Vector2(1,1),pos:new THREE.Vector2(),size:new THREE.Vector2(1,1)}}};
+const lowMat=new THREE.ShaderMaterial({vertexShader:LOWRES_VERTEX_SHADER,fragmentShader:LOWRES_FRAGMENT_SHADER,uniforms:lowUniforms});
+const low=new THREE.Mesh(geom.clone(),lowMat);low.userData.tileType='lowres';
+const lowScene=new THREE.Scene();lowScene.add(low);
+const map={data:{id:'world',texturesUrl:'/textures.json'},hiresMaterial:[mat,{uniforms:{textureImage:{value:white}}}],hiresTileManager:{scene:highScene},lowresTileManager:[{scene:lowScene}]};
+window.BlueMap={Three:THREE};window.bluemap={mapViewer:{map,redraw(){}}};
+window.testSurface = (normalY, height) => {
+ const normals = high.geometry.attributes.normal;
+ for(let i=0;i<normals.count;i++) normals.setXYZ(i,0,normalY,normalY===1?0:1);
+ normals.needsUpdate=true;
+ const positions=high.geometry.attributes.position;
+ for(let i=0;i<positions.count;i++) positions.setY(i,height);
+ positions.needsUpdate=true;
+};
+window.addLateTile = () => { const tile=new THREE.Mesh(geom.clone(),[mat,mat.clone()]);tile.position.x=32;tile.userData.tileType='hires';highScene.add(tile);window.lateTile=tile; };
+window.sampleLate = () => { camera.position.x=48;camera.lookAt(48,65,16);const result=window.sample().high;camera.position.x=16;camera.lookAt(16,65,16);return result; };
+const target=new THREE.WebGLRenderTarget(32,32);
+window.sample=()=>{const result={};for(const [key,scene] of [['high',highScene],['low',lowScene]]){renderer.setRenderTarget(target);renderer.render(scene,camera);const pixel=new Uint8Array(4);renderer.readRenderTargetPixels(target,16,16,1,1,pixel);result[key]=Array.from(pixel);}return result;};
+const script=document.createElement('script');script.src='/seasonal.js';document.body.appendChild(script);
+</script></body></html>

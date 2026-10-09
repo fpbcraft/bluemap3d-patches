@@ -28,6 +28,8 @@ final class CompatManager {
     private CompatManager() {
     }
 
+    static String currentFingerprint() { return fingerprint; }
+
     static CompatRuleSet rules() {
         return RULES.get();
     }

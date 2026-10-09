@@ -2,7 +2,9 @@
 
 The optional `addon-compat` integration detects Ecliptic Seasons on NeoForge 1.21.x and reads its server-authoritative solar term via its public API. There is no required runtime dependency: if Ecliptic Seasons is absent, nothing runs.
 
-It polls once per 60 seconds and logs actual solar-term transitions. Reads are dispatched to the Minecraft server thread. The first read establishes a baseline and **never triggers a full rebuild**.
+The default is now the [dynamic saved-world layer](ECLIPTIC_DYNAMIC_LAYER.md); the forced-refresh settings below apply only with `dynamic=false`.
+
+It polls once per 10 seconds and logs actual solar-term transitions. Reads are dispatched to the Minecraft server thread. The first read establishes a baseline and **never triggers a full rebuild**.
 
 ## Refresh policy
 

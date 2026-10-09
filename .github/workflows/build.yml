@@ -34,6 +34,18 @@ jobs:
         id: release
         run: echo "version=$(python3 scripts/release_metadata.py --lines | sed -n '1p')" >> "$GITHUB_OUTPUT"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test seasonal browser layer
+        run: |
+          npm ci --prefix tests/seasonal
+          npm test --prefix tests/seasonal
+          cd tests/seasonal
+          npx playwright install --with-deps chromium
+          npm run test:browser
+
       - name: Build BlueMap compatibility artifacts
         run: ./build.sh
 

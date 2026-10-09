@@ -54,7 +54,7 @@ public final class SeasonalTintBridge {
     }
 
     public static Color tint(String blockId, BlockNeighborhood block, Color base) {
-        if (!Boolean.parseBoolean(System.getProperty("bluemap.compat.ecliptic.tint", "true"))) return base;
+        if (SeasonalLayer.enabled() || !Boolean.parseBoolean(System.getProperty("bluemap.compat.ecliptic.tint", "true"))) return base;
         if (block == null || block.getBiome() == null || block.getBiome().getKey() == null) return base;
         SeasonalTint tint = snapshot.get(block.getBiome().getKey().toString());
         if (tint == null) return base;
