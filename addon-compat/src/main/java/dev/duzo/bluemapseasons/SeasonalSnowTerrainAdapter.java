@@ -9,6 +9,7 @@ import de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.Varian
 import de.bluecolored.bluemap.core.util.Key;
 import de.bluecolored.bluemap.core.world.BlockState;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,6 +38,14 @@ public final class SeasonalSnowTerrainAdapter {
         ResourcePack pack = impl.blueMapService().getResourcePack();
         if (pack == null) return;
 
+        final Field rendererField;
+        try {
+            rendererField = Variant.class.getDeclaredField("renderer");
+            rendererField.setAccessible(true);
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            Logger.global.logError("Cannot install Ecliptic snow routing: BlueMap Variant.renderer unavailable", error);
+            return;
+        }
         int count = 0;
         for (String id : new String[]{
                 "minecraft:grass_block", "minecraft:dirt", "minecraft:coarse_dirt",
@@ -48,8 +57,12 @@ public final class SeasonalSnowTerrainAdapter {
             for (Variant variant : variants) {
                 // Do not override renderers installed by Copycats, CTM or mod-specific adapters.
                 if (variant.getRenderer() == BlockRendererType.DEFAULT) {
-                    variant.setRenderer(TYPE);
-                    count++;
+                    try {
+                        rendererField.set(variant, TYPE);
+                        count++;
+                    } catch (IllegalAccessException error) {
+                        Logger.global.logError("Could not route Ecliptic snow terrain renderer", error);
+                    }
                 }
             }
         }
