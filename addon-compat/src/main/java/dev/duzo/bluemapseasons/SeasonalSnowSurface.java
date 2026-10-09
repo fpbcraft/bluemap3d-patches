@@ -38,17 +38,17 @@ public final class SeasonalSnowSurface {
     public static boolean isSnowy(BlockNeighborhood block) {
         String blockId = block.getBlockState().getFormatted();
         if (!Boolean.parseBoolean(System.getProperty("bluemap.compat.ecliptic.snow", "true"))) return false;
-        if (!snowCandidate(blockId)) return color;
+        if (!snowCandidate(blockId)) return false;
         // This prevents an expensive cross-thread world lookup for most ordinary blocks.
-        if (block.getNeighborBlock(0, 1, 0).getBlockState() == null) return color;
+        if (block.getNeighborBlock(0, 1, 0).getBlockState() == null) return false;
         String above = block.getNeighborBlock(0, 1, 0).getBlockState().getFormatted();
-        if (!("minecraft:air".equals(above) || "minecraft:cave_air".equals(above))) return color;
+        if (!("minecraft:air".equals(above) || "minecraft:cave_air".equals(above))) return false;
 
         Position pos = new Position(block.getX(), block.getY(), block.getZ());
         Boolean snowy = cache.get(pos);
         if (snowy == null) {
             if (queued.size() < MAX_PENDING && queued.add(pos)) pending.offer(pos);
-            return color;
+            return false;
         }
         return Boolean.TRUE.equals(snowy);
     }
