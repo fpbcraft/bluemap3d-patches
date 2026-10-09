@@ -15,8 +15,10 @@ dependencies {
     compileOnly "de.bluecolored:bluemap-common:5.7"
 
     // Production links to BlueMap at runtime, but tests instantiate its Color class.
-    testImplementation "de.bluecolored:bluemap-core:5.7"
-    testImplementation "de.bluecolored:bluemap-common:5.7"
+    // The published 5.7 POM includes an unversioned bluemap-api dependency;
+    // tests only need the BlueMap classes, not that broken transitive metadata.
+    testImplementation("de.bluecolored:bluemap-core:5.7") { transitive = false }
+    testImplementation("de.bluecolored:bluemap-common:5.7") { transitive = false }
     testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.4"
     testRuntimeOnly "com.google.code.gson:gson:2.14.0"
