@@ -9,6 +9,7 @@ import dev.duzo.bluemapdynamictrees.DynamicTreesTerrainAdapter;
 import dev.duzo.bluemapdynamictrees.DynamicTreesTerrainDispatch;
 import dev.duzo.bluemapfurniture.ImmersiveFurnitureAdapter;
 import dev.duzo.bluemapseasons.EclipticSeasonsAdapter;
+import dev.duzo.bluemapseasons.SeasonalSnowTerrainAdapter;
 
 /**
  * Single native BlueMap compatibility entrypoint.
@@ -23,6 +24,7 @@ public final class BlueMapCompatAddon implements Runnable {
     public void run() {
         // Resource-pack extensions must register before BlueMap constructs its ResourcePack.
         ConnectedTextureTerrainAdapter.register();
+        SeasonalSnowTerrainAdapter.register();
 
         // Specialized adapters share this one native BlueMap addon artifact.
         new BlueMapCopycatsCompatAddon().run();
@@ -46,6 +48,7 @@ public final class BlueMapCompatAddon implements Runnable {
             // Install CT routing last so blockstates already claimed by a more specific
             // compatibility renderer remain authoritative.
             ConnectedTextureTerrainAdapter.onBlueMapEnable(api);
+            SeasonalSnowTerrainAdapter.onEnable(api);
         });
 
         BlueMapAPI.onDisable(api -> EclipticSeasonsAdapter.onDisable());
