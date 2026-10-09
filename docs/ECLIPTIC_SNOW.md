@@ -2,7 +2,7 @@
 
 This is stacked on PR #75, which is stacked on #74.
 
-Opt-in with the **JVM startup flag** `-Dbluemap.compat.ecliptic.snow=true`. Default is **off**.
+Virtual snow sampling is **enabled by default** when Ecliptic Seasons is installed. To disable it, set the JVM startup flag `-Dbluemap.compat.ecliptic.snow=false`.
 
 The BlueMap color callback queues exposed opaque surface locations (selected vanilla dirt/grass/stone/gravel types only). A bounded queue (2,048) and cache (8,192) keep memory limited. Ecliptic's public `isSnowyBlock(Level, BlockState, BlockPos)` is queried on the Minecraft server thread during the calendar poll; no chunks are deliberately loaded. The renderer uses cached results only. On a confirmed snowy surface it lightens the color, preserving alpha.
 
