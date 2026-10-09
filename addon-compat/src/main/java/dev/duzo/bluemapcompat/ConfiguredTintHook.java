@@ -7,6 +7,8 @@ import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
 import de.bluecolored.bluemap.core.util.math.Color;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 
+import dev.duzo.bluemapseasons.SeasonalTintBridge;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -127,12 +129,15 @@ final class ConfiguredTintHook {
 
         Object original = originals.get(blockId);
         if (original != null) {
-            return colorFunctionInvoke.invoke(original, calculator, block, target);
+            colorFunctionInvoke.invoke(original, calculator, block, target);
+        } else if (defaultOriginal != null) {
+            colorFunctionInvoke.invoke(defaultOriginal, calculator, block, target);
+        } else {
+            blendedFoliage.invoke(calculator, block, target);
         }
-        if (defaultOriginal != null) {
-            return colorFunctionInvoke.invoke(defaultOriginal, calculator, block, target);
-        }
-        return blendedFoliage.invoke(calculator, block, target);
+        // Explicit configured tints retain precedence; Ecliptic colors apply only to
+        // the normal block-color path and only where the server reports a biome palette.
+        return SeasonalTintBridge.tint(blockId, block, target);
     }
 
     private Integer resolveTint(
