@@ -105,4 +105,25 @@ final class ConnectedTextureLayoutTest {
                                 | ConnectedTextureLayout.TOP
                                 | ConnectedTextureLayout.BOTTOM));
     }
+    @Test
+    void railwaysVerticalPinkmachineUsesItsCustomTwoByTwoOrdering() {
+        assertEquals(0, ConnectedTextureLayout.createTile("vertical_pinkmachine", 0));
+        assertEquals(
+                2,
+                ConnectedTextureLayout.createTile(
+                        "vertical_pinkmachine", ConnectedTextureLayout.TOP));
+        assertEquals(
+                3,
+                ConnectedTextureLayout.createTile(
+                        "vertical_pinkmachine", ConnectedTextureLayout.BOTTOM));
+        assertEquals(
+                1,
+                ConnectedTextureLayout.createTile(
+                        "vertical_pinkmachine",
+                        ConnectedTextureLayout.TOP | ConnectedTextureLayout.BOTTOM));
+        assertEquals(2, ConnectedTextureLayout.createGrid("vertical_pinkmachine").width());
+        assertEquals(2, ConnectedTextureLayout.createGrid("vertical_pinkmachine").height());
+    }
+
+
 }
