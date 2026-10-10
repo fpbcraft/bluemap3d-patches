@@ -13,7 +13,10 @@ import org.slf4j.LoggerFactory;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Set;
+import net.minecraft.world.level.block.Blocks;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -54,6 +57,7 @@ public final class CopycatsSpecialSource implements BlockModelSource {
 
         List<ModelQuad> result = metadata == null ? List.of() : switch (id) {
             case "copycats:copycat_byte" -> byteQuads(state, metadata);
+            case "copycats:copycat_byte_panel" -> bytePanel(state, metadata);
             case "copycats:copycat_vertical_half_layer" -> verticalHalfLayer(state, metadata);
             case "copycats:copycat_flat_pane" -> flatPane(state, metadata);
             case "copycats:copycat_vertical_stairs" -> verticalStairs(state, metadata);
@@ -86,7 +90,8 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     }
 
     private static boolean isTarget(String id) {
-        return id.equals("copycats:copycat_byte")
+        return id.equals("copycats:copycat_byte_panel")
+                || id.equals("copycats:copycat_byte")
                 || id.equals("copycats:copycat_vertical_half_layer")
                 || id.equals("copycats:copycat_flat_pane")
                 || id.equals("copycats:copycat_vertical_stairs")
@@ -100,43 +105,138 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     // Copycat Byte
     // -------------------------------------------------------------------------
 
+    /**
+     * Eight bytes are independently populated and independently textured. Evaluate
+     * their connected textures on the 2x2x2 part lattice, including seams INSIDE the
+     * same block, rather than treating every 8px byte as a separate whole block.
+     */
     private List<ModelQuad> byteQuads(BlockState state, CompoundTag metadata) {
+        Map<Integer, BlockState> parts = new HashMap<>();
+        for (int y = 0; y < 2; y++) for (int z = 0; z < 2; z++) for (int x = 0; x < 2; x++) {
+            String key = byteKey(x, y, z);
+            BlockState material = materialFor(metadata, key);
+            if (booleanProperty(state, key) && usable(material))
+                parts.put(cellKey(x, y, z), material);
+        }
+
+        List<ModelQuad> result = new ArrayList<>();
+        for (int y = 0; y < 2; y++) for (int z = 0; z < 2; z++) for (int x = 0; x < 2; x++) {
+            BlockState material = parts.get(cellKey(x, y, z));
+            if (material == null) continue;
+            addPart(result, parts, x, y, z, () ->
+                    addBytePieces(result, x * 8, y * 8, z * 8, material));
+        }
+        return List.copyOf(result);
+    }
+
+    private void addBytePieces(
+            List<ModelQuad> result, int ox, int oy, int oz, BlockState material) {
+        Transform t = new Transform();
+        // Retain the original Copycats+ eight source samples per byte.
+        piece(result,t,ox,oy,oz,0,0,0,4,4,4,material);
+        piece(result,t,ox+4,oy,oz,12,0,0,16,4,4,material);
+        piece(result,t,ox,oy,oz+4,0,0,12,4,4,16,material);
+        piece(result,t,ox+4,oy,oz+4,12,0,12,16,4,16,material);
+        piece(result,t,ox,oy+4,oz,0,12,0,4,16,4,material);
+        piece(result,t,ox+4,oy+4,oz,12,12,0,16,16,4,material);
+        piece(result,t,ox,oy+4,oz+4,0,12,12,4,16,16,material);
+        piece(result,t,ox+4,oy+4,oz+4,12,12,12,16,16,16,material);
+    }
+
+    private List<ModelQuad> bytePanel(BlockState state, CompoundTag metadata) {
+        record PanelPart(String name, int x, int y) {}
+        PanelPart[] items = {
+                new PanelPart("bottom_left", 1, 0),
+                new PanelPart("bottom_right", 0, 0),
+                new PanelPart("top_left", 1, 1),
+                new PanelPart("top_right", 0, 1)
+        };
+        String facing = stringProperty(state, "facing");
+        Map<Integer, BlockState> parts = new HashMap<>();
+        for (PanelPart part : items) {
+            if (!booleanProperty(state, part.name())) continue;
+            BlockState material = materialFor(metadata, part.name());
+            if (!usable(material)) continue;
+            int[] xyz = panelCell(facing, part.x(), part.y());
+            parts.put(cellKey(xyz[0], xyz[1], xyz[2]), material);
+        }
+
         List<ModelQuad> out = new ArrayList<>();
-        addByte(out, state, metadata, "bottom_northwest", 0, 0, 0);
-        addByte(out, state, metadata, "bottom_northeast", 8, 0, 0);
-        addByte(out, state, metadata, "bottom_southwest", 0, 0, 8);
-        addByte(out, state, metadata, "bottom_southeast", 8, 0, 8);
-        addByte(out, state, metadata, "top_northwest", 0, 8, 0);
-        addByte(out, state, metadata, "top_northeast", 8, 8, 0);
-        addByte(out, state, metadata, "top_southwest", 0, 8, 8);
-        addByte(out, state, metadata, "top_southeast", 8, 8, 8);
+        for (PanelPart part : items) {
+            int[] xyz = panelCell(facing, part.x(), part.y());
+            BlockState material = parts.get(cellKey(xyz[0], xyz[1], xyz[2]));
+            if (material == null) continue;
+            addPart(out, parts, xyz[0], xyz[1], xyz[2], () -> {
+                float i = part.x() * 8f;
+                float j = part.y() * 8f;
+                if ("up".equals(facing)) {
+                    addMappedCuboid(out,new Transform(),
+                            new float[]{i,13,8-j},new float[]{i+8,16,16-j},
+                            new float[]{i,13,8-j},new float[]{i+8,16,16-j},material);
+                } else if ("down".equals(facing)) {
+                    addMappedCuboid(out,new Transform(),
+                            new float[]{i,0,j},new float[]{i+8,3,j+8},
+                            new float[]{i,0,j},new float[]{i+8,3,j+8},material);
+                } else {
+                    Transform rotation = new Transform().rotateY(yRotation(facing));
+                    addMappedCuboid(out,rotation,
+                            new float[]{i,j,13},new float[]{i+8,j+8,16},
+                            new float[]{i,j,13},new float[]{i+8,j+8,16},material);
+                }
+            });
+        }
         return List.copyOf(out);
     }
 
-    private void addByte(
-            List<ModelQuad> out,
-            BlockState state,
-            CompoundTag metadata,
-            String key,
-            int ox,
-            int oy,
-            int oz) {
-        if (!booleanProperty(state, key)) return;
-        BlockState material = materialFor(metadata, key);
-        if (!usable(material)) return;
+    private void addPart(List<ModelQuad> unused, Map<Integer,BlockState> parts,
+            int x, int y, int z, Runnable build) {
+        BlockRenderContext base = renderContext.get();
+        if (base == null) {
+            build.run();
+            return;
+        }
+        // Temporarily use a virtual 8px lattice. An adjacent byte uses its own
+        // copied material; positions beyond the block fall through to the original
+        // world/contraption lookup, which already resolves neighbouring copycats.
+        BlockRenderContext lookup = new BlockRenderContext(
+                parts.get(cellKey(x,y,z)), base.blockEntityData(),
+                base.x()*2 + x, base.y()*2 + y, base.z()*2 + z,
+                (vx,vy,vz) -> {
+                    int bx = Math.floorDiv(vx,2), by = Math.floorDiv(vy,2);
+                    int bz = Math.floorDiv(vz,2);
+                    if (bx == base.x() && by == base.y() && bz == base.z()) {
+                        return parts.getOrDefault(cellKey(Math.floorMod(vx,2),
+                                Math.floorMod(vy,2),Math.floorMod(vz,2)),
+                                Blocks.AIR.defaultBlockState());
+                    }
+                    return base.stateAtOffset(bx-base.x(), by-base.y(), bz-base.z());
+                });
+        renderContext.set(lookup);
+        try {
+            build.run();
+        } finally {
+            renderContext.set(base);
+        }
+    }
 
-        Transform t = new Transform();
-        // CopycatByteModelCore: eight 4x4x4 samples make each 8x8x8 byte. Keeping those
-        // source sample regions preserves the copied block's texture layout instead of
-        // stretching one 8x8 auto-UV cube over the byte as V15 did.
-        piece(out, t, ox,     oy,     oz,     0,  0,  0,  4,  4,  4,  material);
-        piece(out, t, ox + 4, oy,     oz,     12, 0,  0,  16, 4,  4,  material);
-        piece(out, t, ox,     oy,     oz + 4, 0,  0,  12, 4,  4,  16, material);
-        piece(out, t, ox + 4, oy,     oz + 4, 12, 0,  12, 16, 4,  16, material);
-        piece(out, t, ox,     oy + 4, oz,     0,  12, 0,  4,  16, 4,  material);
-        piece(out, t, ox + 4, oy + 4, oz,     12, 12, 0,  16, 16, 4,  material);
-        piece(out, t, ox,     oy + 4, oz + 4, 0,  12, 12, 4,  16, 16, material);
-        piece(out, t, ox + 4, oy + 4, oz + 4, 12, 12, 12, 16, 16, 16, material);
+    private static int cellKey(int x,int y,int z) {
+        return (x << 2) | (y << 1) | z;
+    }
+
+    private static String byteKey(int x,int y,int z) {
+        return (y==0?"bottom_":"top_")
+                + (z==0?"north":"south") + (x==0?"west":"east");
+    }
+
+    private static int[] panelCell(String facing, int i, int j) {
+        return switch(facing) {
+            case "up" -> new int[]{i,1,1-j};
+            case "down" -> new int[]{i,0,j};
+            case "north" -> new int[]{1-i,j,0};
+            case "east" -> new int[]{1,j,1-i};
+            case "west" -> new int[]{0,j,i};
+            default -> new int[]{i,j,1};
+        };
     }
 
     // -------------------------------------------------------------------------
