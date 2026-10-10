@@ -90,7 +90,7 @@ public final class HeadstockTerrainRenderer implements BlockRenderer {
             // ResourceModelRenderer does not expose the current face direction to
             // TextureGallery. Use the copied material's north texture as the
             // representative surface; other, non-copycat faces are unchanged.
-            var resolved = appearances.resolve(material, Direction.NORTH, block);
+            var resolved = appearances.resolve(material, Direction.NORTH, block, null);
             if (resolved != null && resolved.textureIndex() > 0) {
                 copied.set(resolved.textureIndex());
             } else {
