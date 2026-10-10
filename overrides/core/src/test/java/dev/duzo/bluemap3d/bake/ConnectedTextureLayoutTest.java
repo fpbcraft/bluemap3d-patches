@@ -106,6 +106,36 @@ final class ConnectedTextureLayoutTest {
                                 | ConnectedTextureLayout.BOTTOM));
     }
     @Test
+    void movingCopiedMaterialConnectsAfterWrapperSubstitution() {
+        // The sampler replaces the wrapper with the copied material before
+        // connected-texture resolution. A wrapper-only check always failed.
+        assertTrue(ConnectedTextureResolver.connectsResolvedCopiedMaterial(
+                true, true, false));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                ConnectedTextureResolver.connectsResolvedCopiedMaterial(false, true, false));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                ConnectedTextureResolver.connectsResolvedCopiedMaterial(true, false, false));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                ConnectedTextureResolver.connectsResolvedCopiedMaterial(true, true, true));
+    }
+
+    @Test
+    void assembledRotatedCopycatsUsePhysicalSurfaceNormals() {
+        assertEquals(net.minecraft.core.Direction.SOUTH,
+                CopycatsSpecialSource.physicalFace(new float[]{
+                        0,0,16, 16,0,16, 16,16,16, 0,16,16},
+                        net.minecraft.core.Direction.NORTH));
+        assertEquals(net.minecraft.core.Direction.WEST,
+                CopycatsSpecialSource.physicalFace(new float[]{
+                        0,0,0, 0,0,16, 0,16,16, 0,16,0},
+                        net.minecraft.core.Direction.EAST));
+        assertEquals(net.minecraft.core.Direction.UP,
+                CopycatsSpecialSource.physicalFace(new float[]{
+                        0,16,0, 0,16,16, 16,16,16, 16,16,0},
+                        net.minecraft.core.Direction.DOWN));
+    }
+
+    @Test
     void railwaysVerticalPinkmachineUsesItsCustomTwoByTwoOrdering() {
         assertEquals(0, ConnectedTextureLayout.createTile("vertical_pinkmachine", 0));
         assertEquals(
