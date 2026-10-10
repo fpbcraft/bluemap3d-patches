@@ -170,7 +170,8 @@ final class ConnectedTextureLayout {
 
     static Grid createGrid(String type) {
         return switch (normalise(type)) {
-            case "horizontal", "horizontal_kryppers", "vertical" -> new Grid(2, 2);
+            case "horizontal", "horizontal_kryppers", "vertical", "vertical_pinkmachine" ->
+                    new Grid(2, 2);
             case "omnidirectional" -> new Grid(8, 8);
             default -> new Grid(4, 4);
         };
@@ -187,6 +188,11 @@ final class ConnectedTextureLayout {
             }
             case "vertical" ->
                     (has(mask, TOP) ? 1 : 0) + (has(mask, BOTTOM) ? 2 : 0);
+            case "vertical_pinkmachine" -> {
+                boolean top = has(mask, TOP);
+                boolean bottom = has(mask, BOTTOM);
+                yield !top && !bottom ? 0 : !top ? 3 : !bottom ? 2 : 1;
+            }
             case "omnidirectional" -> createOmnidirectional(mask);
             case "cross" ->
                     (has(mask, TOP) ? 1 : 0)
