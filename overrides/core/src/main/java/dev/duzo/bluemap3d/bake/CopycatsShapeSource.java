@@ -28,6 +28,25 @@ public final class CopycatsShapeSource implements BlockModelSource {
     private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/CopycatsTrace");
     private static final boolean TRACE = Boolean.getBoolean("bluemap.copycats.trace");
     private static final AtomicInteger TRACE_LINES = new AtomicInteger();
+    private static final AtomicInteger CREATE_TRACE_LINES = new AtomicInteger();
+
+    private static void traceCreate(BlockState state, BlockRenderContext context,
+            CompoundTag metadata, String status) {
+        if (!TRACE || state == null || CREATE_TRACE_LINES.get() >= 80) return;
+        var id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        if (!"create".equals(id.getNamespace())
+                || (!"copycat_panel".equals(id.getPath())
+                    && !"copycat_step".equals(id.getPath()))) return;
+        CREATE_TRACE_LINES.incrementAndGet();
+        LOGGER.debug("COPYCATS-MOVING-TRACE phase=CREATE-SHAPE block={} pos={} state={} metadataKeys={} {}",
+                id,
+                context == null ? "<none>"
+                        : context.x()+","+context.y()+","+context.z(),
+                state,
+                metadata == null ? "<null>" : metadata.getAllKeys(),
+                status);
+    }
+
 
 
     private final ResourcePackSource models;
@@ -56,6 +75,9 @@ public final class CopycatsShapeSource implements BlockModelSource {
             CompoundTag metadata,
             BlockRenderContext context) {
         if (!CopiedMaterialResolver.isMaterialWrapper(state) || metadata == null) {
+            traceCreate(state, context, metadata,
+                    metadata == null ? "skip=missing-material-nbt"
+                            : "skip=not-material-wrapper");
             return List.of();
         }
 
@@ -65,10 +87,19 @@ public final class CopycatsShapeSource implements BlockModelSource {
         if ("railways".equals(id.getNamespace())) return List.of();
 
         BlockState material = CopiedMaterialResolver.materialFor(metadata, null);
-        if (!CopiedMaterialResolver.usable(material)) return List.of();
+        if (!CopiedMaterialResolver.usable(material)) {
+            traceCreate(state, context, metadata,
+                    "skip=unusable-copied-material value=" + material);
+            return List.of();
+        }
 
         List<AABB> boxes = boxesOf(state);
-        if (boxes.isEmpty() || boxes.size() > MAX_BOXES) return List.of();
+        if (boxes.isEmpty() || boxes.size() > MAX_BOXES) {
+            traceCreate(state, context, metadata,
+                    "skip=invalid-voxel-shape boxes=" + boxes.size()
+                            + " material=" + BuiltInRegistries.BLOCK.getKey(material.getBlock()));
+            return List.of();
+        }
 
         List<ModelQuad> out = new ArrayList<>(boxes.size() * 6);
         for (AABB box : boxes) {
@@ -101,6 +132,9 @@ public final class CopycatsShapeSource implements BlockModelSource {
             }
         }
 
+        traceCreate(state, context, metadata,
+                "result=emitted boxes=" + boxes.size() + " quads=" + out.size()
+                        + " material=" + BuiltInRegistries.BLOCK.getKey(material.getBlock()));
         if (TRACE && TRACE_LINES.getAndIncrement() < 60) {
             long missingFace = out.stream()
                     .filter(q -> q.shadeFace() == null && q.cullFace() == null).count();
