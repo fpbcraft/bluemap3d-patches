@@ -206,10 +206,10 @@ public final class CopycatsShapeSource implements BlockModelSource {
         double p = 3.0 / 16.0;
         return switch (facing) {
             case "down" -> List.of(new AABB(0, 1-p, 0, 1, 1, 1));
-            case "north" -> List.of(new AABB(0, 0, 1-p, 1, 1, 1));
-            case "south" -> List.of(new AABB(0, 0, 0, 1, 1, p));
-            case "west" -> List.of(new AABB(1-p, 0, 0, 1, 1, 1));
-            case "east" -> List.of(new AABB(0, 0, 0, p, 1, 1));
+            case "north" -> List.of(new AABB(0, 0, 0, 1, 1, p));
+            case "south" -> List.of(new AABB(0, 0, 1-p, 1, 1, 1));
+            case "west" -> List.of(new AABB(0, 0, 0, p, 1, 1));
+            case "east" -> List.of(new AABB(1-p, 0, 0, 1, 1, 1));
             default -> List.of(new AABB(0, 0, 0, 1, p, 1));
         };
     }
