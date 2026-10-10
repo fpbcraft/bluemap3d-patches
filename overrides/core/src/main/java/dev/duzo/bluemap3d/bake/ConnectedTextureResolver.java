@@ -237,9 +237,8 @@ final class ConnectedTextureResolver {
         BlockState copied = CopiedMaterialResolver.materialFor(
                 context.blockEntityData(), null);
         boolean copiedContext = CopiedMaterialResolver.usable(copied);
-        if (!current.positionVariant()
-                && copiedContext
-                && context.state().equals(other)) {
+        if (connectsResolvedCopiedMaterial(
+                copiedContext, context.state().equals(other), current.positionVariant())) {
             return true;
         }
 
@@ -265,6 +264,16 @@ final class ConnectedTextureResolver {
             }
         }
         return false;
+    }
+
+    /**
+     * In the moving pipeline, context.state is the effective copied material,
+     * not the original Copycats wrapper. Make this part of the CT policy explicit
+     * so the regression can be exercised independently of live train rendering.
+     */
+    static boolean connectsResolvedCopiedMaterial(
+            boolean hasCopiedMaterialData, boolean sameMaterial, boolean positionVariant) {
+        return hasCopiedMaterialData && sameMaterial && !positionVariant;
     }
 
     private CreateConnectedTextures.Spec createSpec(
