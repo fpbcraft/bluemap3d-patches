@@ -54,4 +54,25 @@ final class CreateConnectedTexturesTest {
                 CreateConnectedTextures.typeForSheet(
                         "create:block/palettes/stone_types/layered/tuff_cut_layered_connected"));
     }
+    @Test
+    void steamNRailsSheetsExposeTheirClientCtTypes() {
+        assertEquals(
+                "omnidirectional",
+                CreateConnectedTextures.typeForSheet(
+                        "railways:block/palettes/brown/wrapped_slashed_connected"));
+        assertEquals(
+                "vertical_pinkmachine",
+                CreateConnectedTextures.typeForSheet(
+                        "railways:block/palettes/brown/tank_side_connected"));
+        assertEquals(
+                "horizontal_kryppers",
+                CreateConnectedTextures.typeForSheet(
+                        "railways:block/palettes/brown/boiler_side_connected"));
+        assertEquals(
+                "vertical",
+                CreateConnectedTextures.typeForSheet(
+                        "railways:block/palettes/brown/single_pane_window_connected"));
+    }
+
+
 }

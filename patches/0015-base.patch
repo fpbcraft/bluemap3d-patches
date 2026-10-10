@@ -926,7 +926,7 @@ index e8199bf..f2a3e33 100644
  import dev.duzo.bluemap3d.bake.MapColorSource;
  import dev.duzo.bluemap3d.bake.ResourcePackSource;
  import dev.duzo.bluemap3d.bake.ShapeSource;
-@@ -72,7 +76,18 @@ public final class BlueMap3DMod {
+@@ -72,7 +76,21 @@ public final class BlueMap3DMod {
              if (Config.USE_RESOURCE_PACKS.get()) {
                  assets = AssetIndex.open(configuredSources(), blueMapRoot);
                  ResourcePackSource packs = new ResourcePackSource(assets);
@@ -937,11 +937,14 @@ index e8199bf..f2a3e33 100644
 +                // Dynamic Copycats+ boards have no JSON geometry; their material lives in
 +                // block-entity NBT, so they must be resolved before the ordinary pack path.
 +                sources.add(new CopycatsBoardSource(packs));
++                // Railways headstocks have real JSON geometry, but their copycat skin is
++                // normally substituted by a client-only baked-model wrapper.
++                sources.add(new dev.duzo.bluemap3d.bake.RailwaysCopycatHeadstockSource(packs));
++                // A copycat JSON model may contain placeholder quads, so this must run
++                // before ordinary resource-pack selection rather than only on empty models.
++                sources.add(new CopycatsShapeSource(packs));
                  sources.add(packs);
 +                sources.add(new dev.duzo.bluemap3d.bake.EntityModelSource(assets));
-+                // Copycats+ emits many models entirely in client code. If no real JSON
-+                // model exists, preserve its server VoxelShape and copied material.
-+                sources.add(new CopycatsShapeSource(packs));
                  // Between the real models and the coloured cube: a block whose model has
                  // no geometry still has a voxel shape and a particle sprite.
                  if (Config.SHAPE_FALLBACK.get()) {
@@ -2351,10 +2354,13 @@ index 14cc6cc..3ba2e04 100644
  
      private final List<BlockModelSource> sources;
      private final int maxBlocks;
-@@ -97,10 +102,36 @@ public final class VolumeMesher {
+@@ -97,10 +102,39 @@ public final class VolumeMesher {
          java.util.Set<String> unresolved = new java.util.TreeSet<>();
  
-+        BlockRenderContext.BlockLookup blockLookup = volume::stateAt;
++        BlockRenderContext.BlockLookup blockLookup = (x, y, z) ->
++                CopiedMaterialResolver.effectiveState(
++                        volume.stateAt(x, y, z),
++                        volume.blockEntityDataAt(x, y, z));
          volume.forEachBlock((x, y, z, state) -> {
 +            CompoundTag blockEntityData = volume.blockEntityDataAt(x, y, z);
 +            BlockRenderContext renderContext =

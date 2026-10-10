@@ -23,6 +23,9 @@ final class CreateConnectedTextures {
         Spec createDeco = createDeco(texture, state);
         if (createDeco != null) return createDeco;
 
+        Spec railways = railways(texture);
+        if (railways != null) return railways;
+
         if (!texture.startsWith("create:block/")) return null;
         String path = texture.substring("create:block/".length());
         String block = BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
@@ -114,6 +117,26 @@ final class CreateConnectedTextures {
         }
 
         return null;
+    }
+
+    private static Spec railways(String texture) {
+        String prefix = "railways:block/palettes/";
+        if (!texture.startsWith(prefix)) return null;
+
+        String name = texture.substring(texture.lastIndexOf('/') + 1);
+        String type = switch (name) {
+            case "slashed", "riveted", "vent",
+                    "wrapped_slashed", "copper_wrapped_slashed", "iron_wrapped_slashed" ->
+                    "omnidirectional";
+            case "riveted_pillar_side", "tank_side",
+                    "wrapped_tank_side", "copper_wrapped_tank_side", "iron_wrapped_tank_side" ->
+                    "vertical_pinkmachine";
+            case "boiler_side", "wrapped_boiler_side",
+                    "copper_wrapped_boiler_side", "iron_wrapped_boiler_side" ->
+                    "horizontal_kryppers";
+            default -> name.endsWith("_window") ? "vertical" : null;
+        };
+        return type == null ? null : new Spec(type, texture + "_connected", false);
     }
 
     private static Spec createDeco(String texture, BlockState state) {

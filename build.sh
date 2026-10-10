@@ -36,8 +36,14 @@ for patch in "$ROOT"/patches/*.patch; do
 done
 
 # Maintained moving/live compatibility overrides.
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopiedMaterialResolver.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/CopiedMaterialResolver.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/RailwaysCopycatHeadstockSource.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/RailwaysCopycatHeadstockSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/BitsNBobsStrutSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ResourcePackSource.java" \

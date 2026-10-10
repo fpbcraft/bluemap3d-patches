@@ -26,6 +26,7 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     private static final Set<String> TRACED = ConcurrentHashMap.newKeySet();
 
     private final ResourcePackSource models;
+    private final ThreadLocal<BlockRenderContext> renderContext = new ThreadLocal<>();
 
     public CopycatsSpecialSource(ResourcePackSource models) {
         this.models = models;
@@ -34,6 +35,16 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     @Override
     public List<ModelQuad> quadsFor(BlockState state) {
         return List.of();
+    }
+
+    @Override
+    public List<ModelQuad> quadsFor(BlockRenderContext context) {
+        renderContext.set(context);
+        try {
+            return quadsFor(context.state(), context.blockEntityData());
+        } finally {
+            renderContext.remove();
+        }
     }
 
     @Override
@@ -431,7 +442,10 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     }
 
     private Appearance appearance(BlockState material, Direction surface) {
-        List<ModelQuad> quads = models.quadsFor(material);
+        BlockRenderContext context = renderContext.get();
+        List<ModelQuad> quads = context == null
+                ? models.quadsFor(material)
+                : models.quadsFor(context.withState(material));
         ModelQuad chosen = null;
         for (ModelQuad quad : quads) {
             if (quad.cullFace() == surface) {
