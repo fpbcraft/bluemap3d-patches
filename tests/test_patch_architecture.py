@@ -244,6 +244,10 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn('static Direction physicalFace(float[] p, Direction fallback)', emitter)
         self.assertIn('CopiedMaterialResolver.materialFor(', moving)
         self.assertIn('context.state().equals(other)', moving)
+        self.assertIn('CopycatsPhysicalFace.of(vertices, fallback.name())', (
+            ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java"
+        ).read_text())
+        self.assertIn('CopycatsPhysicalFace.java', (ROOT / "build.sh").read_text())
         self.assertIn('boolean copiedContext = CopiedMaterialResolver.usable(copied)', moving)
 
     def test_static_copycats_and_railways_compatibility_is_wired(self) -> None:
