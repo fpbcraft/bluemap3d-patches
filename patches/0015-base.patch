@@ -926,7 +926,7 @@ index e8199bf..f2a3e33 100644
  import dev.duzo.bluemap3d.bake.MapColorSource;
  import dev.duzo.bluemap3d.bake.ResourcePackSource;
  import dev.duzo.bluemap3d.bake.ShapeSource;
-@@ -72,7 +76,18 @@ public final class BlueMap3DMod {
+@@ -72,7 +76,21 @@ public final class BlueMap3DMod {
              if (Config.USE_RESOURCE_PACKS.get()) {
                  assets = AssetIndex.open(configuredSources(), blueMapRoot);
                  ResourcePackSource packs = new ResourcePackSource(assets);
@@ -2354,7 +2354,7 @@ index 14cc6cc..3ba2e04 100644
  
      private final List<BlockModelSource> sources;
      private final int maxBlocks;
-@@ -97,10 +102,36 @@ public final class VolumeMesher {
+@@ -97,10 +102,39 @@ public final class VolumeMesher {
          java.util.Set<String> unresolved = new java.util.TreeSet<>();
  
 +        BlockRenderContext.BlockLookup blockLookup = (x, y, z) ->
