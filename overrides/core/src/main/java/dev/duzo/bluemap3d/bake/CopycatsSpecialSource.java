@@ -201,14 +201,54 @@ public final class CopycatsSpecialSource implements BlockModelSource {
                             new float[]{i,0,j},new float[]{i+8,3,j+8},
                             new float[]{i,0,j},new float[]{i+8,3,j+8},material);
                 } else {
+                    // The real Copycats+ model uses 4 corner pieces per layer,
+                    // with independent 4px source samples. Preserve the source
+                    // UVs and omit faces inside the assembled byte panel.
                     Transform rotation = new Transform().rotateY(yRotation(facing));
-                    addMappedCuboid(out,rotation,
-                            new float[]{i,j,13},new float[]{i+8,j+8,16},
-                            new float[]{i,j,13},new float[]{i+8,j+8,16},material);
+                    for (int subY = 0; subY < 2; subY++) {
+                        for (int subX = 0; subX < 2; subX++) {
+                            float dx = i + subX * 4f;
+                            float dy = j + subY * 4f;
+                            float sx = subX == 0 ? 0 : 12;
+                            float sy = subY == 0 ? 0 : 12;
+                            addPanelSampleSlice(out, rotation, material,
+                                    dx, dy, 13, sx, sy, 0, 2,
+                                    subX, subY, false);
+                            addPanelSampleSlice(out, rotation, material,
+                                    dx, dy, 15, sx, sy, 15, 1,
+                                    subX, subY, true);
+                        }
+                    }
                 }
             });
         }
         return List.copyOf(out);
+    }
+
+    private void addPanelSampleSlice(
+            List<ModelQuad> out, Transform transform, BlockState material,
+            float dx, float dy, float dz, float sx, float sy, float sz, float depth,
+            int subX, int subY, boolean rear) {
+        List<ModelQuad> faces = new ArrayList<>(6);
+        addMappedCuboid(faces, transform,
+                new float[]{dx,dy,dz}, new float[]{dx+4,dy+4,dz+depth},
+                new float[]{sx,sy,sz}, new float[]{sx+4,sy+4,sz+depth},
+                material);
+        // Direction.values() is DOWN, UP, NORTH, SOUTH, WEST, EAST.
+        // Cull the three internal faces of each sub-piece just as the
+        // original CopycatMultiBytePanelModelCore's cull masks do.
+        for (int face = 0; face < faces.size(); face++) {
+            boolean internal = switch (face) {
+                case 0 -> subY == 1;
+                case 1 -> subY == 0;
+                case 2 -> rear;
+                case 3 -> !rear;
+                case 4 -> subX == 1;
+                case 5 -> subX == 0;
+                default -> false;
+            };
+            if (!internal) out.add(faces.get(face));
+        }
     }
 
     private void addPart(Map<Integer,BlockState> parts,
