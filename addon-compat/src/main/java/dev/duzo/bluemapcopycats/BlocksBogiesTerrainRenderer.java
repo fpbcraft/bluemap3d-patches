@@ -139,17 +139,34 @@ public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
 
         emitObj(frame, 0, 0, 0);
 
+        // The central axle of an odd-axle large bogie is a semi-blind wheel.
+        // Reusing the outer wheel mesh here produced a wrong hub/profile.
+        var centerWheel = spec.axles() > 1 && spec.axles() % 2 == 1
+                && !spec.small()
+                ? BlocksBogiesObjMesh.load("bogie/" + size + "/shared/wheels_s_b")
+                : java.util.List.<BlocksBogiesObjMesh.Triangle>of();
         for (float z : spec.wheelPositions()) {
-            // These OBJ vertices are already in block units. The mod's client
-            // renderer translates its shared wheel partials to the correct
-            // center height and axle spacing after loading the model.
-            emitObj(wheels, 0, spec.wheelY(), z);
+            var mesh = Math.abs(z) < 0.0001f && !centerWheel.isEmpty()
+                    ? centerWheel : wheels;
+            emitObj(mesh, 0, spec.wheelY(), z);
         }
 
-        for (String rod : new String[]{"left_c_rod", "right_c_rod", "belts"}) {
-            var partial = BlocksBogiesObjMesh.load(modelRoot + "/" + rod);
-            if (!partial.isEmpty()) emitObj(partial, 0, 0, 0);
+        // A static snapshot has wheelAngle=0. The original B&B pistonless
+        // renderer still translates each connecting rod. Earlier we emitted
+        // the raw OBJ rods at (0,0,0), placing them far below the wheel hubs.
+        float crankRadius = spec.extraLarge() ? .375f : .25f;
+        var right = BlocksBogiesObjMesh.load(modelRoot + "/right_c_rod");
+        if (!right.isEmpty()) {
+            emitObj(right, 0, spec.wheelY() + crankRadius, 0);
         }
+        var left = BlocksBogiesObjMesh.load(modelRoot + "/left_c_rod");
+        if (!left.isEmpty()) {
+            // The left rod is phase-shifted by 90 degrees: rotating its
+            // crank translation around X puts the .25 offset on Z.
+            emitObj(left, 0, spec.wheelY(), crankRadius);
+        }
+        var belts = BlocksBogiesObjMesh.load(modelRoot + "/belts");
+        if (!belts.isEmpty()) emitObj(belts, 0, 0, 0);
         return true;
     }
 
