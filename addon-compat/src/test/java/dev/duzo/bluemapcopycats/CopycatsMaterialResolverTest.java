@@ -61,6 +61,25 @@ final class CopycatsMaterialResolverTest {
     }
 
     @Test
+    void copycatsAcceptGenericPrettyInPinkAndRailwaysCopiedMaterials() {
+        for (String id : new String[]{
+                "pretty_in_pink:black_brushed_steel",
+                "pretty_in_pink:white_brushed_steel",
+                "railways:brown_single_pane_locometal_window",
+                "railways:blue_four_pane_locometal_window"}) {
+            CopycatsMaterial direct = CopycatsMaterialResolver.resolve(
+                    state(id, Map.of("axis", "y")), null, null);
+            assertEquals(id, direct.id());
+            assertTrue(CopycatsMaterialResolver.usable(direct));
+
+            CopycatsMaterial multipart = CopycatsMaterialResolver.resolve(
+                    null, Map.of("top", storage(state(id, Map.of()))), "top");
+            assertEquals(id, multipart.id());
+            assertTrue(CopycatsMaterialResolver.usable(multipart));
+        }
+    }
+
+    @Test
     void unusableMaterialsRemainRejected() {
         assertFalse(CopycatsMaterialResolver.usable(null));
         assertFalse(CopycatsMaterialResolver.usable(new CopycatsMaterial("minecraft:air", Map.of())));
