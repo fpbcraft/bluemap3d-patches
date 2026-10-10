@@ -209,8 +209,8 @@ public final class CopiedMaterialConnectedTextures {
             } else {
                 selected = materialState(data.material());
             }
-            return new CellNeighbor(selected, selected != null
-                    && selected.getProperties().isOccluding());
+            // One 8x8x3 byte-panel part cannot occlude a whole block face.
+            return new CellNeighbor(selected, false);
         }
         // Non-byte-panel materials retain their normal full-block CT behavior.
         // A copied shape is resolved through its existing material-NBT path.
