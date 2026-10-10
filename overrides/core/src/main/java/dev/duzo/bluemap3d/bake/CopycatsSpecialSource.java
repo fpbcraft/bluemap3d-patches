@@ -123,8 +123,9 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         for (int y = 0; y < 2; y++) for (int z = 0; z < 2; z++) for (int x = 0; x < 2; x++) {
             BlockState material = parts.get(cellKey(x, y, z));
             if (material == null) continue;
-            addPart(result, parts, x, y, z, () ->
-                    addBytePieces(result, x * 8, y * 8, z * 8, material));
+            final int ox=x*8, oy=y*8, oz=z*8;
+            addPart(parts, x, y, z, () ->
+                    addBytePieces(result, ox, oy, oz, material));
         }
         return List.copyOf(result);
     }
@@ -166,7 +167,7 @@ public final class CopycatsSpecialSource implements BlockModelSource {
             int[] xyz = panelCell(facing, part.x(), part.y());
             BlockState material = parts.get(cellKey(xyz[0], xyz[1], xyz[2]));
             if (material == null) continue;
-            addPart(out, parts, xyz[0], xyz[1], xyz[2], () -> {
+            addPart(parts, xyz[0], xyz[1], xyz[2], () -> {
                 float i = part.x() * 8f;
                 float j = part.y() * 8f;
                 if ("up".equals(facing)) {
@@ -188,7 +189,7 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         return List.copyOf(out);
     }
 
-    private void addPart(List<ModelQuad> unused, Map<Integer,BlockState> parts,
+    private void addPart(Map<Integer,BlockState> parts,
             int x, int y, int z, Runnable build) {
         BlockRenderContext base = renderContext.get();
         if (base == null) {
