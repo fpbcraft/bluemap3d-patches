@@ -20,26 +20,26 @@ final class CopycatsTerrainOrientationTest {
     void staticCreatePanelHorizontalFacingsMatchStationaryWorld() {
         // Canonical Create panel is a 3px plate at Y=0..3.
         float[] corner = {8, 1.5f, 8};
-        position(corner.clone(), CopycatsTerrainRenderer.panelTransform("north"), 8, 8, 14.5f);
-        position(corner.clone(), CopycatsTerrainRenderer.panelTransform("south"), 8, 8, 1.5f);
-        position(corner.clone(), CopycatsTerrainRenderer.panelTransform("west"), 14.5f, 8, 8);
-        position(corner.clone(), CopycatsTerrainRenderer.panelTransform("east"), 1.5f, 8, 8);
+        position(corner.clone(), CopycatsStaticFacing.panel("north"), 8, 8, 14.5f);
+        position(corner.clone(), CopycatsStaticFacing.panel("south"), 8, 8, 1.5f);
+        position(corner.clone(), CopycatsStaticFacing.panel("west"), 14.5f, 8, 8);
+        position(corner.clone(), CopycatsStaticFacing.panel("east"), 1.5f, 8, 8);
     }
 
     @Test
     void staticCreatePanelUpAndDownKeepTheirExistingOrientation() {
         float[] point = {8, 1.5f, 8};
-        position(point.clone(), CopycatsTerrainRenderer.panelTransform("up"), 8, 1.5f, 8);
-        position(point.clone(), CopycatsTerrainRenderer.panelTransform("down"), 8, 14.5f, 8);
+        position(point.clone(), CopycatsStaticFacing.panel("up"), 8, 1.5f, 8);
+        position(point.clone(), CopycatsStaticFacing.panel("down"), 8, 14.5f, 8);
     }
 
     @Test
     void staticVerticalStepCorrectsAllFourHorizontalFacings() {
         // Copycats+ canonical part occupies its positive X/Z quarter.
         float[] center = {12, 8, 12};
-        position(center.clone(), CopycatsTerrainRenderer.verticalStepTransform("south"), 4, 8, 4);
-        position(center.clone(), CopycatsTerrainRenderer.verticalStepTransform("west"), 12, 8, 4);
-        position(center.clone(), CopycatsTerrainRenderer.verticalStepTransform("north"), 12, 8, 12);
-        position(center.clone(), CopycatsTerrainRenderer.verticalStepTransform("east"), 4, 8, 12);
+        position(center.clone(), CopycatsStaticFacing.verticalStep("south"), 4, 8, 4);
+        position(center.clone(), CopycatsStaticFacing.verticalStep("west"), 12, 8, 4);
+        position(center.clone(), CopycatsStaticFacing.verticalStep("north"), 12, 8, 12);
+        position(center.clone(), CopycatsStaticFacing.verticalStep("east"), 4, 8, 12);
     }
 }
