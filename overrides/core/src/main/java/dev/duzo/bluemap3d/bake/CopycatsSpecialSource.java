@@ -155,15 +155,35 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     private void addBytePieces(
             List<ModelQuad> result, int ox, int oy, int oz, BlockState material) {
         Transform t = new Transform();
-        // Retain the original Copycats+ eight source samples per byte.
-        piece(result,t,ox,oy,oz,0,0,0,4,4,4,material);
-        piece(result,t,ox+4,oy,oz,12,0,0,16,4,4,material);
-        piece(result,t,ox,oy,oz+4,0,0,12,4,4,16,material);
-        piece(result,t,ox+4,oy,oz+4,12,0,12,16,4,16,material);
-        piece(result,t,ox,oy+4,oz,0,12,0,4,16,4,material);
-        piece(result,t,ox+4,oy+4,oz,12,12,0,16,16,4,material);
-        piece(result,t,ox,oy+4,oz+4,0,12,12,4,16,16,material);
-        piece(result,t,ox+4,oy+4,oz+4,12,12,12,16,16,16,material);
+        // Recreate CopycatMultiByteModelCore's eight 4px source samples
+        // and cull the three internal faces of each piece. Previously all
+        // six faces were emitted, allowing internal texture seams to leak.
+        for (int subY = 0; subY < 2; subY++) {
+            for (int subZ = 0; subZ < 2; subZ++) {
+                for (int subX = 0; subX < 2; subX++) {
+                    float sx = subX == 0 ? 0 : 12;
+                    float sy = subY == 0 ? 0 : 12;
+                    float sz = subZ == 0 ? 0 : 12;
+                    List<ModelQuad> faces = new ArrayList<>(6);
+                    piece(faces, t,
+                            ox + subX * 4, oy + subY * 4, oz + subZ * 4,
+                            sx, sy, sz, sx + 4, sy + 4, sz + 4, material);
+                    // Direction.values() is DOWN, UP, NORTH, SOUTH, WEST, EAST.
+                    for (int face = 0; face < faces.size(); face++) {
+                        boolean internal = switch (face) {
+                            case 0 -> subY == 1;
+                            case 1 -> subY == 0;
+                            case 2 -> subZ == 1;
+                            case 3 -> subZ == 0;
+                            case 4 -> subX == 1;
+                            case 5 -> subX == 0;
+                            default -> false;
+                        };
+                        if (!internal) result.add(faces.get(face));
+                    }
+                }
+            }
+        }
     }
 
     private List<ModelQuad> bytePanel(BlockState state, CompoundTag metadata) {
