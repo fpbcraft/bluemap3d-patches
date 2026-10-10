@@ -11,6 +11,7 @@ import de.bluecolored.bluemap.core.world.block.ExtendedBlock;
 
 import java.util.Map;
 import dev.duzo.bluemapcopycats.CopycatsTerrainBlockEntity;
+import dev.duzo.bluemapcopycats.CopycatsTrace;
 
 /**
  * Applies the same pre-baked Fusion/Create CT resources to materials carried by
@@ -30,19 +31,33 @@ public final class CopiedMaterialConnectedTextures {
             ResourcePath<Texture> source, BlockState material,
             Direction face, BlockNeighborhood owner) {
         Appearance plain = new Appearance(source, 0f, 0f, 1f, 1f);
-        if (extension == null || source == null || material == null || face == null) return plain;
+        if (extension == null || source == null || material == null || face == null) {
+            CopycatsTrace.log(owner, "CT", "material=" + material + " face=" + face
+                    + " source=" + source + " reason="
+                    + (extension == null ? "missing-extension" : "missing-input"));
+            return plain;
+        }
         String id = source.getFormatted();
         var fusion = extension.fusionSpec(id);
         var create = extension.createSpec(id, material.getFormatted(), material.getProperties(), face);
-        if (fusion == null && create == null) return plain;
+        if (fusion == null && create == null) {
+            CopycatsTrace.log(owner, "CT", "material=" + material.getFormatted()
+                    + " face=" + face + " base=" + id + " mode=none reason=no-ct-spec");
+            return plain;
+        }
 
         int mask = mask(material, face, owner, fusion, create);
         if (fusion != null) {
             ResourcePath<Texture> path = extension.fusionMaterial(id, fusion, mask);
-            if (!available(path)) return plain;
+            int tile = ConnectedTextureLayout.fusionTile(fusion.layout(), mask);
+            boolean found = available(path);
+            CopycatsTrace.log(owner, "CT", "material=" + material.getFormatted()
+                    + " face=" + face + " mode=fusion layout=" + fusion.layout()
+                    + " base=" + id + " mask=0x" + Integer.toHexString(mask)
+                    + " tile=" + tile + " destination=" + path + " available=" + found);
+            if (!found) return plain;
             if (ConnectedTextureLayout.isMultiQuadFusionLayout(fusion.layout()))
                 return new Appearance(path, 0f, 0f, 1f, 1f);
-            int tile = ConnectedTextureLayout.fusionTile(fusion.layout(), mask);
             return tiled(path, fusion.grid(), tile);
         }
 
@@ -50,7 +65,13 @@ public final class CopiedMaterialConnectedTextures {
         String sheet = create.sheetTexture(owner.getX(), owner.getY(), owner.getZ());
         int tile = ConnectedTextureLayout.createTile(create.type(), mask);
         ResourcePath<Texture> path = extension.createMaterial(sheet, create.type(), tile);
-        return available(path) ? tiled(path, ConnectedTextureLayout.createGrid(create.type()), tile) : plain;
+        boolean found = available(path);
+        CopycatsTrace.log(owner, "CT", "material=" + material.getFormatted()
+                + " face=" + face + " mode=create type=" + create.type()
+                + " base=" + id + " sheet=" + sheet
+                + " mask=0x" + Integer.toHexString(mask)
+                + " tile=" + tile + " destination=" + path + " available=" + found);
+        return found ? tiled(path, ConnectedTextureLayout.createGrid(create.type()), tile) : plain;
     }
 
     private boolean available(ResourcePath<Texture> path) {
