@@ -937,6 +937,9 @@ index e8199bf..f2a3e33 100644
 +                // Dynamic Copycats+ boards have no JSON geometry; their material lives in
 +                // block-entity NBT, so they must be resolved before the ordinary pack path.
 +                sources.add(new CopycatsBoardSource(packs));
++                // Railways headstocks have real JSON geometry, but their copycat skin is
++                // normally substituted by a client-only baked-model wrapper.
++                sources.add(new dev.duzo.bluemap3d.bake.RailwaysCopycatHeadstockSource(packs));
                  sources.add(packs);
 +                sources.add(new dev.duzo.bluemap3d.bake.EntityModelSource(assets));
 +                // Copycats+ emits many models entirely in client code. If no real JSON
@@ -2354,7 +2357,10 @@ index 14cc6cc..3ba2e04 100644
 @@ -97,10 +102,36 @@ public final class VolumeMesher {
          java.util.Set<String> unresolved = new java.util.TreeSet<>();
  
-+        BlockRenderContext.BlockLookup blockLookup = volume::stateAt;
++        BlockRenderContext.BlockLookup blockLookup = (x, y, z) ->
++                CopiedMaterialResolver.effectiveState(
++                        volume.stateAt(x, y, z),
++                        volume.blockEntityDataAt(x, y, z));
          volume.forEachBlock((x, y, z, state) -> {
 +            CompoundTag blockEntityData = volume.blockEntityDataAt(x, y, z);
 +            BlockRenderContext renderContext =
