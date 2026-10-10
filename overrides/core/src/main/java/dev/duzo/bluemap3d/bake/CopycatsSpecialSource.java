@@ -30,6 +30,11 @@ public final class CopycatsSpecialSource implements BlockModelSource {
 
     private final ResourcePackSource models;
     private final ThreadLocal<BlockRenderContext> renderContext = new ThreadLocal<>();
+    private static final boolean TRACE =
+            Boolean.getBoolean("bluemap.copycats.trace");
+    private static final java.util.concurrent.atomic.AtomicInteger TRACE_LINES =
+            new java.util.concurrent.atomic.AtomicInteger();
+
 
     public CopycatsSpecialSource(ResourcePackSource models) {
         this.models = models;
@@ -75,6 +80,23 @@ public final class CopycatsSpecialSource implements BlockModelSource {
             String keys = materialKeys(metadata);
             LOGGER.debug("V21 MOVING block={} state={} metadata={} materialKeys={} quads={}",
                     id, state, metadata == null ? "missing" : "present", keys, result.size());
+        }
+        if (TRACE && TRACE_LINES.getAndIncrement() < 60) {
+            long noFace = result.stream()
+                    .filter(quad -> quad.shadeFace() == null && quad.cullFace() == null)
+                    .count();
+            java.util.Set<String> textures = new java.util.TreeSet<>();
+            for (ModelQuad quad : result) {
+                if (quad.texture() != null && textures.size() < 12)
+                    textures.add(quad.texture());
+            }
+            BlockRenderContext current = renderContext.get();
+            LOGGER.debug("COPYCATS-MOVING-TRACE phase=SOURCE block={} coords={} metadata={} materialKeys={} quads={} missingFace={} textures={}",
+                    id,
+                    current == null ? "<none>" :
+                            current.x() + "," + current.y() + "," + current.z(),
+                    metadata == null ? "<null>" : "present",
+                    materialKeys(metadata), result.size(), noFace, textures);
         }
         return result;
     }
@@ -557,6 +579,16 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         }
         if (chosen == null && !quads.isEmpty()) chosen = quads.getFirst();
 
+        if (TRACE && TRACE_LINES.getAndIncrement() < 60) {
+            LOGGER.debug("COPYCATS-MOVING-TRACE phase=MATERIAL material={} face={} sampledQuads={} matchedTexture={} matchedExists={} chosenCull={} chosenShade={} sampledContext={}",
+                    BuiltInRegistries.BLOCK.getKey(material.getBlock()),
+                    surface, quads.size(), chosen == null ? "<null>" : chosen.texture(),
+                    chosen != null && chosen.texture() != null
+                            && models.texture(chosen.texture()) != null,
+                    chosen == null ? null : chosen.cullFace(),
+                    chosen == null ? null : chosen.shadeFace(),
+                    context == null ? "state-only" : "neighbor-aware");
+        }
         if (chosen != null && chosen.texture() != null && models.texture(chosen.texture()) != null) {
             return new Appearance(chosen.texture(), chosen.tint());
         }
