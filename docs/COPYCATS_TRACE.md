@@ -120,6 +120,43 @@ radius to `8` to avoid collecting many blocks at the edge of the
 original 24-block window. For dedicated static samples at
 `(-889,-411)`, use `center=-889,-411` with a small radius.
 
+## Missing Create copycat panels and steps (ground + locomotive)
+
+The October 10 comparison shows some `create:copycat_panel` and
+`create:copycat_step` blocks are visible in Minecraft but missing both
+on the static BlueMap ground test and in the moving locomotive geometry.
+
+This update addresses **two separate renderers**:
+
+1. **Static terrain:** A blockstate JSON supplied by the compatibility resource
+   pack may lose load-order priority to Create's ordinary blockstate. The
+   API-enable dispatch now explicitly replaces `create:copycat_panel` and
+   `create:copycat_step` entries after all packs are loaded. Startup should
+   log `static Create copycat panels/steps routed 2 id(s)`. Static tracing
+   also emits `COPYCATS-TRACE phase=ENTITY` and `phase=GEOMETRY` when the
+   custom renderer is called.
+2. **BlueMap3D moving trains:** The old generic panel fallback used a
+   **1-pixel** face. Create's `CopycatPanelBlock` uses
+   `AllShapes.CASING_3PX`; the renderer now asks the actual state for its
+   voxel shape and falls back to 3 pixels with explicit direction handling.
+   Create steps have a canonical 16×8×8 fallback. With tracing enabled,
+   `COPYCATS-MOVING-TRACE phase=CREATE-SHAPE` reports successful geometry or
+   the exact early-return reason (`missing-material-nbt`,
+   `unusable-copied-material`, or `invalid-voxel-shape`).
+
+For the ground test, force-update the test area after restarting with the new
+compatibility-addon JAR. For the locomotive, **also replace the BlueMap3D
+patched JAR** and cause a new Create carriage mesh to be baked; ordinary
+terrain rerenders and train movement do not guarantee this. A quick
+disassemble/reassemble of the locomotive is a suitable test if safe for the
+world. Do not delete any world files or objects just to refresh these assets.
+
+If the startup reports the two Create IDs routed but there is no
+`STATIC block=create:copycat_panel`/step, or the expected
+`COPYCATS-TRACE` events in the correct area, record that alongside the
+model results. If the moving trace says `missing-material-nbt`, the
+failure is upstream in the contraption snapshot pipeline, not CT atlas UVs.
+
 ## Minimal reproducible case
 
 Use a small cluster of unassembled blocks near the trace center:
