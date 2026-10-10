@@ -59,11 +59,18 @@ public final class CopiedMaterialConnectedTextures {
 
     static Appearance tiled(
             ResourcePath<Texture> path, ConnectedTextureLayout.Grid grid, int tile) {
+        float[] uv = tileUvs(grid, tile);
+        return new Appearance(path, uv[0], uv[1], uv[2], uv[3]);
+    }
+
+    // Keep pure coordinate calculation testable without loading BlueMap runtime classes.
+    static float[] tileUvs(ConnectedTextureLayout.Grid grid, int tile) {
         int x = Math.floorMod(tile, grid.width());
         int y = Math.floorDiv(tile, grid.width());
-        return new Appearance(path,
+        return new float[]{
                 x / (float) grid.width(), y / (float) grid.height(),
-                (x + 1f) / grid.width(), (y + 1f) / grid.height());
+                (x + 1f) / grid.width(), (y + 1f) / grid.height()
+        };
     }
 
     static int constrainCorners(int mask) {
