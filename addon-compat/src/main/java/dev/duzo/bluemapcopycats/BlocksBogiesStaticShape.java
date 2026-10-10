@@ -46,6 +46,26 @@ final class BlocksBogiesStaticShape {
             return .5f - 1.5f - 1f / 128f;
         }
 
+        /**
+         * The same B&B block can have multiple selected BogeyStyles. Use its
+         * BogeyData, not axle count alone, to pick the correct frame family.
+         */
+        String objVariant(String style, String blockId) {
+            String name = style == null ? "" : style.substring(style.indexOf(':') + 1);
+            if (name.contains("walschaerts") && name.contains("extended"))
+                return name.contains("short") ? "sew" : "lew";
+            if (name.contains("walschaerts"))
+                return name.contains("short") ? "sw" : "lw";
+            if (name.contains("scotch_yoke")) return "c";
+            if (name.contains("extended") && name.contains("pistonless")) return "ep";
+            if (name.contains("pistonless") || name.contains("rodless")) return "p";
+            if (name.contains("extended") && name.contains("long")) return "le";
+            if (name.contains("extended") && name.contains("short")) return "se";
+            if (name.contains("long")) return "l";
+            if (name.contains("short")) return "s";
+            return blockId.endsWith("_rot") ? "l" : "p";
+        }
+
         float wheelSpacing() {
             if (small()) return 1f;
             if (extraLarge()) return 2.25f;
