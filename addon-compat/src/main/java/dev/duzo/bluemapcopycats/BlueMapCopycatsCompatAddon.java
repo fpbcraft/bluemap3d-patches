@@ -1,6 +1,7 @@
 package dev.duzo.bluemapcopycats;
 
 import de.bluecolored.bluemap.api.BlueMapAPI;
+import de.bluecolored.bluemap.common.api.BlueMapAPIImpl;
 import de.bluecolored.bluemap.core.map.hires.block.BlockRendererType;
 import de.bluecolored.bluemap.core.util.Key;
 import de.bluecolored.bluemap.core.world.mca.blockentity.BlockEntityType;
@@ -53,6 +54,13 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
         // parsed blockstate for material-specific rendering.
         BlueMapAPI.onEnable(api -> {
             registerBlockEntities();
+            // Some worlds may have decoded chunks before the competing decoder was
+            // replaced. Re-read their block-entity NBT with the authoritative registry
+            // before any static renderer starts using those cached instances.
+            if (api instanceof BlueMapAPIImpl implementation) {
+                implementation.blueMapService().getWorlds().values()
+                        .forEach(world -> world.invalidateChunkCache());
+            }
             ConnectedTerrainDispatch.apply(api);
         });
 
