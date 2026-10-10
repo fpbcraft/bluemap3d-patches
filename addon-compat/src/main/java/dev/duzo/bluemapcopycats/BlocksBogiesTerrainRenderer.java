@@ -31,6 +31,7 @@ public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
     private final TextureGallery gallery;
     private TileModelView view;
     private LightData light;
+    private float terrainOffsetY;
 
     public BlocksBogiesTerrainRenderer(
             ResourcePack pack, TextureGallery gallery, RenderSettings settings) {
@@ -45,6 +46,7 @@ public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
         if (spec == null) return;
         this.view = tile;
         this.light = block.getLightData();
+        this.terrainOffsetY = spec.staticTerrainOffsetY();
         int first = tile.getTileModel().size();
 
         // Prefer the actual static OBJ geometry shipped inside the installed
@@ -238,9 +240,9 @@ public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
         view.add(1);
         TileModel model=view.getTileModel();
         int n=view.getStart();
-        model.setPositions(n,(float)(a.x+.5),(float)a.y,(float)(a.z+.5),
-                (float)(b.x+.5),(float)b.y,(float)(b.z+.5),
-                (float)(c.x+.5),(float)c.y,(float)(c.z+.5));
+        model.setPositions(n,(float)(a.x+.5),(float)(a.y+terrainOffsetY),(float)(a.z+.5),
+                (float)(b.x+.5),(float)(b.y+terrainOffsetY),(float)(b.z+.5),
+                (float)(c.x+.5),(float)(c.y+terrainOffsetY),(float)(c.z+.5));
         model.setUvs(n,u0,v0,u1,v1,u2,v2);
         model.setMaterialIndex(n,texture);
         model.setColor(n,1,1,1);
