@@ -152,34 +152,12 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         return "create:copycat_panel".equals(id) || "create:copycat_step".equals(id);
     }
 
-    /**
-     * Static BlueMap geometry has the reversed horizontal attachment orientation
-     * compared with the blockstate's in-game Create model. Apply the correction
-     * only here; assembled train meshes use Minecraft's voxel shape directly.
-     */
-    static CopycatsTransform panelTransform(String facing) {
-        CopycatsTransform transform = new CopycatsTransform();
-        switch (facing) {
-            case "down" -> transform.flipY(true);
-            case "north" -> transform.rotateX(90).rotateY(180);
-            case "south" -> transform.rotateX(270).rotateY(180);
-            case "west" -> transform.rotateZ(270).rotateY(180);
-            case "east" -> transform.rotateZ(90).rotateY(180);
-            default -> { /* up: base slab at y=0 */ }
-        }
-        return transform;
-    }
-
-    static CopycatsTransform verticalStepTransform(String facing) {
-        return new CopycatsTransform().rotateY(yRotation(facing) + 180);
-    }
-
     /** Create's CASING_3PX profile, facing the clicked support surface. */
     private List<Quad> createPanel(CopycatsTerrainBlockEntity entity) {
         CopycatsMaterial material = CopycatsMaterialResolver.createPanelOrStepMaterial(entity);
         if (material == null) return List.of();
 
-        CopycatsTransform transform = panelTransform(property("facing"));
+        CopycatsTransform transform = CopycatsStaticFacing.panel(property("facing"));
         List<Quad> out = new ArrayList<>();
         cuboid(out, transform, 0, 0, 0, 16, 3, 16, material);
         return out;
@@ -585,7 +563,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (!usable(material)) return List.of();
         List<Quad> out = new ArrayList<>();
         cuboid(out,
-                verticalStepTransform(property("facing")),
+                CopycatsStaticFacing.verticalStep(property("facing")),
                 8, 0, 8, 16, 16, 16, material);
         return out;
     }
