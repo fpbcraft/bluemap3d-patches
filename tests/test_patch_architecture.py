@@ -119,6 +119,24 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("deliverCompletedRenders()", queue)
         self.assertIn("renderQueueSize() != 0", queue)
 
+    def test_train_assembly_queues_the_original_carriage_footprint(self) -> None:
+        transform = (ROOT / "scripts/transforms/contraption_provider.py").read_text()
+
+        self.assertIn("entry.assemblyFootprint = assemblyFootprintOf(live.getContraption())", transform)
+        self.assertIn("entry.assemblyFootprint = assemblyFootprintOf(contraption)", transform)
+        self.assertIn("terrainContraptions.add(objectId)", transform)
+        self.assertIn(
+            "trackTerrainFootprint(\n"
+            "                    level,\n"
+            "                    objectId,\n"
+            "                    entry.assemblyFootprint,",
+            transform,
+        )
+        self.assertIn(
+            "BlockPos worldPos = contraption.anchor.offset(local);",
+            transform,
+        )
+
     def test_create_persistence_and_diagnostics_are_transition_based(self) -> None:
         persistence = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/api/PersistentSceneObjectProvider.java").read_text()
         removal = (ROOT / "overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/ContraptionRemovalMixin.java").read_text()
