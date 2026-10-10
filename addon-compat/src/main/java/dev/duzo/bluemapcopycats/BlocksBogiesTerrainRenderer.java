@@ -137,11 +137,11 @@ public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
 
         emitObj(frame, 0, 0, 0);
 
-        for (int i=0; i<spec.axles();i++) {
-            float z=(float)(i-(spec.axles()-1)/2.0);
-            // Corresponds to CachedBuffers.partial(...wheels).translate(0,.75,j)
-            // in Blocks & Bogies' actual client renderers.
-            emitObj(wheels, 0, .75f, z);
+        for (float z : spec.wheelPositions()) {
+            // These OBJ vertices are already in block units. The mod's client
+            // renderer translates its shared wheel partials to the correct
+            // center height and axle spacing after loading the model.
+            emitObj(wheels, 0, spec.wheelY(), z);
         }
 
         for (String rod : new String[]{"left_c_rod", "right_c_rod", "belts"}) {
