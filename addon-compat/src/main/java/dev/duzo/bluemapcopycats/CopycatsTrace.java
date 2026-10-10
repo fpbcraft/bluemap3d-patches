@@ -21,6 +21,8 @@ public final class CopycatsTrace {
             Integer.getInteger("bluemap.copycats.trace.radius", 24));
     private static final int[] CENTER = parseCenter(
             System.getProperty("bluemap.copycats.trace.center", ""));
+    private static final String MATCH =
+            System.getProperty("bluemap.copycats.trace.match", "").trim();
     private static final AtomicInteger COUNT = new AtomicInteger();
 
     private CopycatsTrace() {}
@@ -33,7 +35,7 @@ public final class CopycatsTrace {
     }
 
     public static void log(BlockNeighborhood block, String phase, String details) {
-        if (!enabled(block)) return;
+        if (!enabled(block) || (!MATCH.isEmpty() && !details.contains(MATCH))) return;
         int line = COUNT.getAndIncrement();
         if (line >= LIMIT) return;
         Logger.global.logDebug("COPYCATS-TRACE phase=" + phase
