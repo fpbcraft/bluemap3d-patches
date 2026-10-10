@@ -125,11 +125,10 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("entry.assemblyFootprint = assemblyFootprintOf(live.getContraption())", transform)
         self.assertIn("entry.assemblyFootprint = assemblyFootprintOf(contraption)", transform)
         self.assertIn("terrainContraptions.add(objectId)", transform)
+        self.assertIn("trackTerrainFootprint(", transform)
         self.assertIn(
-            "trackTerrainFootprint(\n"
-            "                    level,\n"
-            "                    objectId,\n"
-            "                    entry.assemblyFootprint,",
+            "entry.assemblyFootprint,\n"
+            "                        footprintOf(object)",
             transform,
         )
         self.assertIn(
