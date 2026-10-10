@@ -86,7 +86,7 @@ window_properties = {
 }
 window_properties_path = root / "railways" / "blockProperties.json"
 window_properties_path.parent.mkdir(parents=True, exist_ok=True)
-window_properties_path.write_text(json.dumps(window_properties, indent=2) + "\\n")
+window_properties_path.write_text(json.dumps(window_properties, indent=2) + "\n")
 
 
 write_dispatch(
