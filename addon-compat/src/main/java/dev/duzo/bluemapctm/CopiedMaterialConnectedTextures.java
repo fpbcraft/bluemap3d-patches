@@ -200,9 +200,15 @@ public final class CopiedMaterialConnectedTextures {
             CopycatsTerrainBlockEntity data = CopycatsTerrainBlockEntity.from(
                     neighbour.getBlockEntity());
             if (data == null) return new CellNeighbor(null, false);
-            var material = dev.duzo.bluemapcopycats.CopycatsMaterialResolver
-                    .materialFor(data, part);
-            BlockState selected = material == null ? null : material.asBlockState();
+            BlockState selected = null;
+            if (data.materialData() instanceof Map<?, ?> storage
+                    && storage.get(part) instanceof Map<?, ?> partData) {
+                Object raw = partData.containsKey("material")
+                        ? partData.get("material") : partData.get("Material");
+                selected = materialState(raw);
+            } else {
+                selected = materialState(data.material());
+            }
             return new CellNeighbor(selected, selected != null
                     && selected.getProperties().isOccluding());
         }
