@@ -701,7 +701,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
                 d[0],d[1],d[2]
         };
         transform.applyQuad(positions);
-        out.add(new Quad(positions, materialFace, material));
+        out.add(new Quad(positions,
+                CopycatsQuadEmitter.physicalFace(positions, materialFace), material));
     }
 
     private CopycatsMaterial materialFor(CopycatsTerrainBlockEntity entity, String part) {

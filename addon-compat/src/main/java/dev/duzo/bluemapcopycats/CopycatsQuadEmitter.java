@@ -67,6 +67,13 @@ final class CopycatsQuadEmitter {
         return true;
     }
 
+    /** A transformed copycat quad must use its actual world-facing normal
+     * when sampling the material model and evaluating its CT neighbours.
+     * The original unrotated face label is wrong for any rotated panel/step. */
+    static Direction physicalFace(float[] p, Direction fallback) {
+        return Direction.valueOf(CopycatsFaceOrientation.of(p, fallback.name()));
+    }
+
     /**
      * Map a quad's vertices to their actual positions on the full 16-pixel
      * material face. The CT atlas tile remains the same, but a half-panel

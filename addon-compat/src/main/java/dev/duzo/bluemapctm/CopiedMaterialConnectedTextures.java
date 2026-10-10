@@ -19,6 +19,8 @@ import dev.duzo.bluemapcopycats.CopycatsTrace;
  * No allowlist of material mods or copycat shapes is required.
  */
 public final class CopiedMaterialConnectedTextures {
+    private static final boolean TRACE_NEIGHBORS =
+            Boolean.getBoolean("bluemap.copycats.trace.neighbors");
     private final ResourcePack resources;
     private final ConnectedTextureResourceExtension extension;
 
@@ -152,6 +154,22 @@ public final class CopiedMaterialConnectedTextures {
                 connects = !front.getProperties().isOccluding()
                         && material.getFormatted().equals(other.getFormatted())
                         && material.getProperties().equals(other.getProperties());
+            }
+            // For persistent static seams, report the four cardinal
+            // directions that *failed* to join; the existing CT trace reports
+            // only the resulting mask, not why an adjacent copied panel missed.
+            // Keep this opt-in because BlueMap calls the shader per tiny quad.
+            if (!connects && create != null && TRACE_NEIGHBORS
+                    && (i % 2 == 0) && CopycatsTrace.enabled(block)) {
+                CopycatsTrace.log(block, "CT-EDGE",
+                        "face=" + face + " dir=" + dirs[i]
+                        + " copied=" + material.getFormatted()
+                        + " sourceNeighbor=" + neighbour.getBlockState().getFormatted()
+                        + " resolvedNeighbor=" + (other == null ? "<null>"
+                                : other.getFormatted())
+                        + " hasNeighborEntity=" + (neighbour.getBlockEntity() != null)
+                        + " frontOccludes=" + front.getProperties().isOccluding()
+                        + " frontBlock=" + front.getBlockState().getFormatted());
             }
             if (connects) mask |= 1 << i;
         }

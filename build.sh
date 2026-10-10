@@ -40,6 +40,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopiedMaterialRes
    core/src/main/java/dev/duzo/bluemap3d/bake/CopiedMaterialResolver.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsPhysicalFace.java" \
+   core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsPhysicalFace.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/RailwaysCopycatHeadstockSource.java" \

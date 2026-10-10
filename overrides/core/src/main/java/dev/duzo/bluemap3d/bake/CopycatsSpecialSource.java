@@ -519,13 +519,17 @@ public final class CopycatsSpecialSource implements BlockModelSource {
             float[] sourceTo,
             BlockState material) {
         for (Direction face : Direction.values()) {
-            Appearance appearance = appearance(material, face);
             float[] positions = ResourcePackGeometry.faceCorners(destFrom, destTo, face);
             transform.apply(positions);
             float[] uvs = ResourcePackGeometry.uvCorners(
                     ResourcePackGeometry.autoUv(sourceFrom, sourceTo, face), 0);
             if (transform.mirrored()) reverseWinding(positions, uvs);
-            out.add(new ModelQuad(null, null, positions, uvs,
+            // The copied material is evaluated in world orientation. Sampling
+            // the pre-rotation face used the wrong CT neighbors on assembled
+            // rotated byte panels, even when the underlying material matched.
+            Direction worldFace = physicalFace(positions, face);
+            Appearance appearance = appearance(material, worldFace);
+            out.add(new ModelQuad(null, worldFace, positions, uvs,
                     appearance.texture(), appearance.tint()));
         }
     }
@@ -542,9 +546,16 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         transform.apply(positions);
         float[] uvs = new float[]{0,16, 16,16, 16,0, 0,0};
         if (transform.mirrored()) reverseWinding(positions, uvs);
-        Appearance appearance = appearance(material, sourceFace);
-        out.add(new ModelQuad(null, null, positions, uvs,
+        Direction worldFace = physicalFace(positions, sourceFace);
+        Appearance appearance = appearance(material, worldFace);
+        out.add(new ModelQuad(null, worldFace, positions, uvs,
                 appearance.texture(), appearance.tint()));
+    }
+
+    /** Recover the outward face after copying, rotating or mirroring geometry. */
+    static Direction physicalFace(float[] vertices, Direction fallback) {
+        return Direction.valueOf(
+                CopycatsPhysicalFace.of(vertices, fallback.name()));
     }
 
     private static float[] p(float x, float y, float z) {
