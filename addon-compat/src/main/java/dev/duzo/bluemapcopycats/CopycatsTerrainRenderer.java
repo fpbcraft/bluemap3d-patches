@@ -67,6 +67,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             case "copycats:copycat_vertical_half_layer" -> verticalHalfLayer(entity);
             case "copycats:copycat_flat_pane" -> flatPane(entity);
             case "copycats:copycat_vertical_stairs" -> verticalStairs(entity);
+            case "copycats:copycat_slope" -> slope(entity);
             case "copycats:copycat_slope_layer" -> slopeLayer(entity);
             case "copycats:copycat_slab" -> copycatsSlab(entity);
             case "copycats:copycat_board" -> board(entity);
@@ -298,6 +299,12 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         cuboid(out, t, 0, 0, 4, 16, 16, 8, material);
     }
 
+    private List<Quad> slope(CopycatsTerrainBlockEntity entity) {
+        CopycatsMaterial material = materialFor(entity, null);
+        if (!usable(material)) return List.of();
+        return slopePrism(material, 0, 16);
+    }
+
     private List<Quad> slopeLayer(CopycatsTerrainBlockEntity entity) {
         CopycatsMaterial material = materialFor(entity, null);
         if (!usable(material)) return List.of();
@@ -306,7 +313,10 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (layer <= 0) return List.of();
         float minHeight = layer <= 4 ? 0 : (layer - 4) * 4f;
         float maxHeight = layer <= 4 ? layer * 4f : 16f;
+        return slopePrism(material, minHeight, maxHeight);
+    }
 
+    private List<Quad> slopePrism(CopycatsMaterial material, float minHeight, float maxHeight) {
         CopycatsTransform transform = new CopycatsTransform()
                 .rotateY(yRotation(property("facing")))
                 .flipY("top".equals(property("half")));
