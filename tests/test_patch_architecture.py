@@ -101,6 +101,21 @@ class PatchArchitectureTest(unittest.TestCase):
         build = (ROOT / "build.sh").read_text()
         self.assertIn("CopycatsShapeSource.java", build)
 
+    def test_region_refresh_invalidates_loaded_hires_tiles_and_repeats_feed(self) -> None:
+        queue = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java").read_text()
+        transform = (ROOT / "scripts/transforms/terrain_reload.py").read_text()
+        build = (ROOT / "build.sh").read_text()
+
+        self.assertIn("FULL_MAP_REFRESH_SENTINEL", queue)
+        self.assertIn("new Vector2i(FULL_MAP_REFRESH_SENTINEL, FULL_MAP_REFRESH_SENTINEL)", queue)
+        self.assertIn("var loaded = Array.from(manager.tiles.values())", transform)
+        self.assertIn("manager.tryLoadTile(tx, tz)", transform)
+        self.assertIn("terrain_reload.py", build)
+
+        drain = queue.split("public Map<String, List<int[]>> drainUndelivered()", 1)[1]
+        drain = drain.split("public int version()", 1)[0]
+        self.assertNotIn("undelivered.clear()", drain)
+
     def test_create_removal_tracking_is_wired_into_distribution(self) -> None:
         build = (ROOT / "build.sh").read_text()
         mixins = (ROOT / "overrides/addon-create/src/main/resources/bluemap3d_create.mixins.json").read_text()
