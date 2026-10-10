@@ -54,6 +54,18 @@ public interface SceneObjectProvider {
         return List.of();
     }
 
+    /**
+     * Positive evidence that a cached scene object no longer exists, even if a removal
+     * event was missed while its backing entity was unloaded.
+     *
+     * <p>Called only for saved objects absent from the current live provider snapshot.
+     * The default deliberately preserves objects across chunk unloads and restarts.
+     * Providers must return true only when an authoritative registry proves deletion.
+     */
+    default boolean isDefinitelyDeleted(ServerLevel level, String objectId) {
+        return false;
+    }
+
     default Collection<ResourceLocation> hiddenBlocks() {
         return List.of();
     }
