@@ -51,7 +51,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         this.block = block;
 
         String id = block.getBlockState().getFormatted();
-        if (!(block.getBlockEntity() instanceof CopycatsTerrainBlockEntity entity)) {
+        CopycatsTerrainBlockEntity entity = CopycatsTerrainBlockEntity.from(block.getBlockEntity());
+        if (entity == null) {
             if (TRACED.add(id + "#missing-entity")) {
                 Logger.global.logWarning(String.format("STATIC block=%s has no retained Copycats block entity (actual=%s)",
                         id,
