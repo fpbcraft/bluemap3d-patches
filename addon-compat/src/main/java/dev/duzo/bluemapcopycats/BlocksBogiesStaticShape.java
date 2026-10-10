@@ -25,5 +25,28 @@ final class BlocksBogiesStaticShape {
     record Spec(String size, int axles) {
         boolean small() {return "s".equals(size);}
         boolean extraLarge() {return "xl".equals(size);}
+
+        /**
+         * Wheel placement in Blocks & Bogies uses block units, not OBJ pixels.
+         * In particular the large three-axle engine has its outer wheels at
+         * +/-1.6875, not +/-0.82 as in the previous approximation.
+         */
+        float wheelY() {
+            return small() ? .75f : extraLarge() ? 1.25f : 1f;
+        }
+
+        float wheelSpacing() {
+            if (small()) return 1f;
+            if (extraLarge()) return 2.25f;
+            return axles == 3 ? 1.6875f : 1.125f;
+        }
+
+        float[] wheelPositions() {
+            float[] result = new float[axles];
+            for (int i = 0; i < axles; i++) {
+                result[i] = (i - (axles - 1f) / 2f) * wheelSpacing();
+            }
+            return result;
+        }
     }
 }
