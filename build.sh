@@ -112,6 +112,9 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectPersist
    core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectPersistenceStore.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/ScenePersistencePolicy.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/ScenePersistencePolicy.java
+mkdir -p core/src/main/java/dev/duzo/bluemap3d/publish
+cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java" \
+   core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegment.java" \
    core/src/main/java/dev/duzo/bluemap3d/api/DynamicModelSegment.java
 mkdir -p core/src/test/java/dev/duzo/bluemap3d/api
@@ -136,6 +139,8 @@ cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/BakedMesh.java" \
 cp "$ROOT/overrides/core/src/main/java/dev/duzo/bluemap3d/bake/Bm3dWriter.java" \
    core/src/main/java/dev/duzo/bluemap3d/bake/Bm3dWriter.java
 mkdir -p addon-create/src/main/java/dev/duzo/bluemap3d/create
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionDeletionTracker.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionDeletionTracker.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/ChainConveyorProvider.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/ChainConveyorProvider.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/BeltProvider.java" \
@@ -151,6 +156,8 @@ cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/Simulat
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringRegistry.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringRegistry.java
 mkdir -p addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/ContraptionRemovalMixin.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/ContraptionRemovalMixin.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedSpringBlockEntityMixin.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedSpringBlockEntityMixin.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedRopeStrandHolderMixin.java" \

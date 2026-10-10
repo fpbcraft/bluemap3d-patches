@@ -43,6 +43,7 @@ def _apply_sable_integration(s: str) -> str:
     s = s.replace(
         import_needle,
         import_needle
+
             + '\nimport dev.duzo.bluemap3d.compat.CompatRegistry;'
             + '\nimport dev.ryanhcode.sable.Sable;'
             + '\nimport dev.ryanhcode.sable.api.sublevel.SubLevelContainer;'
@@ -74,8 +75,7 @@ def _apply_sable_integration(s: str) -> str:
             + '\n    private final Set<String> sableProjected = ConcurrentHashMap.newKeySet();'
             + '\n\n    /** Last known child contraptions for Sable ships, retained when their live entity unloads. */'
             + '\n    private final Map<ServerLevel, Map<String, SableContraptionCache>> sableContraptionCaches = new ConcurrentHashMap<>();'
-            + '\n\n    /** Positive deletion evidence consumed by generic scene persistence. */'
-            + '\n    private final Map<ServerLevel, Set<String>> deletedContraptionIds = new ConcurrentHashMap<>();'
+
             + '\n\n    /** ControlledContraptionEntity controller position, used only to invalidate disassembled cached rotors. */'
             + '\n    private static final Field CONTROLLER_POS_FIELD = controllerPosField();'
             + '\n\n    /** Persistent last-known Sable child snapshots, separate from user-editable compatibility config. */'
@@ -485,28 +485,21 @@ def _apply_sable_integration(s: str) -> str:
         clear_needle,
         '''    @Override
     public Collection<String> deletedObjectIds(ServerLevel level) {
-        Set<String> deleted = deletedContraptionIds.get(level);
-        if (deleted == null || deleted.isEmpty()) return List.of();
-
-        List<String> result = List.copyOf(deleted);
-        deleted.removeAll(result);
-        return result;
+        return ContraptionDeletionTracker.drain(level);
     }
 
     private void markContraptionDeleted(ServerLevel level, String objectId) {
-        if (objectId == null || objectId.isBlank()) return;
-        deletedContraptionIds
-                .computeIfAbsent(level, ignored -> ConcurrentHashMap.newKeySet())
-                .add(objectId);
+        ContraptionDeletionTracker.record(level, objectId);
     }
 
     public void clear() {
         savePersistentSableCaches();
         carriageCaches.clear();
         sableContraptionCaches.clear();
-        deletedContraptionIds.clear();
+        ContraptionDeletionTracker.clear();
         sablePersistentLoaded.clear();
         terrainFootprints.clear();
+        terrainPersistTicks.clear();
     }''',
         1,
     )
@@ -539,6 +532,9 @@ def _apply_terrain_invalidation(s: str) -> str:
         terrain_field_needle
             + '\n\n    /** Last world footprint for ordinary Create contraptions currently reported live. */'
             + '\n    private final Map<ServerLevel, Map<String, Footprint>> terrainFootprints = new ConcurrentHashMap<>();'
+            + '\n\n    /** Last game tick whose changed Create terrain was persisted for BlueMap. */'
+            + '\n    private final Map<ServerLevel, Long> terrainPersistTicks = new ConcurrentHashMap<>();'
+
             + '\n\n    /** Inclusive X/Z footprint of a contraption in the real world. */'
             + '\n    private record Footprint(int minX, int minZ, int maxX, int maxZ, int y) {}'
             + '\n\n    private static final int MAX_TERRAIN_REFRESH_SAMPLES = 64;',
@@ -716,6 +712,24 @@ def _apply_terrain_invalidation(s: str) -> str:
      * Contraption.addBlock stores each key as globalPos - anchor, so adding anchor back
      * reconstructs the positions that were removed from the chunk at assembly time.
      */
+    private void persistTerrainOnce(ServerLevel level) {
+        long tick = level.getGameTime();
+        Long previous = terrainPersistTicks.put(level, tick);
+        if (previous != null && previous.longValue() == tick) return;
+
+        try {
+            // BlueMap's terrain renderer reads MCA region files, not the live ServerLevel.
+            // Create has already removed/returned the blocks in memory at this point, so
+            // persist once for this level/tick before asking BlueMap to re-render tiles.
+            level.save(null, true, false);
+        } catch (RuntimeException error) {
+            terrainPersistTicks.remove(level, tick);
+            LOGGER.warn(
+                    "Could not persist Create terrain changes before BlueMap refresh in {}",
+                    level.dimension().location(), error);
+        }
+    }
+
     private static Footprint assemblyFootprintOf(Contraption contraption) {
         if (contraption == null || contraption.anchor == null
                 || contraption.getBlocks() == null || contraption.getBlocks().isEmpty()) {
@@ -786,8 +800,10 @@ def _apply_terrain_invalidation(s: str) -> str:
                 (int) Math.floor(minY));
     }
 
-    private static void refreshFootprint(ServerLevel level, Footprint footprint) {
+    private void refreshFootprint(ServerLevel level, Footprint footprint) {
         if (footprint == null) return;
+
+        persistTerrainOnce(level);
 
         // Sample at half BlueMap's usual 32-block hires tile width. Core coalesces
         // repeated positions down to tile coordinates before scheduling renders.
