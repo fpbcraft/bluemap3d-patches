@@ -224,9 +224,15 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
         if (face.getCullface() != null) {
             ExtendedBlock b = getRotationRelativeBlock(face.getCullface());
             BlockProperties p = b.getProperties();
-            if (p.isCulling()) return;
-            if (p.getCullingIdentical() && b.getBlockState().equals(block.getBlockState())) {
-                return;
+            // Railways locometal windows inherit full-cube cullfaces even though
+            // their material is a transparent cutout. Adjacent opaque blocks must
+            // never erase the window pane or its opposite face.
+            if (!ConnectedTextureRoutingRules.keepsTransparentWindowFaces(
+                    block.getBlockState().getFormatted())) {
+                if (p.isCulling()) return;
+                if (p.getCullingIdentical() && b.getBlockState().equals(block.getBlockState())) {
+                    return;
+                }
             }
         }
 
