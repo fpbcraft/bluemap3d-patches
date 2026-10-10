@@ -519,13 +519,17 @@ public final class CopycatsSpecialSource implements BlockModelSource {
             float[] sourceTo,
             BlockState material) {
         for (Direction face : Direction.values()) {
-            Appearance appearance = appearance(material, face);
             float[] positions = ResourcePackGeometry.faceCorners(destFrom, destTo, face);
             transform.apply(positions);
             float[] uvs = ResourcePackGeometry.uvCorners(
                     ResourcePackGeometry.autoUv(sourceFrom, sourceTo, face), 0);
             if (transform.mirrored()) reverseWinding(positions, uvs);
-            out.add(new ModelQuad(null, null, positions, uvs,
+            // The copied material is evaluated in world orientation. Sampling
+            // the pre-rotation face used the wrong CT neighbors on assembled
+            // rotated byte panels, even when the underlying material matched.
+            Direction worldFace = physicalFace(positions, face);
+            Appearance appearance = appearance(material, worldFace);
+            out.add(new ModelQuad(null, worldFace, positions, uvs,
                     appearance.texture(), appearance.tint()));
         }
     }
@@ -542,9 +546,25 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         transform.apply(positions);
         float[] uvs = new float[]{0,16, 16,16, 16,0, 0,0};
         if (transform.mirrored()) reverseWinding(positions, uvs);
-        Appearance appearance = appearance(material, sourceFace);
-        out.add(new ModelQuad(null, null, positions, uvs,
+        Direction worldFace = physicalFace(positions, sourceFace);
+        Appearance appearance = appearance(material, worldFace);
+        out.add(new ModelQuad(null, worldFace, positions, uvs,
                 appearance.texture(), appearance.tint()));
+    }
+
+    /** Recover the outward face after copying, rotating or mirroring geometry. */
+    private static Direction physicalFace(float[] vertices, Direction fallback) {
+        if (vertices == null || vertices.length < 9) return fallback;
+        float ax=vertices[3]-vertices[0], ay=vertices[4]-vertices[1],
+                az=vertices[5]-vertices[2];
+        float bx=vertices[6]-vertices[0], by=vertices[7]-vertices[1],
+                bz=vertices[8]-vertices[2];
+        float x=ay*bz-az*by, y=az*bx-ax*bz, z=ax*by-ay*bx;
+        float largest=Math.max(Math.abs(x),Math.max(Math.abs(y),Math.abs(z)));
+        if (largest<0.0001f) return fallback;
+        if (Math.abs(x)==largest) return x>0 ? Direction.EAST : Direction.WEST;
+        if (Math.abs(y)==largest) return y>0 ? Direction.UP : Direction.DOWN;
+        return z>0 ? Direction.SOUTH : Direction.NORTH;
     }
 
     private static float[] p(float x, float y, float z) {
