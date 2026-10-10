@@ -330,7 +330,7 @@ index a98a42e..6ecb9bf 100644
          return new CarriageGeometry(volume, version);
      }
  
-@@ -812,6 +841,32 @@ public final class ContraptionProvider implements SceneObjectProvider {
+@@ -812,6 +841,37 @@ public final class ContraptionProvider implements SceneObjectProvider {
          return style == null ? STANDARD_BOGEY_STYLE : style;
      }
  
@@ -346,7 +346,12 @@ index a98a42e..6ecb9bf 100644
 +            CompoundTag updateTag, StructureTemplate.StructureBlockInfo info) {
 +        String namespace = net.minecraft.core.registries.BuiltInRegistries.BLOCK
 +                .getKey(info.state().getBlock()).getNamespace();
-+        if (!"copycats".equals(namespace)) {
++        String path = net.minecraft.core.registries.BuiltInRegistries.BLOCK
++                .getKey(info.state().getBlock()).getPath();
++        if (!"copycats".equals(namespace)
++                && !(("create".equals(namespace) || "create_connected".equals(namespace))
++                    && path.contains("copycat"))
++                && !("railways".equals(namespace) && path.startsWith("copycat_"))) {
 +            return null;
 +        }
 +
