@@ -215,15 +215,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
                     // Internal directions match Copycats+'s eight cull masks.
                     // Face order is DOWN, UP, NORTH, SOUTH, WEST, EAST.
                     for (int face = 0; face < faces.size(); face++) {
-                        boolean internal = switch (face) {
-                            case 0 -> subY == 1;
-                            case 1 -> subY == 0;
-                            case 2 -> subZ == 1;
-                            case 3 -> subZ == 0;
-                            case 4 -> subX == 1;
-                            case 5 -> subX == 0;
-                            default -> false;
-                        };
+                        boolean internal = internalBytePieceFace(face, subX, subY, subZ);
                         if (!internal) out.add(faces.get(face));
                     }
                 }
@@ -674,17 +666,22 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         // and the seam between the front and back depth slices are hidden.
         // Face order from cuboid(): DOWN, UP, NORTH, SOUTH, WEST, EAST.
         for (int face = 0; face < faces.size(); face++) {
-            boolean internal = switch (face) {
-                case 0 -> subY == 1;
-                case 1 -> subY == 0;
-                case 2 -> rear;
-                case 3 -> !rear;
-                case 4 -> subX == 1;
-                case 5 -> subX == 0;
-                default -> false;
-            };
+            boolean internal = internalBytePieceFace(face, subX, subY, rear ? 1 : 0);
             if (!internal) out.add(faces.get(face));
         }
+    }
+
+    /** The source core culls exactly three internal faces per 4px piece. */
+    static boolean internalBytePieceFace(int face, int subX, int subY, int subZ) {
+        return switch (face) {
+            case 0 -> subY == 1; // DOWN
+            case 1 -> subY == 0; // UP
+            case 2 -> subZ == 1; // NORTH
+            case 3 -> subZ == 0; // SOUTH
+            case 4 -> subX == 1; // WEST
+            case 5 -> subX == 0; // EAST
+            default -> false;
+        };
     }
 
     private List<Quad> pressurePlate(CopycatsTerrainBlockEntity entity) {
