@@ -17,13 +17,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Stationary-only server-side fallback for Blocks & Bogies.
+ * Stationary-only server-side fallback for Blocks &amp; Bogies.
  *
  * Their 1.21.1 JSON blockstates contain only the top mount; frames and wheels
  * are OBJ partials drawn by a client-only BogeyBlockEntityRenderer. BlueMap
  * does not load that renderer or NeoForge's OBJ model loader. Render a
  * recognisable frame, axle rods and axle-accurate wheel sets using actual
- * Blocks & Bogies textures, without affecting moving train meshes.
+ * Blocks &amp; Bogies textures, without affecting moving train meshes.
  */
 public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
     private static final Set<String> TRACED = ConcurrentHashMap.newKeySet();
