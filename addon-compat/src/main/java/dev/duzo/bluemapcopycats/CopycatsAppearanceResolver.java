@@ -55,7 +55,10 @@ final class CopycatsAppearanceResolver {
         if (stateResource == null) {
             stateResource = resourcePack.getBlockState(materialState);
         }
-        if (stateResource == null) return null;
+        if (stateResource == null) {
+            CopycatsTrace.log(block, "MODEL", "material=" + materialId + " face=" + wantedFace + " reason=missing-blockstate");
+            return null;
+        }
 
         List<Variant> variants = new ArrayList<>(2);
         stateResource.forEach(
@@ -64,14 +67,23 @@ final class CopycatsAppearanceResolver {
                 block.getY(),
                 block.getZ(),
                 variants::add);
-        if (variants.isEmpty()) return null;
+        if (variants.isEmpty()) {
+            CopycatsTrace.log(block, "MODEL", "material=" + materialId + " face=" + wantedFace + " reason=no-variant");
+            return null;
+        }
 
         Model model = variants.getFirst().getModel().getResource(resourcePack::getModel);
-        if (model == null) return null;
+        if (model == null) {
+            CopycatsTrace.log(block, "MODEL", "material=" + materialId + " face=" + wantedFace + " reason=missing-model");
+            return null;
+        }
         // Railways and Pretty in Pink both use inherited vanilla cube-column models.
         // Faces and texture variables live on the parent rather than the leaf JSON.
         model.applyParent(resourcePack);
-        if (model.getElements() == null) return null;
+        if (model.getElements() == null) {
+            CopycatsTrace.log(block, "MODEL", "material=" + materialId + " face=" + wantedFace + " reason=no-elements-after-inheritance");
+            return null;
+        }
 
         List<Map<Direction, Face>> faces = new ArrayList<>();
         for (Element element : model.getElements()) {
@@ -81,13 +93,23 @@ final class CopycatsAppearanceResolver {
                 faces,
                 wantedFace,
                 List.of(Direction.values()));
-        if (selected == null) return null;
+        if (selected == null) {
+            CopycatsTrace.log(block, "MODEL", "material=" + materialId + " face=" + wantedFace + " reason=no-face");
+            return null;
+        }
 
         ResourcePath<Texture> texture =
                 selected.getTexture().getTexturePath(model.getTextures()::get);
         if (texture == null) texture = ResourcePack.MISSING_TEXTURE;
         var connected = copiedConnectedTextures.resolve(texture, materialState, wantedFace, block);
         int textureIndex = textureGallery.get(connected.texture());
+        CopycatsTrace.log(block, "ATLAS", "material=" + materialId + " face=" + wantedFace
+                + " baseTexture=" + texture + " chosenTexture=" + connected.texture()
+                + " sourcePresent=" + resourcePack.getTextures().containsKey(texture)
+                + " chosenPresent=" + resourcePack.getTextures().containsKey(connected.texture())
+                + " index=" + textureIndex
+                + " uv=" + connected.u0() + "," + connected.v0() + ","
+                + connected.u1() + "," + connected.v1());
 
         Color tint = new Color().set(1f, 1f, 1f, 1f, true);
         if (selected.getTintindex() >= 0) {
