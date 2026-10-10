@@ -93,6 +93,14 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertNotIn("BlueMap3DMod procedural import insertion point", script)
         self.assertNotIn("BlueMap3DMod procedural source insertion point", script)
 
+    def test_copycat_material_renderer_precedes_resource_pack_placeholder(self) -> None:
+        patch = (ROOT / "patches/0015-base.patch").read_text()
+        copied = patch.index("sources.add(new CopycatsShapeSource(packs))")
+        ordinary = patch.index("sources.add(packs)", copied)
+        self.assertLess(copied, ordinary)
+        build = (ROOT / "build.sh").read_text()
+        self.assertIn("CopycatsShapeSource.java", build)
+
     def test_create_removal_tracking_is_wired_into_distribution(self) -> None:
         build = (ROOT / "build.sh").read_text()
         mixins = (ROOT / "overrides/addon-create/src/main/resources/bluemap3d_create.mixins.json").read_text()
