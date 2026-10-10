@@ -51,6 +51,7 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
         registerHeadstockRenderer();
         registerBlocksBogiesRenderer();
         registerBlockEntities();
+        registerBlocksBogiesBlockEntity();
         registerGirderBlockEntity();
 
         // Addons load before BlueMap loads its resources. The API enable callback runs
@@ -59,6 +60,7 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
         // parsed blockstate for material-specific rendering.
         BlueMapAPI.onEnable(api -> {
             registerBlockEntities();
+            registerBlocksBogiesBlockEntity();
             // Some worlds may have decoded chunks before the competing decoder was
             // replaced. Re-read their block-entity NBT with the authoritative registry
             // before any static renderer starts using those cached instances.
@@ -137,6 +139,32 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
         if (BlockRendererType.REGISTRY.get(BLOCKS_BOGIES_RENDERER_KEY) != null) return;
         BlockRendererType.REGISTRY.register(new BlockRendererType.Impl(
                 BLOCKS_BOGIES_RENDERER_KEY, BlocksBogiesTerrainRenderer::new));
+    }
+
+    private static void registerBlocksBogiesBlockEntity() {
+        Key key = new Key("create_bb", "bogey");
+        BlockEntityType existing = BlockEntityType.REGISTRY.get(key);
+        if (existing != null
+                && BlocksBogiesTerrainBlockEntity.class.equals(existing.getBlockEntityClass()))
+            return;
+        try {
+            if (existing == null) {
+                BlockEntityType.REGISTRY.register(new BlockEntityType.Impl(
+                        key, BlocksBogiesTerrainBlockEntity.class));
+            } else {
+                // BlueMap's registry is insert-only. Retain the nested
+                // BogeyData.BogeyStyle even if another addon registered first.
+                Field field = Registry.class.getDeclaredField("entries");
+                field.setAccessible(true);
+                @SuppressWarnings("unchecked")
+                Map<Key, BlockEntityType> entries =
+                        (Map<Key, BlockEntityType>) field.get(BlockEntityType.REGISTRY);
+                entries.put(key, new BlockEntityType.Impl(
+                        key, BlocksBogiesTerrainBlockEntity.class));
+            }
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            Logger.global.logError("Cannot retain Blocks & Bogies style NBT", error);
+        }
     }
 
     private static void registerGirderBlockEntity() {
