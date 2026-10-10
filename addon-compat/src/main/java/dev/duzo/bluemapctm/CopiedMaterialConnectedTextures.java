@@ -9,8 +9,8 @@ import de.bluecolored.bluemap.core.world.BlockState;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 import de.bluecolored.bluemap.core.world.block.ExtendedBlock;
 
-import java.lang.reflect.Method;
 import java.util.Map;
+import dev.duzo.bluemapcopycats.CopycatsTerrainBlockEntity;
 
 /**
  * Applies the same pre-baked Fusion/Create CT resources to materials carried by
@@ -106,12 +106,12 @@ public final class CopiedMaterialConnectedTextures {
             int dy = up[1] * vertical + right[1] * horizontal;
             int dz = up[2] * vertical + right[2] * horizontal;
             ExtendedBlock neighbour = block.getNeighborBlock(dx, dy, dz);
-            BlockState other = effectiveMaterial(neighbour);
+            BlockState other = effectiveMaterial(neighbour, material);
             ExtendedBlock front = block.getNeighborBlock(
                     dx + faceOffset(face, 0),
                     dy + faceOffset(face, 1),
                     dz + faceOffset(face, 2));
-            BlockState inFront = effectiveMaterial(front);
+            BlockState inFront = effectiveMaterial(front, material);
 
             boolean connects;
             if (fusion != null) {
@@ -139,37 +139,50 @@ public final class CopiedMaterialConnectedTextures {
     }
 
     /**
-     * Compatibility with CreateEntityAddon, which can deserialize the same block
-     * entity before our full decoder is installed. Its getMaterial() DTO exposes
-     * Name/Properties rather than the Map used by our normal decoder.
+     * Resolve neighbor copycats through their copied NBT. For multipart wrappers,
+     * prefer the part using the requested material; this allows all Copycats+
+     * variants with shared material_data to participate in a CT neighbourhood.
+     * A material not carried by the neighbour never connects.
      */
-    private static BlockState effectiveMaterial(ExtendedBlock block) {
-        BlockState state = block.getBlockState();
-        String id = state.getFormatted();
-        if (!(id.startsWith("copycats:") ||
-              id.startsWith("create:copycat") ||
-              id.startsWith("create_connected:copycat") ||
-              id.startsWith("railways:copycat"))) return state;
-        BlockEntity entity = block.getBlockEntity();
-        if (entity == null) return state;
-        try {
-            Method method = entity.getClass().getMethod("getMaterial");
-            Object material = method.invoke(entity);
-            if (material == null) return state;
-            Method name = material.getClass().getMethod("getName");
-            Object value = name.invoke(material);
-            if (!(value instanceof String blockId)) return state;
-            Method properties = material.getClass().getMethod("getProperties");
-            Object raw = properties.invoke(material);
-            Map<String, String> props = raw instanceof Map<?, ?> map ?
-                    map.entrySet().stream()
-                       .filter(e -> e.getKey() instanceof String && e.getValue() instanceof String)
-                       .collect(java.util.stream.Collectors.toMap(
-                           e -> (String)e.getKey(), e -> (String)e.getValue())) : Map.of();
-            return new BlockState(blockId, props);
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            return state;
+    private static BlockState effectiveMaterial(ExtendedBlock block, BlockState requested) {
+        BlockState original = block.getBlockState();
+        String id = original.getFormatted();
+        if (!(id.startsWith("copycats:")
+                || id.startsWith("create:copycat")
+                || id.startsWith("create_connected:copycat")
+                || id.startsWith("railways:copycat"))) {
+            return original;
         }
+
+        CopycatsTerrainBlockEntity data = CopycatsTerrainBlockEntity.from(block.getBlockEntity());
+        if (data == null) return original;
+        BlockState direct = materialState(data.material());
+        if (requested.equals(direct)) return direct;
+        if (data.materialData() instanceof Map<?, ?> parts) {
+            for (Object value : parts.values()) {
+                if (!(value instanceof Map<?, ?> storage)) continue;
+                Object raw = storage.containsKey("material")
+                        ? storage.get("material") : storage.get("Material");
+                BlockState part = materialState(raw);
+                if (requested.equals(part)) return part;
+            }
+        }
+        return direct != null ? direct : original;
+    }
+
+    private static BlockState materialState(Object raw) {
+        if (!(raw instanceof Map<?, ?> value)) return null;
+        Object name = value.containsKey("Name") ? value.get("Name") : value.get("name");
+        if (!(name instanceof String id) || id.isBlank()) return null;
+        Object fields = value.containsKey("Properties")
+                ? value.get("Properties") : value.get("properties");
+        Map<String, String> properties = fields instanceof Map<?, ?> props
+                ? props.entrySet().stream()
+                  .filter(e -> e.getKey() instanceof String && e.getValue() instanceof String)
+                  .collect(java.util.stream.Collectors.toMap(
+                      e -> (String) e.getKey(), e -> (String) e.getValue()))
+                : Map.of();
+        return new BlockState(id, properties);
     }
 
     public record Appearance(ResourcePath<Texture> texture, float u0, float v0, float u1, float v1) {}
