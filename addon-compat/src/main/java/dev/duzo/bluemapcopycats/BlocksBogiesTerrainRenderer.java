@@ -47,6 +47,26 @@ public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
         this.light = block.getLightData();
         int first = tile.getTileModel().size();
 
+        // Prefer the actual static OBJ geometry shipped inside the installed
+        // Blocks & Bogies JAR, including the intended frame and wheel profile.
+        // Only fall back to a procedural approximation if those files are absent.
+        if (renderOriginalObj(block, spec)) {
+            tile.initialize(first);
+            if ("x".equals(block.getBlockState().getProperties().get("axis"))) {
+                tile.translate(-.5f, 0f, -.5f)
+                        .rotate(90,0,1,0)
+                        .translate(.5f, 0f, .5f);
+            }
+            blockColor.set(1f,1f,1f,1f,true);
+            if (TRACED.add(block.getBlockState().getFormatted())) {
+                Logger.global.logInfo("STATIC BOGIE block="
+                        + block.getBlockState().getFormatted()
+                        + " geometry=mod-obj"
+                        + " triangles=" + (tile.getTileModel().size()-first));
+            }
+            return;
+        }
+
         int frame = texture(spec.small() ? "create_bb:block/bogie/small_frame"
                 : "create_bb:block/bogie/frame2",
                 "create_bb:block/bogie/frame", "create:block/bogey/top");
@@ -88,6 +108,83 @@ public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
                     + " geometry=frame-and-wheels"
                     + " triangles=" + (tile.getTileModel().size()-first));
         }
+    }
+
+    private boolean renderOriginalObj(
+            BlockNeighborhood block, BlocksBogiesStaticShape.Spec spec) {
+        String raw = block.getBlockState().getFormatted();
+        String suffix = raw.substring(raw.indexOf(':')+1);
+        String modelRoot;
+        if (spec.small()) {
+            String prefix = suffix.endsWith("_trailing") ? "t"
+                    : suffix.endsWith("_offset") ? "s" : "s";
+            String n = Integer.toString(spec.axles()*2);
+            modelRoot = "bogie/small/" + prefix + n
+                    + (suffix.endsWith("_offset") ? "e" : "");
+        } else {
+            String n = Integer.toString(spec.axles()*2);
+            modelRoot = "bogie/" + (spec.extraLarge() ? "extra_large/xl" : "large/l")
+                    + n + "p";
+        }
+        var frame = BlocksBogiesObjMesh.load(modelRoot + "/frame");
+        if (frame.isEmpty()) return false;
+
+        // Load every mesh before emitting anything, so a missing wheel asset
+        // does not leave a half-finished OBJ mixed with fallback cylinders.
+        String size = spec.small() ? "small" : spec.extraLarge() ? "extra_large" : "large";
+        var wheels = BlocksBogiesObjMesh.load("bogie/" + size + "/shared/wheels");
+        if (wheels.isEmpty()) return false;
+
+        emitObj(frame, 0, 0, 0);
+
+        for (int i=0; i<spec.axles();i++) {
+            float z=(float)(i-(spec.axles()-1)/2.0);
+            // Corresponds to CachedBuffers.partial(...wheels).translate(0,.75,j)
+            // in Blocks & Bogies' actual client renderers.
+            emitObj(wheels, 0, .75f, z);
+        }
+
+        for (String rod : new String[]{"left_c_rod", "right_c_rod", "belts"}) {
+            var partial = BlocksBogiesObjMesh.load(modelRoot + "/" + rod);
+            if (!partial.isEmpty()) emitObj(partial, 0, 0, 0);
+        }
+        return true;
+    }
+
+    private void emitObj(
+            java.util.List<BlocksBogiesObjMesh.Triangle> quads,
+            float dx,float dy,float dz) {
+        java.util.Map<String,Integer> materials = new java.util.HashMap<>();
+        for(var quad:quads) {
+            String material=quad.material();
+            if ("none".equals(material)) continue;
+            int index=materials.computeIfAbsent(material,
+                    name -> textureFromMaterial(name));
+            var a=quad.a();var b=quad.b();var c=quad.c();
+            triangle(
+                    new Vec(a.xyz()[0]+dx,a.xyz()[1]+dy,a.xyz()[2]+dz),
+                    new Vec(b.xyz()[0]+dx,b.xyz()[1]+dy,b.xyz()[2]+dz),
+                    new Vec(c.xyz()[0]+dx,c.xyz()[1]+dy,c.xyz()[2]+dz),
+                    index,
+                    a.uv()[0],a.uv()[1],b.uv()[0],b.uv()[1],c.uv()[0],c.uv()[1]);
+        }
+    }
+
+    private int textureFromMaterial(String material) {
+        return switch(material) {
+            case "create_rods" -> texture("create_bb:block/bogie/create_rods");
+            case "belts" -> texture("create:block/bogey/belt");
+            case "wheels", "wheel_small" -> texture("create_bb:block/bogie/wheel");
+            case "wheels_single" -> texture("create_bb:block/bogie/single");
+            case "wheels_xl" -> texture("create_bb:block/bogie/32x32");
+            case "wheels_xl_single" -> texture("create_bb:block/bogie/32x32_single");
+            case "frame", "frame2", "frame4", "small_frame", "piston",
+                    "extras", "support", "single_axle_body", "broad_piston",
+                    "trailing_bogey_base", "small_trailing_bogey_outer",
+                    "xl_textures" -> texture("create_bb:block/bogie/" + material);
+            default -> texture("create_bb:block/bogie/" + material,
+                    "minecraft:block/iron_block");
+        };
     }
 
     private int texture(String... ids) {
