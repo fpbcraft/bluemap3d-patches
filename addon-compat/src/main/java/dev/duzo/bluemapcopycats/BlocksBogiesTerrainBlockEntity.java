@@ -4,7 +4,7 @@ import de.bluecolored.bluemap.core.world.mca.blockentity.MCABlockEntity;
 import de.bluecolored.bluenbt.NBTName;
 import java.util.Map;
 
-/** Reads B&B's Create BogeyData.BogeyStyle for stationary model selection. */
+/** Reads Blocks and Bogies' Create BogeyData.BogeyStyle for stationary model selection. */
 public final class BlocksBogiesTerrainBlockEntity extends MCABlockEntity {
     @NBTName("BogeyData")
     private Object bogeyData;
