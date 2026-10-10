@@ -74,7 +74,11 @@ public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
 
         tile.initialize(first);
         if ("x".equals(block.getBlockState().getProperties().get("axis"))) {
-            tile.rotate(90,0,1,0);
+            // TileModelView rotates around (0,0,0), not the block midpoint.
+            // Preserve the bogey's center when turning its wheels across the track.
+            tile.translate(-.5f, 0f, -.5f)
+                    .rotate(90,0,1,0)
+                    .translate(.5f, 0f, .5f);
         }
         blockColor.set(1f,1f,1f,1f,true);
         if (TRACED.add(block.getBlockState().getFormatted())) {
