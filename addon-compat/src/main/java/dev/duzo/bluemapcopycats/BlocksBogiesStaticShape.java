@@ -35,6 +35,16 @@ final class BlocksBogiesStaticShape {
             return small() ? .75f : extraLarge() ? 1.25f : 1f;
         }
 
+        /**
+         * The upstream renderer positions these OBJ meshes inside the bogey's
+         * animated render pose, not directly at a BlueMap terrain block origin.
+         * Move the complete stationary mesh toward the rail bed; keep the
+         * original wheel/frame/rod offsets relative to each other intact.
+         */
+        float staticTerrainOffsetY() {
+            return -3f / 16f;
+        }
+
         float wheelSpacing() {
             if (small()) return 1f;
             if (extraLarge()) return 2.25f;
