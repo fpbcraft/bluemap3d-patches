@@ -69,7 +69,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
                     + " partKeys=" + partKeys
                     + " primary=" + (primary == null ? "<null>" : primary.id()));
         }
-        if (entity == null) {
+        if (entity == null && !isCreatePanelOrStep(id)) {
             if (TRACED.add(id + "#missing-entity")) {
                 Logger.global.logWarning(String.format("STATIC block=%s has no retained Copycats block entity (actual=%s)",
                         id,
@@ -148,20 +148,38 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         }
     }
 
-    /** Create's CASING_3PX profile, facing the clicked support surface. */
-    private List<Quad> createPanel(CopycatsTerrainBlockEntity entity) {
-        CopycatsMaterial material = materialFor(entity, null);
-        if (!usable(material)) return List.of();
+    private static boolean isCreatePanelOrStep(String id) {
+        return "create:copycat_panel".equals(id) || "create:copycat_step".equals(id);
+    }
 
+    /**
+     * Static BlueMap geometry has the reversed horizontal attachment orientation
+     * compared with the blockstate's in-game Create model. Apply the correction
+     * only here; assembled train meshes use Minecraft's voxel shape directly.
+     */
+    static CopycatsTransform panelTransform(String facing) {
         CopycatsTransform transform = new CopycatsTransform();
-        switch (property("facing")) {
+        switch (facing) {
             case "down" -> transform.flipY(true);
-            case "north" -> transform.rotateX(90);
-            case "south" -> transform.rotateX(270);
-            case "west" -> transform.rotateZ(270);
-            case "east" -> transform.rotateZ(90);
+            case "north" -> transform.rotateX(90).rotateY(180);
+            case "south" -> transform.rotateX(270).rotateY(180);
+            case "west" -> transform.rotateZ(270).rotateY(180);
+            case "east" -> transform.rotateZ(90).rotateY(180);
             default -> { /* up: base slab at y=0 */ }
         }
+        return transform;
+    }
+
+    static CopycatsTransform verticalStepTransform(String facing) {
+        return new CopycatsTransform().rotateY(yRotation(facing) + 180);
+    }
+
+    /** Create's CASING_3PX profile, facing the clicked support surface. */
+    private List<Quad> createPanel(CopycatsTerrainBlockEntity entity) {
+        CopycatsMaterial material = CopycatsMaterialResolver.createPanelOrStepMaterial(entity);
+        if (material == null) return List.of();
+
+        CopycatsTransform transform = panelTransform(property("facing"));
         List<Quad> out = new ArrayList<>();
         cuboid(out, transform, 0, 0, 0, 16, 3, 16, material);
         return out;
@@ -169,8 +187,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
 
     /** Create's STEP_BOTTOM/STEP_TOP: half-height, half-depth, rotated about Y. */
     private List<Quad> createStep(CopycatsTerrainBlockEntity entity) {
-        CopycatsMaterial material = materialFor(entity, null);
-        if (!usable(material)) return List.of();
+        CopycatsMaterial material = CopycatsMaterialResolver.createPanelOrStepMaterial(entity);
+        if (material == null) return List.of();
 
         CopycatsTransform transform = new CopycatsTransform()
                 .rotateY(yRotation(property("facing")));
@@ -567,7 +585,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (!usable(material)) return List.of();
         List<Quad> out = new ArrayList<>();
         cuboid(out,
-                new CopycatsTransform().rotateY(yRotation(property("facing"))),
+                verticalStepTransform(property("facing")),
                 8, 0, 8, 16, 16, 16, material);
         return out;
     }
