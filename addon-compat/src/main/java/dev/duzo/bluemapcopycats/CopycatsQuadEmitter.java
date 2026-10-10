@@ -24,7 +24,7 @@ final class CopycatsQuadEmitter {
             BlockNeighborhood block,
             TileModelView tileModel) {
         CopycatsAppearanceResolver.Appearance appearance =
-                appearanceResolver.resolve(material, face, block);
+                appearanceResolver.resolve(material, face, block, positions);
         if (appearance == null) return false;
 
         float[] p = positions;
