@@ -121,24 +121,24 @@ final class ConnectedTextureLayoutTest {
 
     @Test
     void assembledRotatedCopycatsUsePhysicalSurfaceNormals() {
-        assertEquals(net.minecraft.core.Direction.SOUTH,
-                CopycatsSpecialSource.physicalFace(new float[]{
+        assertEquals("SOUTH",
+                CopycatsPhysicalFace.of(new float[]{
                         0,0,16, 16,0,16, 16,16,16, 0,16,16},
-                        net.minecraft.core.Direction.NORTH));
-        assertEquals(net.minecraft.core.Direction.WEST,
-                CopycatsSpecialSource.physicalFace(new float[]{
+                        "NORTH"));
+        assertEquals("WEST",
+                CopycatsPhysicalFace.of(new float[]{
                         0,0,0, 0,0,16, 0,16,16, 0,16,0},
-                        net.minecraft.core.Direction.EAST));
-        assertEquals(net.minecraft.core.Direction.UP,
-                CopycatsSpecialSource.physicalFace(new float[]{
+                        "EAST"));
+        assertEquals("UP",
+                CopycatsPhysicalFace.of(new float[]{
                         0,16,0, 0,16,16, 16,16,16, 16,16,0},
-                        net.minecraft.core.Direction.DOWN));
+                        "DOWN"));
         // A sloped face is not a cardinal surface; do not corrupt its
         // originally selected material direction to force CT.
-        assertEquals(net.minecraft.core.Direction.NORTH,
-                CopycatsSpecialSource.physicalFace(new float[]{
+        assertEquals("NORTH",
+                CopycatsPhysicalFace.of(new float[]{
                         0,0,0, 16,0,0, 16,16,16, 0,16,16},
-                        net.minecraft.core.Direction.NORTH));
+                        "NORTH"));
     }
 
     @Test
