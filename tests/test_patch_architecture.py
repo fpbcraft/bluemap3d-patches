@@ -173,6 +173,33 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn('"CT-NOMATCH"', resolver)
         self.assertIn('"CT-MISSING-SHEET"', resolver)
 
+    def test_create_panel_and_step_render_in_static_and_moving_paths(self) -> None:
+        static_dispatch = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/ConnectedTerrainDispatch.java").read_text()
+        static_renderer = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/CopycatsTerrainRenderer.java").read_text()
+        moving = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java").read_text()
+
+        # Resource pack order must not suppress Create's static material renderer.
+        self.assertIn('"create:copycat_panel".equals(id)', static_dispatch)
+        self.assertIn('"create:copycat_step".equals(id)', static_dispatch)
+        self.assertIn('states.put(entry.getValue(), createCopycatDispatch)', static_dispatch)
+        self.assertIn('entry.getValue().setResource(createCopycatDispatch)', static_dispatch)
+        self.assertIn('paths.containsKey(id)', static_dispatch)
+        self.assertIn('"static Create copycat panels/steps routed %s id(s)"', static_dispatch)
+        self.assertIn('case "create:copycat_panel" -> createPanel(entity)', static_renderer)
+        self.assertIn('case "create:copycat_step" -> createStep(entity)', static_renderer)
+        self.assertIn('cuboid(out, transform, 0, 0, 0, 16, 3, 16, material)', static_renderer)
+
+        # Create's panel shape is CASING_3PX, not a one-pixel wafer. Evaluate the
+        # actual state shape first; still show the block if shape lookup fails.
+        self.assertIn("Create's CopycatPanelBlock uses AllShapes.CASING_3PX", moving)
+        self.assertIn('return createPanelFallback(property(state, "facing"))', moving)
+        self.assertIn('return createStepFallback(property(state, "facing"), property(state, "half"))', moving)
+        self.assertIn('double p = 3.0 / 16.0', moving)
+        self.assertIn('case "north" -> List.of(new AABB(0, 0, 0, 1, 1, p))', moving)
+        self.assertIn('phase=CREATE-SHAPE', moving)
+        self.assertIn('skip=missing-material-nbt', moving)
+        self.assertIn('skip=unusable-copied-material', moving)
+
     def test_static_copycats_and_railways_compatibility_is_wired(self) -> None:
         generator = (ROOT / "scripts/generate-static-resources.py").read_text()
         registry = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/BlueMapCopycatsCompatAddon.java").read_text()
