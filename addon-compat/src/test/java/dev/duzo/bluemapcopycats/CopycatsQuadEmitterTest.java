@@ -85,7 +85,7 @@ class CopycatsQuadEmitterTest {
                 for (int x = 0; x < 2; x++) {
                     int visible = 0;
                     for (int face = 0; face < 6; face++) {
-                        if (!CopycatsTerrainRenderer.internalBytePieceFace(face, x, y, z))
+                        if (!CopycatsPieceCull.internalBytePieceFace(face, x, y, z))
                             visible++;
                     }
                     assertEquals(3, visible);
