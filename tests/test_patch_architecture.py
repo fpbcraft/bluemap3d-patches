@@ -183,16 +183,20 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn('new CopycatsMaterial("create:copycat_base", Map.of())', materials)
         self.assertIn('entity == null && !isCreatePanelOrStep(id)', renderer)
         self.assertIn('CopycatsMaterialResolver.createPanelOrStepMaterial(entity)', renderer)
-        self.assertIn('panelTransform(property("facing"))', renderer)
-        self.assertIn('verticalStepTransform(property("facing"))', renderer)
+        self.assertIn('CopycatsStaticFacing.panel(property("facing"))', renderer)
+        self.assertIn('CopycatsStaticFacing.verticalStep(property("facing"))', renderer)
         self.assertIn('"create:block/copycat_base"', appearance)
         self.assertIn('fallback=self-default', appearance)
         self.assertIn('boolean createPanelOrStep = isCreatePanelOrStep(state)', moving)
         self.assertIn('ResourceLocation.fromNamespaceAndPath("create", "copycat_base")', moving)
         self.assertIn('metadata == null ? "<null>" : metadata.getAllKeys()', moving)
-        self.assertIn("CopycatsTerrainOrientationTest", (
+        facing = (addon / "CopycatsStaticFacing.java").read_text()
+        self.assertIn('transform.rotateX(90).rotateY(180)', facing)
+        self.assertIn('transform.rotateZ(90).rotateY(180)', facing)
+        self.assertIn('rotateY(yRotation(facing) + 180)', facing)
+        self.assertIn("class CopycatsTerrainOrientationTest", (
             ROOT / "addon-compat/src/test/java/dev/duzo/bluemapcopycats/CopycatsTerrainOrientationTest.java"
-        ).read_text().replace("class CopycatsTerrainOrientationTest", "CopycatsTerrainOrientationTest"))
+        ).read_text())
 
     def test_create_panel_and_step_render_in_static_and_moving_paths(self) -> None:
         static_dispatch = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/ConnectedTerrainDispatch.java").read_text()
