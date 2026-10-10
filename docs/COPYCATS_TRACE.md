@@ -57,6 +57,12 @@ the server log for `COPYCATS-TRACE` and `COPYCATS-MOVING-TRACE`.
 - `phase=MATERIAL`: copied block material, face being sampled, texture
   chosen and whether its pixels were found.
 - `phase=SHAPE`: CopycatsShapeSource voxel geometry/texture results.
+- `phase=CT-SKIP`: a generated moving quad has no face metadata or usable UV axes.
+- `phase=CT-NOMATCH`: a moving quad reached CT resolution but its copied
+  texture/wrapper did not match a CT definition.
+- `phase=CT-MISSING-SHEET`: matching Create CT definition with no sheet image.
+- `phase=CT-CREATE` / `phase=CT-FUSION`: the moving pass selected a
+  particular CT sheet, connectivity mask and tile.
 
 **Important:** The moving CT resolver ordinarily requires a face on each
 quad. A high `missingFace` count is evidence of why a downstream CT
