@@ -63,6 +63,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         }
 
         List<Quad> quads = switch (id) {
+            case "create:copycat_panel" -> createPanel(entity);
+            case "create:copycat_step" -> createStep(entity);
             case "copycats:copycat_byte" -> byteQuads(entity);
             case "copycats:copycat_vertical_half_layer" -> verticalHalfLayer(entity);
             case "copycats:copycat_flat_pane" -> flatPane(entity);
@@ -115,6 +117,38 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
                     quads.size(),
                     emitted));
         }
+    }
+
+    /** Create's CASING_3PX profile, facing the clicked support surface. */
+    private List<Quad> createPanel(CopycatsTerrainBlockEntity entity) {
+        CopycatsMaterial material = materialFor(entity, null);
+        if (!usable(material)) return List.of();
+
+        CopycatsTransform transform = new CopycatsTransform();
+        switch (property("facing")) {
+            case "down" -> transform.flipY(true);
+            case "north" -> transform.rotateX(90);
+            case "south" -> transform.rotateX(270);
+            case "west" -> transform.rotateZ(270);
+            case "east" -> transform.rotateZ(90);
+            default -> { /* up: base slab at y=0 */ }
+        }
+        List<Quad> out = new ArrayList<>();
+        cuboid(out, transform, 0, 0, 0, 16, 3, 16, material);
+        return out;
+    }
+
+    /** Create's STEP_BOTTOM/STEP_TOP: half-height, half-depth, rotated about Y. */
+    private List<Quad> createStep(CopycatsTerrainBlockEntity entity) {
+        CopycatsMaterial material = materialFor(entity, null);
+        if (!usable(material)) return List.of();
+
+        CopycatsTransform transform = new CopycatsTransform()
+                .rotateY(yRotation(property("facing")));
+        List<Quad> out = new ArrayList<>();
+        boolean top = "top".equals(property("half"));
+        cuboid(out, transform, 0, top ? 8 : 0, 8, 16, top ? 16 : 8, 16, material);
+        return out;
     }
 
     private List<Quad> byteQuads(CopycatsTerrainBlockEntity entity) {
