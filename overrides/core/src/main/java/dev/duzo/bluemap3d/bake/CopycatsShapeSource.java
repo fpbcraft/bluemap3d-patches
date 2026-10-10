@@ -1,6 +1,7 @@
 package dev.duzo.bluemap3d.bake;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
@@ -74,7 +75,9 @@ public final class CopycatsShapeSource implements BlockModelSource {
             BlockState state,
             CompoundTag metadata,
             BlockRenderContext context) {
-        if (!CopiedMaterialResolver.isMaterialWrapper(state) || metadata == null) {
+        boolean createPanelOrStep = isCreatePanelOrStep(state);
+        if (!CopiedMaterialResolver.isMaterialWrapper(state)
+                || (metadata == null && !createPanelOrStep)) {
             traceCreate(state, context, metadata,
                     metadata == null ? "skip=missing-material-nbt"
                             : "skip=not-material-wrapper");
@@ -88,9 +91,20 @@ public final class CopycatsShapeSource implements BlockModelSource {
 
         BlockState material = CopiedMaterialResolver.materialFor(metadata, null);
         if (!CopiedMaterialResolver.usable(material)) {
-            traceCreate(state, context, metadata,
-                    "skip=unusable-copied-material value=" + material);
-            return List.of();
+            if (createPanelOrStep && isDefaultCreateMaterial(material)) {
+                // Create's untextured panel/step intentionally carries
+                // create:copycat_base. No material NBT is also legitimate for
+                // default/unmodified blocks. Keep its geometry in the 3D scene.
+                material = BuiltInRegistries.BLOCK.get(
+                        ResourceLocation.fromNamespaceAndPath("create", "copycat_base"))
+                        .defaultBlockState();
+                traceCreate(state, context, metadata,
+                        "fallback=self-default material=create:copycat_base");
+            } else {
+                traceCreate(state, context, metadata,
+                        "skip=unusable-copied-material value=" + material);
+                return List.of();
+            }
         }
 
         List<AABB> boxes = boxesOf(state);
@@ -175,6 +189,13 @@ public final class CopycatsShapeSource implements BlockModelSource {
             BlockState material,
             Direction surface,
             BlockRenderContext context) {
+        // The default Create copycat block is a material state, but its texture
+        // is a real sprite (create:block/copycat_base), not a missing/air model.
+        if ("create:copycat_base".equals(
+                BuiltInRegistries.BLOCK.getKey(material.getBlock()).toString())
+                && models.texture("create:block/copycat_base") != null) {
+            return new Appearance("create:block/copycat_base", 0xFFFFFF);
+        }
         List<ModelQuad> materialQuads = context == null
                 ? models.quadsFor(material)
                 : models.quadsFor(context.withState(material));
@@ -200,6 +221,21 @@ public final class CopycatsShapeSource implements BlockModelSource {
         }
 
         return new Appearance("minecraft:block/stone", 0xFFFFFF);
+    }
+
+    private static boolean isCreatePanelOrStep(BlockState state) {
+        if (state == null) return false;
+        var id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        return "create".equals(id.getNamespace())
+                && ("copycat_panel".equals(id.getPath())
+                    || "copycat_step".equals(id.getPath()));
+    }
+
+    private static boolean isDefaultCreateMaterial(BlockState material) {
+        if (material == null) return true;
+        String id = BuiltInRegistries.BLOCK.getKey(material.getBlock()).toString();
+        return "create:copycat_base".equals(id)
+                || "copycats:copycat_base".equals(id);
     }
 
     private static List<AABB> boxesOf(BlockState state) {
