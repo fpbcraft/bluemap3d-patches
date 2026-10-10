@@ -19,6 +19,11 @@ and restart with matching BlueMap3D and compatibility-addon artifacts:
 -Dbluemap.copycats.trace.limit=240
 ```
 
+For a second, narrower pass focused specifically on Railways CT, optionally add
+`-Dbluemap.copycats.trace.match=railways:`. This filters static trace details
+by text; leave it **unset** for the initial pass so `entity=<null>` and missing
+material data are not hidden.
+
 BlueMap DEBUG logging must be enabled to see these lines. The center accepts
 **X,Z** coordinates; Y is not part of the filter. Remove
 `-Dbluemap.copycats.trace.center=...` to trace the first samples anywhere,
