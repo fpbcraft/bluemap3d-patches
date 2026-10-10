@@ -44,6 +44,23 @@ final class CopycatsAppearanceResolver {
         BlockState materialState = material.asBlockState();
         String materialId = materialState.getFormatted();
 
+        // Create's untextured copycats intentionally copy its special base block.
+        // The world blockstate may be represented by a render-dispatch model;
+        // resolve its real Create texture directly rather than treating the
+        // default state as an unsupported material.
+        if ("create:copycat_base".equals(materialId)) {
+            ResourcePath<Texture> base = new ResourcePath<>("create:block/copycat_base");
+            ResourcePath<Texture> chosen = resourcePack.getTextures().containsKey(base)
+                    ? base : ResourcePack.MISSING_TEXTURE;
+            int atlasIndex = textureGallery.get(chosen);
+            if (CopycatsTrace.enabled(block)) CopycatsTrace.log(block, "ATLAS",
+                    "material=" + materialId + " face=" + wantedFace
+                            + " fallback=self-default texture=" + chosen
+                            + " available=" + resourcePack.getTextures().containsKey(base));
+            return new Appearance(atlasIndex, new Color().set(1f, 1f, 1f, 1f, true),
+                    0f, 0f, 1f, 1f);
+        }
+
         // Static compatibility adapters replace some ordinary blockstates with
         // lightweight renderer-dispatch blockstates after BlueMap has baked resources.
         // Copycats needs the copied material's real model/texture, not that dispatch
