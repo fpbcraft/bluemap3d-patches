@@ -18,6 +18,7 @@ final class CopycatsQuadEmitter {
 
     boolean emit(
             float[] positions,
+            float[] sampledPositions,
             Direction face,
             CopycatsMaterial material,
             BlockNeighborhood block,
@@ -42,11 +43,10 @@ final class CopycatsQuadEmitter {
                 p[6]/16f,p[7]/16f,p[8]/16f,
                 p[9]/16f,p[10]/16f,p[11]/16f);
 
-        // A copycat quad can occupy only a fraction of the 16x16 block face.
-        // Mapping the *entire* connected tile onto every 8x8 byte repeats its
-        // border pattern at internal seams. Project vertex UVs in block space so
-        // adjoining parts sample adjoining portions of the same CT tile.
-        float[] uv = projectedUvs(p, appearance.u0(), appearance.v0(),
+        // The sampled material positions may differ from the geometry's world
+        // positions, especially for Copycats+ pieces with remapped source
+        // cuboids. Keep their CT UVs in the copied material's pixel space.
+        float[] uv = projectedUvs(sampledPositions, appearance.u0(), appearance.v0(),
                 appearance.u1(), appearance.v1());
         target.setUvs(f1, uv[0],uv[1], uv[2],uv[3], uv[4],uv[5]);
         target.setUvs(f2, uv[0],uv[1], uv[4],uv[5], uv[6],uv[7]);
