@@ -16,10 +16,8 @@ import java.util.List;
 /**
  * Material-aware fallback for copycats whose client geometry is emitted in code.
  *
- * <p>This deliberately runs after ordinary resource-pack resolution. It therefore only
- * claims copycats whose server-side JSON model had no usable geometry, preserving dedicated
- * procedural sources while covering Create copycat panels/steps and the long tail of
- * Copycats+ shapes.
+ * <p>Runs before ordinary resource-pack resolution for material wrappers, since a
+ * placeholder JSON model can otherwise prevent the copied material from rendering.
  */
 public final class CopycatsShapeSource implements BlockModelSource {
 
@@ -151,6 +149,21 @@ public final class CopycatsShapeSource implements BlockModelSource {
     }
 
     private static List<AABB> boxesOf(BlockState state) {
+        var id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        if ("create".equals(id.getNamespace()) && "copycat_panel".equals(id.getPath())) {
+            // Create's panel outline relies on a world-aware voxel shape. That lookup can
+            // fail against EmptyBlockGetter inside a moving contraption mesh worker.
+            // Use the panel's one-pixel-thick local slab explicitly instead.
+            String facing = property(state, "facing");
+            return switch (facing) {
+                case "down" -> List.of(new AABB(0, 15.0 / 16.0, 0, 1, 1, 1));
+                case "north" -> List.of(new AABB(0, 0, 15.0 / 16.0, 1, 1, 1));
+                case "south" -> List.of(new AABB(0, 0, 0, 1, 1, 1.0 / 16.0));
+                case "west" -> List.of(new AABB(15.0 / 16.0, 0, 0, 1, 1, 1));
+                case "east" -> List.of(new AABB(0, 0, 0, 1.0 / 16.0, 1, 1));
+                default -> List.of(new AABB(0, 0, 0, 1, 1.0 / 16.0, 1));
+            };
+        }
         try {
             VoxelShape shape = state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
             if (shape.isEmpty()) {
@@ -160,6 +173,16 @@ public final class CopycatsShapeSource implements BlockModelSource {
         } catch (RuntimeException ignored) {
             return List.of();
         }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static String property(BlockState state, String name) {
+        for (net.minecraft.world.level.block.state.properties.Property property : state.getProperties()) {
+            if (property.getName().equals(name)) {
+                return property.getName(state.getValue(property));
+            }
+        }
+        return "";
     }
 
     private static Direction cullFaceOf(float[] from, float[] to, Direction face) {
