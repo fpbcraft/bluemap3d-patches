@@ -42,10 +42,14 @@ final class CopycatsQuadEmitter {
                 p[6]/16f,p[7]/16f,p[8]/16f,
                 p[9]/16f,p[10]/16f,p[11]/16f);
 
-        target.setUvs(f1, appearance.u0(),appearance.v1(),
-                appearance.u1(),appearance.v1(), appearance.u1(),appearance.v0());
-        target.setUvs(f2, appearance.u0(),appearance.v1(),
-                appearance.u1(),appearance.v0(), appearance.u0(),appearance.v0());
+        // A copycat quad can occupy only a fraction of the 16x16 block face.
+        // Mapping the *entire* connected tile onto every 8x8 byte repeats its
+        // border pattern at internal seams. Project vertex UVs in block space so
+        // adjoining parts sample adjoining portions of the same CT tile.
+        float[] uv = projectedUvs(p, appearance.u0(), appearance.v0(),
+                appearance.u1(), appearance.v1());
+        target.setUvs(f1, uv[0],uv[1], uv[2],uv[3], uv[4],uv[5]);
+        target.setUvs(f2, uv[0],uv[1], uv[4],uv[5], uv[6],uv[7]);
         target.setMaterialIndex(f1, appearance.textureIndex());
         target.setMaterialIndex(f2, appearance.textureIndex());
 
@@ -61,5 +65,61 @@ final class CopycatsQuadEmitter {
         target.setAOs(f1, 1f,1f,1f);
         target.setAOs(f2, 1f,1f,1f);
         return true;
+    }
+
+    /**
+     * Map a quad's vertices to their actual positions on the full 16-pixel
+     * material face. The CT atlas tile remains the same, but a half-panel
+     * samples only the corresponding half of that tile.
+     *
+     * For non-axis-aligned quads (e.g. slopes), retain the previous UV
+     * behavior until surface-local coordinates can be derived reliably.
+     */
+    static float[] projectedUvs(float[] positions,
+            float left, float top, float right, float bottom) {
+        float minX=Float.POSITIVE_INFINITY, maxX=Float.NEGATIVE_INFINITY;
+        float minY=Float.POSITIVE_INFINITY, maxY=Float.NEGATIVE_INFINITY;
+        float minZ=Float.POSITIVE_INFINITY, maxZ=Float.NEGATIVE_INFINITY;
+        for (int i=0; i<4; i++) {
+            minX=Math.min(minX,positions[i*3]); maxX=Math.max(maxX,positions[i*3]);
+            minY=Math.min(minY,positions[i*3+1]); maxY=Math.max(maxY,positions[i*3+1]);
+            minZ=Math.min(minZ,positions[i*3+2]); maxZ=Math.max(maxZ,positions[i*3+2]);
+        }
+        boolean xFixed=maxX-minX<0.001f;
+        boolean yFixed=maxY-minY<0.001f;
+        boolean zFixed=maxZ-minZ<0.001f;
+        if (!xFixed && !yFixed && !zFixed) {
+            return new float[]{left,bottom, right,bottom, right,top, left,top};
+        }
+
+        float ax=positions[3]-positions[0];
+        float ay=positions[4]-positions[1];
+        float az=positions[5]-positions[2];
+        float bx=positions[6]-positions[0];
+        float by=positions[7]-positions[1];
+        float bz=positions[8]-positions[2];
+        float nx=ay*bz-az*by;
+        float ny=az*bx-ax*bz;
+        float nz=ax*by-ay*bx;
+        float[] uv = new float[8];
+        for (int i=0; i<4; i++) {
+            float x=positions[i*3]/16f;
+            float y=positions[i*3+1]/16f;
+            float z=positions[i*3+2]/16f;
+            float u,v;
+            if (xFixed) {
+                u=nx>0f?1f-z:z;
+                v=1f-y;
+            } else if (yFixed) {
+                u=x;
+                v=ny>0f?z:1f-z;
+            } else {
+                u=nz>0f?x:1f-x;
+                v=1f-y;
+            }
+            uv[i*2]=left+(right-left)*u;
+            uv[i*2+1]=top+(bottom-top)*v;
+        }
+        return uv;
     }
 }
