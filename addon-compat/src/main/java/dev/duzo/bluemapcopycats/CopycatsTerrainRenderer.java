@@ -612,10 +612,50 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
                     i * 8f + 8, 3, j * 8f + 8,
                     material);
         } else {
-            cuboid(out, new CopycatsTransform().rotateY(yRotation(facing)),
-                    i * 8f, j * 8f, 13,
-                    i * 8f + 8, j * 8f + 8, 16,
-                    material);
+            // CopycatMultiBytePanelModelCore samples four 4px corner regions,
+            // each in two depth slices (2px front, 1px back). A single
+            // 8x8x3 cuboid loses the source UV remapping that Create applies.
+            CopycatsTransform transform = new CopycatsTransform()
+                    .rotateY(yRotation(facing));
+            for (int subY = 0; subY < 2; subY++) {
+                for (int subX = 0; subX < 2; subX++) {
+                    float dx = i * 8f + subX * 4f;
+                    float dy = j * 8f + subY * 4f;
+                    float sx = subX == 0 ? 0 : 12;
+                    float sy = subY == 0 ? 0 : 12;
+                    panelSampledSlice(out, transform, material,
+                            dx, dy, 13, sx, sy, 0, 2,
+                            subX, subY, false);
+                    panelSampledSlice(out, transform, material,
+                            dx, dy, 15, sx, sy, 15, 1,
+                            subX, subY, true);
+                }
+            }
+        }
+    }
+
+    private void panelSampledSlice(
+            List<Quad> out, CopycatsTransform transform, CopycatsMaterial material,
+            float dx, float dy, float dz, float sx, float sy, float sz, float depth,
+            int subX, int subY, boolean rear) {
+        List<Quad> faces = new ArrayList<>(6);
+        piece(faces, transform, dx, dy, dz,
+                sx, sy, sz, sx + 4, sy + 4, sz + depth, material);
+
+        // Mirror Copycats+'s cull flags: internal up/down, left/right,
+        // and the seam between the front and back depth slices are hidden.
+        // Face order from cuboid(): DOWN, UP, NORTH, SOUTH, WEST, EAST.
+        for (int face = 0; face < faces.size(); face++) {
+            boolean internal = switch (face) {
+                case 0 -> subY == 1;
+                case 1 -> subY == 0;
+                case 2 -> rear;
+                case 3 -> !rear;
+                case 4 -> subX == 1;
+                case 5 -> subX == 0;
+                default -> false;
+            };
+            if (!internal) out.add(faces.get(face));
         }
     }
 
