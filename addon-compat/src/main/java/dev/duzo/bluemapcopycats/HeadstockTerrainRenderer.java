@@ -9,7 +9,8 @@ import de.bluecolored.bluemap.core.map.hires.block.ResourceModelRenderer;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
 import de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.Variant;
 import de.bluecolored.bluemap.core.util.Direction;
-import de.bluecolored.bluemap.core.util.Key;
+import de.bluecolored.bluemap.core.resources.ResourcePath;
+import de.bluecolored.bluemap.core.resources.pack.resourcepack.texture.Texture;
 import de.bluecolored.bluemap.core.util.math.Color;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 import java.util.Set;
@@ -53,7 +54,7 @@ public final class HeadstockTerrainRenderer implements BlockRenderer {
                         delegate.render(block, variant, tile.initialize(), color);
                     });
         } finally {
-            gallery.clear();
+            gallery.resetSelection();
         }
         tile.initialize(before);
         blockColor.set(1f, 1f, 1f, 1f, true);
@@ -97,12 +98,12 @@ public final class HeadstockTerrainRenderer implements BlockRenderer {
             }
         }
 
-        private void clear() {
+        private void resetSelection() {
             copied.remove();
         }
 
         @Override
-        public int get(Key texture) {
+        public int get(ResourcePath<Texture> texture) {
             Integer replacement = copied.get();
             if (replacement != null && texture != null
                     && "create:block/copycat_base".equals(texture.getFormatted())) {
