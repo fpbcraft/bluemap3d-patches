@@ -171,18 +171,25 @@ public final class CopycatsShapeSource implements BlockModelSource {
     private static List<AABB> boxesOf(BlockState state) {
         var id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         if ("create".equals(id.getNamespace()) && "copycat_panel".equals(id.getPath())) {
-            // Create's panel outline relies on a world-aware voxel shape. That lookup can
-            // fail against EmptyBlockGetter inside a moving contraption mesh worker.
-            // Use the panel's one-pixel-thick local slab explicitly instead.
-            String facing = property(state, "facing");
-            return switch (facing) {
-                case "down" -> List.of(new AABB(0, 15.0 / 16.0, 0, 1, 1, 1));
-                case "north" -> List.of(new AABB(0, 0, 15.0 / 16.0, 1, 1, 1));
-                case "south" -> List.of(new AABB(0, 0, 0, 1, 1, 1.0 / 16.0));
-                case "west" -> List.of(new AABB(15.0 / 16.0, 0, 0, 1, 1, 1));
-                case "east" -> List.of(new AABB(0, 0, 0, 1.0 / 16.0, 1, 1));
-                default -> List.of(new AABB(0, 0, 0, 1, 1.0 / 16.0, 1));
-            };
+            // Create's CopycatPanelBlock uses AllShapes.CASING_3PX. The prior
+            // one-pixel approximation made panels nearly invisible on trains.
+            // Its getShape is state-only, not world-dependent.
+            try {
+                VoxelShape shape = state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+                if (!shape.isEmpty()) return shape.toAabbs();
+            } catch (RuntimeException ignored) {
+                // Canonical 3px fallback below.
+            }
+            return createPanelFallback(property(state, "facing"));
+        }
+        if ("create".equals(id.getNamespace()) && "copycat_step".equals(id.getPath())) {
+            try {
+                VoxelShape shape = state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+                if (!shape.isEmpty()) return shape.toAabbs();
+            } catch (RuntimeException ignored) {
+                // Canonical STEP_BOTTOM / STEP_TOP fallback below.
+            }
+            return createStepFallback(property(state, "facing"), property(state, "half"));
         }
         try {
             VoxelShape shape = state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
@@ -193,6 +200,29 @@ public final class CopycatsShapeSource implements BlockModelSource {
         } catch (RuntimeException ignored) {
             return List.of();
         }
+    }
+
+    static List<AABB> createPanelFallback(String facing) {
+        double p = 3.0 / 16.0;
+        return switch (facing) {
+            case "down" -> List.of(new AABB(0, 1-p, 0, 1, 1, 1));
+            case "north" -> List.of(new AABB(0, 0, 1-p, 1, 1, 1));
+            case "south" -> List.of(new AABB(0, 0, 0, 1, 1, p));
+            case "west" -> List.of(new AABB(1-p, 0, 0, 1, 1, 1));
+            case "east" -> List.of(new AABB(0, 0, 0, p, 1, 1));
+            default -> List.of(new AABB(0, 0, 0, 1, p, 1));
+        };
+    }
+
+    static List<AABB> createStepFallback(String facing, String half) {
+        double bottom = "top".equals(half) ? 0.5 : 0.0;
+        double top = bottom + 0.5;
+        return switch (facing) {
+            case "north" -> List.of(new AABB(0, bottom, 0, 1, top, 0.5));
+            case "east" -> List.of(new AABB(0.5, bottom, 0, 1, top, 1));
+            case "west" -> List.of(new AABB(0, bottom, 0, 0.5, top, 1));
+            default -> List.of(new AABB(0, bottom, 0.5, 1, top, 1));
+        };
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
