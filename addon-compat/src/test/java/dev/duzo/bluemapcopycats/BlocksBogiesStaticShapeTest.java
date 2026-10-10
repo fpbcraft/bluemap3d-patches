@@ -55,6 +55,27 @@ final class BlocksBogiesStaticShapeTest {
     }
 
     @Test
+    void terrainRailAlignmentKeepsWheelAndFrameTransformsTogether() {
+        // OBJ wheel radii: small 7/16, large 12/16, extra large 16/16.
+        // This tests the world-space wheel clearance when the whole model
+        // is offset, not an independent wheel translation.
+        var small = BlocksBogiesStaticShape.parse("create_bb:s_060");
+        var large = BlocksBogiesStaticShape.parse("create_bb:l_060");
+        var extraLarge = BlocksBogiesStaticShape.parse("create_bb:xl_060");
+        assertNotNull(small);
+        assertNotNull(large);
+        assertNotNull(extraLarge);
+
+        assertEquals(-.1875f, small.staticTerrainOffsetY(), .00001f);
+        assertEquals(small.staticTerrainOffsetY(), large.staticTerrainOffsetY(), .00001f);
+        assertEquals(large.staticTerrainOffsetY(), extraLarge.staticTerrainOffsetY(), .00001f);
+
+        assertEquals(.125f, small.wheelY() + small.staticTerrainOffsetY() - 7f/16f, .00001f);
+        assertEquals(.0625f, large.wheelY() + large.staticTerrainOffsetY() - 12f/16f, .00001f);
+        assertEquals(.0625f, extraLarge.wheelY() + extraLarge.staticTerrainOffsetY() - 1f, .00001f);
+    }
+
+    @Test
     void ignoresOtherModsAndNonBogeyEntries() {
         for(String id:new String[]{"create:large_bogey","railways:copycat_headstock",
                 "create_bb:bogey","create_bb:sign","create_bb:xl_0120",
