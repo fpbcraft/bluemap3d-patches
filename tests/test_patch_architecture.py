@@ -209,7 +209,7 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn('states.put(entry.getValue(), createCopycatDispatch)', static_dispatch)
         self.assertIn('entry.getValue().setResource(createCopycatDispatch)', static_dispatch)
         self.assertIn('paths.containsKey(id)', static_dispatch)
-        self.assertIn('"static Create copycat panels/steps routed %s id(s)"', static_dispatch)
+        self.assertIn('static Create copycat panels/steps routed %s id(s)', static_dispatch)
         self.assertIn('case "create:copycat_panel" -> createPanel(entity)', static_renderer)
         self.assertIn('case "create:copycat_step" -> createStep(entity)', static_renderer)
         self.assertIn('cuboid(out, transform, 0, 0, 0, 16, 3, 16, material)', static_renderer)
