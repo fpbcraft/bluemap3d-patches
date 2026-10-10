@@ -32,7 +32,7 @@ public final class CopiedMaterialConnectedTextures {
             Direction face, BlockNeighborhood owner) {
         Appearance plain = new Appearance(source, 0f, 0f, 1f, 1f);
         if (extension == null || source == null || material == null || face == null) {
-            CopycatsTrace.log(owner, "CT", "material=" + material + " face=" + face
+            if (CopycatsTrace.enabled(owner)) CopycatsTrace.log(owner, "CT", "material=" + material + " face=" + face
                     + " source=" + source + " reason="
                     + (extension == null ? "missing-extension" : "missing-input"));
             return plain;
@@ -41,7 +41,7 @@ public final class CopiedMaterialConnectedTextures {
         var fusion = extension.fusionSpec(id);
         var create = extension.createSpec(id, material.getFormatted(), material.getProperties(), face);
         if (fusion == null && create == null) {
-            CopycatsTrace.log(owner, "CT", "material=" + material.getFormatted()
+            if (CopycatsTrace.enabled(owner)) CopycatsTrace.log(owner, "CT", "material=" + material.getFormatted()
                     + " face=" + face + " base=" + id + " mode=none reason=no-ct-spec");
             return plain;
         }
@@ -51,7 +51,7 @@ public final class CopiedMaterialConnectedTextures {
             ResourcePath<Texture> path = extension.fusionMaterial(id, fusion, mask);
             int tile = ConnectedTextureLayout.fusionTile(fusion.layout(), mask);
             boolean found = available(path);
-            CopycatsTrace.log(owner, "CT", "material=" + material.getFormatted()
+            if (CopycatsTrace.enabled(owner)) CopycatsTrace.log(owner, "CT", "material=" + material.getFormatted()
                     + " face=" + face + " mode=fusion layout=" + fusion.layout()
                     + " base=" + id + " mask=0x" + Integer.toHexString(mask)
                     + " tile=" + tile + " destination=" + path + " available=" + found);
@@ -66,7 +66,7 @@ public final class CopiedMaterialConnectedTextures {
         int tile = ConnectedTextureLayout.createTile(create.type(), mask);
         ResourcePath<Texture> path = extension.createMaterial(sheet, create.type(), tile);
         boolean found = available(path);
-        CopycatsTrace.log(owner, "CT", "material=" + material.getFormatted()
+        if (CopycatsTrace.enabled(owner)) CopycatsTrace.log(owner, "CT", "material=" + material.getFormatted()
                 + " face=" + face + " mode=create type=" + create.type()
                 + " base=" + id + " sheet=" + sheet
                 + " mask=0x" + Integer.toHexString(mask)
