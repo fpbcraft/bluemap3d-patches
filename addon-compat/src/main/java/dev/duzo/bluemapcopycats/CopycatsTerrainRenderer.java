@@ -200,7 +200,35 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (!propertyBool(key)) return;
         CopycatsMaterial material = materialFor(entity, key);
         if (!usable(material)) return;
-        cuboid(out, new CopycatsTransform(), x, y, z, x + 8, y + 8, z + 8, material);
+        // Like CopycatMultiByteModelCore, a byte has 8 separate 4px
+        // source samples, not one 8px cube with stretched source UVs.
+        for (int subY = 0; subY < 2; subY++) {
+            for (int subZ = 0; subZ < 2; subZ++) {
+                for (int subX = 0; subX < 2; subX++) {
+                    float sx = subX == 0 ? 0 : 12;
+                    float sy = subY == 0 ? 0 : 12;
+                    float sz = subZ == 0 ? 0 : 12;
+                    List<Quad> faces = new ArrayList<>(6);
+                    piece(faces, new CopycatsTransform(),
+                            x + subX * 4, y + subY * 4, z + subZ * 4,
+                            sx, sy, sz, sx + 4, sy + 4, sz + 4, material);
+                    // Internal directions match Copycats+'s eight cull masks.
+                    // Face order is DOWN, UP, NORTH, SOUTH, WEST, EAST.
+                    for (int face = 0; face < faces.size(); face++) {
+                        boolean internal = switch (face) {
+                            case 0 -> subY == 1;
+                            case 1 -> subY == 0;
+                            case 2 -> subZ == 1;
+                            case 3 -> subZ == 0;
+                            case 4 -> subX == 1;
+                            case 5 -> subX == 0;
+                            default -> false;
+                        };
+                        if (!internal) out.add(faces.get(face));
+                    }
+                }
+            }
+        }
     }
 
     private List<Quad> verticalHalfLayer(CopycatsTerrainBlockEntity entity) {
