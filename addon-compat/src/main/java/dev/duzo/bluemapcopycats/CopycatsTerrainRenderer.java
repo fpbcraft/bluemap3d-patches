@@ -52,6 +52,23 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
 
         String id = block.getBlockState().getFormatted();
         CopycatsTerrainBlockEntity entity = CopycatsTerrainBlockEntity.from(block.getBlockEntity());
+        if (CopycatsTrace.enabled(block)) {
+            Object direct = entity == null ? null : entity.material();
+            Object parts = entity == null ? null : entity.materialData();
+            String partKeys = parts instanceof java.util.Map<?, ?> map
+                    ? map.keySet().toString() : "<none>";
+            CopycatsMaterial primary = entity == null ? null
+                    : CopycatsMaterialResolver.materialFor(entity, null);
+            CopycatsTrace.log(block, "ENTITY",
+                    "block=" + id
+                    + " rawClass=" + (block.getBlockEntity() == null
+                        ? "<null>" : block.getBlockEntity().getClass().getName())
+                    + " entityId=" + (entity == null ? "<null>" : entity.getId())
+                    + " directType=" + (direct == null ? "<null>" : direct.getClass().getSimpleName())
+                    + " partsType=" + (parts == null ? "<null>" : parts.getClass().getSimpleName())
+                    + " partKeys=" + partKeys
+                    + " primary=" + (primary == null ? "<null>" : primary.id()));
+        }
         if (entity == null) {
             if (TRACED.add(id + "#missing-entity")) {
                 Logger.global.logWarning(String.format("STATIC block=%s has no retained Copycats block entity (actual=%s)",
@@ -105,6 +122,17 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             }
         }
         tileModel.initialize(renderStart);
+        if (CopycatsTrace.enabled(block)) {
+            java.util.Map<String, Long> materials = new java.util.TreeMap<>();
+            for (Quad quad : quads) {
+                String material = quad.material() == null ? "<null>" : quad.material().id();
+                materials.merge(material, 1L, Long::sum);
+            }
+            CopycatsTrace.log(block, "GEOMETRY",
+                    "block=" + id + " materialQuads=" + materials
+                    + " generated=" + quads.size() + " emitted=" + emitted
+                    + " missing=" + (quads.size() - emitted));
+        }
 
         if (emitted > 0) {
             blockColor.set(1f, 1f, 1f, 1f, true);
