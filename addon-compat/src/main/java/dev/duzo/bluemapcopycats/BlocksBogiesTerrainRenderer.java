@@ -116,6 +116,8 @@ public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
             BlockNeighborhood block, BlocksBogiesStaticShape.Spec spec) {
         String raw = block.getBlockState().getFormatted();
         String suffix = raw.substring(raw.indexOf(':')+1);
+        String style = block.getBlockEntity() instanceof BlocksBogiesTerrainBlockEntity bogie
+                ? bogie.style() : null;
         String modelRoot;
         if (spec.small()) {
             String prefix = suffix.endsWith("_trailing") ? "t"
@@ -126,10 +128,21 @@ public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
         } else {
             String n = Integer.toString(spec.axles()*2);
             modelRoot = "bogie/" + (spec.extraLarge() ? "extra_large/xl" : "large/l")
-                    + n + "p";
+                    + n + spec.objVariant(style, raw);
         }
         var frame = BlocksBogiesObjMesh.load(modelRoot + "/frame");
-        if (frame.isEmpty()) return false;
+        if (frame.isEmpty()) {
+            // Unknown/new BogeyStyles may not ship a matching frame variant.
+            // Prefer the installed default pistonless frame to a cube fallback.
+            String family = "bogie/" + (spec.extraLarge()
+                    ? "extra_large/xl" : spec.small() ? "small/s" : "large/l");
+            String alternate = family + (spec.axles() * 2) + "p";
+            if (!spec.small()) {
+                frame = BlocksBogiesObjMesh.load(alternate + "/frame");
+                if (!frame.isEmpty()) modelRoot = alternate;
+            }
+            if (frame.isEmpty()) return false;
+        }
 
         // Load every mesh before emitting anything, so a missing wheel asset
         // does not leave a half-finished OBJ mixed with fallback cylinders.
