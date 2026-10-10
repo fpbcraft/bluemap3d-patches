@@ -76,7 +76,7 @@ final class BytePanelConnectedTextureMask {
      * Match the *same half* of an adjacent byte panel, rather than finding
      * the requested material somewhere in its whole-block material_data map.
      */
-    private CellNeighbor bytePanelCell(BlockNeighborhood owner, int x, int y, int z) {
+    private static CellNeighbor bytePanelCell(BlockNeighborhood owner, int x, int y, int z) {
         int bx = BytePanelCells.worldBlockOffset(x);
         int by = BytePanelCells.worldBlockOffset(y);
         int bz = BytePanelCells.worldBlockOffset(z);
