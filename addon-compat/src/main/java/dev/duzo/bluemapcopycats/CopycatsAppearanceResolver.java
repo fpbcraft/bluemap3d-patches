@@ -64,7 +64,11 @@ final class CopycatsAppearanceResolver {
         if (variants.isEmpty()) return null;
 
         Model model = variants.getFirst().getModel().getResource(resourcePack::getModel);
-        if (model == null || model.getElements() == null) return null;
+        if (model == null) return null;
+        // Railways and Pretty in Pink both use inherited vanilla cube-column models.
+        // Faces and texture variables live on the parent rather than the leaf JSON.
+        model.applyParent(resourcePack);
+        if (model.getElements() == null) return null;
 
         List<Map<Direction, Face>> faces = new ArrayList<>();
         for (Element element : model.getElements()) {
