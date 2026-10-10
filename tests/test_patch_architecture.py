@@ -225,6 +225,24 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn('skip=missing-material-nbt', moving)
         self.assertIn('skip=unusable-copied-material', moving)
 
+    def test_blocks_bogies_static_obj_and_dual_copycat_ct_fixes(self) -> None:
+        base = ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats"
+        meshes = (base / "BlocksBogiesObjMesh.java").read_text()
+        renderer = (base / "BlocksBogiesTerrainRenderer.java").read_text()
+        copycats = (base / "CopycatsTerrainRenderer.java").read_text()
+        emitter = (base / "CopycatsQuadEmitter.java").read_text()
+        moving = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureResolver.java").read_text()
+        self.assertIn("new ZipFile(", meshes)
+        self.assertIn("assets/create_bb/models/block/", meshes)
+        self.assertIn("static List<Triangle> parse(String obj)", meshes)
+        self.assertIn("BlocksBogiesObjMesh.load(modelRoot + \"/frame\")", renderer)
+        self.assertIn("BlocksBogiesObjMesh.load(\"bogie/\" + size + \"/shared/wheels\")", renderer)
+        self.assertIn('geometry=mod-obj', renderer)
+        self.assertIn('CopycatsQuadEmitter.physicalFace(positions, materialFace)', copycats)
+        self.assertIn('static Direction physicalFace(float[] p, Direction fallback)', emitter)
+        self.assertIn('CopiedMaterialResolver.materialFor(', moving)
+        self.assertIn('material.equals(other)', moving)
+
     def test_static_copycats_and_railways_compatibility_is_wired(self) -> None:
         generator = (ROOT / "scripts/generate-static-resources.py").read_text()
         registry = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/BlueMapCopycatsCompatAddon.java").read_text()
