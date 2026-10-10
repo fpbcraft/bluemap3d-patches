@@ -3,6 +3,8 @@ package dev.duzo.bluemapcopycats;
 import de.bluecolored.bluemap.core.logger.Logger;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Explicitly opt-in, bounded diagnostics for a small BlueMap render area.
@@ -24,6 +26,7 @@ public final class CopycatsTrace {
     private static final String MATCH =
             System.getProperty("bluemap.copycats.trace.match", "").trim();
     private static final AtomicInteger COUNT = new AtomicInteger();
+    private static final Set<String> SEEN = ConcurrentHashMap.newKeySet();
 
     private CopycatsTrace() {}
 
@@ -36,6 +39,13 @@ public final class CopycatsTrace {
 
     public static void log(BlockNeighborhood block, String phase, String details) {
         if (!enabled(block) || (!MATCH.isEmpty() && !details.contains(MATCH))) return;
+        if (COUNT.get() >= LIMIT) return;
+        // A multipart copycat may send the same CT face and atlas selection once
+        // per tiny cuboid. Deduplicate by full event identity so that the log cap
+        // is spent on new evidence instead of 4-8 copies of the same information.
+        String event = block.getX() + "," + block.getY() + "," + block.getZ()
+                + "|" + phase + "|" + details;
+        if (!SEEN.add(event)) return;
         int line = COUNT.getAndIncrement();
         if (line >= LIMIT) return;
         Logger.global.logDebug("COPYCATS-TRACE phase=" + phase
