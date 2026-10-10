@@ -1,0 +1,176 @@
+package dev.duzo.bluemapctm;
+
+import de.bluecolored.bluemap.core.resources.ResourcePath;
+import de.bluecolored.bluemap.core.resources.pack.resourcepack.ResourcePack;
+import de.bluecolored.bluemap.core.resources.pack.resourcepack.texture.Texture;
+import de.bluecolored.bluemap.core.util.Direction;
+import de.bluecolored.bluemap.core.world.BlockEntity;
+import de.bluecolored.bluemap.core.world.BlockState;
+import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
+import de.bluecolored.bluemap.core.world.block.ExtendedBlock;
+
+import java.lang.reflect.Method;
+import java.util.Map;
+
+/**
+ * Applies the same pre-baked Fusion/Create CT resources to materials carried by
+ * procedural copycats as the ordinary CT renderer applies to vanilla block models.
+ * No allowlist of material mods or copycat shapes is required.
+ */
+public final class CopiedMaterialConnectedTextures {
+    private final ResourcePack resources;
+    private final ConnectedTextureResourceExtension extension;
+
+    public CopiedMaterialConnectedTextures(ResourcePack resources) {
+        this.resources = resources;
+        this.extension = resources.getResourcePackExtension(ConnectedTextureResourceExtension.TYPE);
+    }
+
+    public Appearance resolve(
+            ResourcePath<Texture> source, BlockState material,
+            Direction face, BlockNeighborhood owner) {
+        Appearance plain = new Appearance(source, 0f, 0f, 1f, 1f);
+        if (extension == null || source == null || material == null || face == null) return plain;
+        String id = source.getFormatted();
+        var fusion = extension.fusionSpec(id);
+        var create = extension.createSpec(id, material.getFormatted(), material.getProperties(), face);
+        if (fusion == null && create == null) return plain;
+
+        int mask = mask(material, face, owner, fusion, create);
+        if (fusion != null) {
+            ResourcePath<Texture> path = extension.fusionMaterial(id, fusion, mask);
+            if (!available(path)) return plain;
+            if (ConnectedTextureLayout.isMultiQuadFusionLayout(fusion.layout()))
+                return new Appearance(path, 0f, 0f, 1f, 1f);
+            int tile = ConnectedTextureLayout.fusionTile(fusion.layout(), mask);
+            return tiled(path, fusion.grid(), tile);
+        }
+
+        mask = constrainCorners(mask);
+        String sheet = create.sheetTexture(owner.getX(), owner.getY(), owner.getZ());
+        int tile = ConnectedTextureLayout.createTile(create.type(), mask);
+        ResourcePath<Texture> path = extension.createMaterial(sheet, create.type(), tile);
+        return available(path) ? tiled(path, ConnectedTextureLayout.createGrid(create.type()), tile) : plain;
+    }
+
+    private boolean available(ResourcePath<Texture> path) {
+        return path != null && resources.getTextures().containsKey(path);
+    }
+
+    private static Appearance tiled(
+            ResourcePath<Texture> path, ConnectedTextureLayout.Grid grid, int tile) {
+        int x = Math.floorMod(tile, grid.width());
+        int y = Math.floorDiv(tile, grid.width());
+        return new Appearance(path,
+                x / (float) grid.width(), y / (float) grid.height(),
+                (x + 1f) / grid.width(), (y + 1f) / grid.height());
+    }
+
+    private static int constrainCorners(int mask) {
+        for (int c = 1; c < 8; c += 2) {
+            int previous = (c + 7) % 8;
+            int next = (c + 1) % 8;
+            if ((mask & (1 << previous)) == 0 || (mask & (1 << next)) == 0)
+                mask &= ~(1 << c);
+        }
+        return mask;
+    }
+
+    private int mask(BlockState material, Direction face, BlockNeighborhood block,
+            ConnectedTextureResourceExtension.FusionSpec fusion,
+            CreateConnectedTextures.Spec create) {
+        // The axes are stable in the world (UV rotation remains the responsibility of
+        // the shape renderer). CT is evaluated using the *copied material*, not the
+        // copycat wrapper's block ID.
+        int[] up = switch (face) {
+            case UP, DOWN -> new int[]{0, 0, -1};
+            default -> new int[]{0, 1, 0};
+        };
+        int[] right = switch (face) {
+            case NORTH -> new int[]{-1, 0, 0};
+            case SOUTH -> new int[]{1, 0, 0};
+            case UP -> new int[]{1, 0, 0};
+            case DOWN -> new int[]{-1, 0, 0};
+            case EAST -> new int[]{0, 0, -1};
+            case WEST -> new int[]{0, 0, 1};
+        };
+        int mask = 0;
+        String[] dirs = {"top", "top_right", "right", "bottom_right",
+                         "bottom", "bottom_left", "left", "top_left"};
+        for (int i = 0; i < 8; i++) {
+            int vertical = i == 0 || i == 1 || i == 7 ? 1
+                    : i >= 3 && i <= 5 ? -1 : 0;
+            int horizontal = i >= 1 && i <= 3 ? 1
+                    : i >= 5 && i <= 7 ? -1 : 0;
+            int dx = up[0] * vertical + right[0] * horizontal;
+            int dy = up[1] * vertical + right[1] * horizontal;
+            int dz = up[2] * vertical + right[2] * horizontal;
+            ExtendedBlock neighbour = block.getNeighborBlock(dx, dy, dz);
+            BlockState other = effectiveMaterial(neighbour);
+            ExtendedBlock front = block.getNeighborBlock(
+                    dx + faceOffset(face, 0),
+                    dy + faceOffset(face, 1),
+                    dz + faceOffset(face, 2));
+            BlockState inFront = effectiveMaterial(front);
+
+            boolean connects;
+            if (fusion != null) {
+                connects = fusion.predicate().test(
+                        material, other, inFront, front.getProperties().isOccluding(),
+                        face, dirs[i]);
+            } else {
+                // Semantic material equality also connects different copycat shapes
+                // and ordinary blocks copied from the same Railways/Create material.
+                connects = !front.getProperties().isOccluding()
+                        && material.getFormatted().equals(other.getFormatted())
+                        && material.getProperties().equals(other.getProperties());
+            }
+            if (connects) mask |= 1 << i;
+        }
+        return mask;
+    }
+
+    private static int faceOffset(Direction d, int axis) {
+        return switch (axis) {
+            case 0 -> d == Direction.EAST ? 1 : d == Direction.WEST ? -1 : 0;
+            case 1 -> d == Direction.UP ? 1 : d == Direction.DOWN ? -1 : 0;
+            default -> d == Direction.SOUTH ? 1 : d == Direction.NORTH ? -1 : 0;
+        };
+    }
+
+    /**
+     * Compatibility with CreateEntityAddon, which can deserialize the same block
+     * entity before our full decoder is installed. Its getMaterial() DTO exposes
+     * Name/Properties rather than the Map used by our normal decoder.
+     */
+    private static BlockState effectiveMaterial(ExtendedBlock block) {
+        BlockState state = block.getBlockState();
+        String id = state.getFormatted();
+        if (!(id.startsWith("copycats:") ||
+              id.startsWith("create:copycat") ||
+              id.startsWith("create_connected:copycat") ||
+              id.startsWith("railways:copycat"))) return state;
+        BlockEntity entity = block.getBlockEntity();
+        if (entity == null) return state;
+        try {
+            Method method = entity.getClass().getMethod("getMaterial");
+            Object material = method.invoke(entity);
+            if (material == null) return state;
+            Method name = material.getClass().getMethod("getName");
+            Object value = name.invoke(material);
+            if (!(value instanceof String blockId)) return state;
+            Method properties = material.getClass().getMethod("getProperties");
+            Object raw = properties.invoke(material);
+            Map<String, String> props = raw instanceof Map<?, ?> map ?
+                    map.entrySet().stream()
+                       .filter(e -> e.getKey() instanceof String && e.getValue() instanceof String)
+                       .collect(java.util.stream.Collectors.toMap(
+                           e -> (String)e.getKey(), e -> (String)e.getValue())) : Map.of();
+            return new BlockState(blockId, props);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return state;
+        }
+    }
+
+    public record Appearance(ResourcePath<Texture> texture, float u0, float v0, float u1, float v1) {}
+}
