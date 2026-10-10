@@ -62,6 +62,33 @@ def write_dispatch(namespace, names, renderer):
 
 write_dispatch("copycats", copycats, "bluemap_copycats:terrain")
 write_dispatch("create_connected", connected, "bluemap_copycats:terrain")
+write_dispatch("create", ["copycat_panel", "copycat_step"], "bluemap_copycats:terrain")
+
+# Steam 'n' Rails windows are full cube-column models with cutout panes. Never let
+# BlueMap's ordinary full-cube occlusion discard their transparent faces. Generate
+# for every upstream palette color and window variant, not just the brown example.
+railways_colors = [
+    "netherite", "brown", "maroon", "red", "vermilion", "orange",
+    "granite", "dripstone", "ochrum", "yellow", "chartreuse",
+    "olive_green", "lime", "green", "pine_green", "cyan", "sea_green",
+    "turquoise", "light_blue", "blue", "royal_blue", "purple",
+    "magenta", "pink", "white", "diorite", "limestone", "light_gray",
+    "tuff", "gray", "scorchia", "black"
+]
+railways_windows = ("round_pane", "single_pane", "two_pane", "four_pane")
+window_properties = {
+    f"railways:{color}_{kind}_locometal_window": {
+        "occluding": False,
+        "culling": False,
+        "cullingIdentical": False,
+    }
+    for color in railways_colors for kind in railways_windows
+}
+window_properties_path = root / "railways" / "blockProperties.json"
+window_properties_path.parent.mkdir(parents=True, exist_ok=True)
+window_properties_path.write_text(json.dumps(window_properties, indent=2) + "\n")
+
+
 write_dispatch(
     "bits_n_bobs",
     ["girder_strut", "weathered_girder_strut", "cable_girder_strut"],

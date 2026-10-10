@@ -1,6 +1,7 @@
 package dev.duzo.bluemap3d.bake;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
@@ -12,6 +13,9 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Material-aware fallback for copycats whose client geometry is emitted in code.
@@ -22,6 +26,29 @@ import java.util.List;
 public final class CopycatsShapeSource implements BlockModelSource {
 
     private static final int MAX_BOXES = 128;
+    private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/CopycatsTrace");
+    private static final boolean TRACE = Boolean.getBoolean("bluemap.copycats.trace");
+    private static final AtomicInteger TRACE_LINES = new AtomicInteger();
+    private static final AtomicInteger CREATE_TRACE_LINES = new AtomicInteger();
+
+    private static void traceCreate(BlockState state, BlockRenderContext context,
+            CompoundTag metadata, String status) {
+        if (!TRACE || state == null || CREATE_TRACE_LINES.get() >= 80) return;
+        var id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        if (!"create".equals(id.getNamespace())
+                || (!"copycat_panel".equals(id.getPath())
+                    && !"copycat_step".equals(id.getPath()))) return;
+        CREATE_TRACE_LINES.incrementAndGet();
+        LOGGER.debug("COPYCATS-MOVING-TRACE phase=CREATE-SHAPE block={} pos={} state={} metadataKeys={} {}",
+                id,
+                context == null ? "<none>"
+                        : context.x()+","+context.y()+","+context.z(),
+                state,
+                metadata == null ? "<null>" : metadata.getAllKeys(),
+                status);
+    }
+
+
 
     private final ResourcePackSource models;
 
@@ -48,7 +75,12 @@ public final class CopycatsShapeSource implements BlockModelSource {
             BlockState state,
             CompoundTag metadata,
             BlockRenderContext context) {
-        if (!CopiedMaterialResolver.isMaterialWrapper(state) || metadata == null) {
+        boolean createPanelOrStep = isCreatePanelOrStep(state);
+        if (!CopiedMaterialResolver.isMaterialWrapper(state)
+                || (metadata == null && !createPanelOrStep)) {
+            traceCreate(state, context, metadata,
+                    metadata == null ? "skip=missing-material-nbt"
+                            : "skip=not-material-wrapper");
             return List.of();
         }
 
@@ -58,10 +90,30 @@ public final class CopycatsShapeSource implements BlockModelSource {
         if ("railways".equals(id.getNamespace())) return List.of();
 
         BlockState material = CopiedMaterialResolver.materialFor(metadata, null);
-        if (!CopiedMaterialResolver.usable(material)) return List.of();
+        if (!CopiedMaterialResolver.usable(material)) {
+            if (createPanelOrStep && isDefaultCreateMaterial(material)) {
+                // Create's untextured panel/step intentionally carries
+                // create:copycat_base. No material NBT is also legitimate for
+                // default/unmodified blocks. Keep its geometry in the 3D scene.
+                material = BuiltInRegistries.BLOCK.get(
+                        ResourceLocation.fromNamespaceAndPath("create", "copycat_base"))
+                        .defaultBlockState();
+                traceCreate(state, context, metadata,
+                        "fallback=self-default material=create:copycat_base");
+            } else {
+                traceCreate(state, context, metadata,
+                        "skip=unusable-copied-material value=" + material);
+                return List.of();
+            }
+        }
 
         List<AABB> boxes = boxesOf(state);
-        if (boxes.isEmpty() || boxes.size() > MAX_BOXES) return List.of();
+        if (boxes.isEmpty() || boxes.size() > MAX_BOXES) {
+            traceCreate(state, context, metadata,
+                    "skip=invalid-voxel-shape boxes=" + boxes.size()
+                            + " material=" + BuiltInRegistries.BLOCK.getKey(material.getBlock()));
+            return List.of();
+        }
 
         List<ModelQuad> out = new ArrayList<>(boxes.size() * 6);
         for (AABB box : boxes) {
@@ -94,6 +146,23 @@ public final class CopycatsShapeSource implements BlockModelSource {
             }
         }
 
+        traceCreate(state, context, metadata,
+                "result=emitted boxes=" + boxes.size() + " quads=" + out.size()
+                        + " material=" + BuiltInRegistries.BLOCK.getKey(material.getBlock()));
+        if (TRACE && TRACE_LINES.getAndIncrement() < 60) {
+            long missingFace = out.stream()
+                    .filter(q -> q.shadeFace() == null && q.cullFace() == null).count();
+            java.util.Set<String> textures = new java.util.TreeSet<>();
+            for (ModelQuad quad : out) {
+                if (quad.texture() != null && textures.size() < 12)
+                    textures.add(quad.texture());
+            }
+            LOGGER.debug("COPYCATS-MOVING-TRACE phase=SHAPE block={} pos={} material={} metaKeys={} boxes={} quads={} missingFace={} textures={}",
+                    id, context == null ? "<none>" : context.x()+","+context.y()+","+context.z(),
+                    BuiltInRegistries.BLOCK.getKey(material.getBlock()),
+                    metadata == null ? "<null>" : metadata.getAllKeys(),
+                    boxes.size(), out.size(), missingFace, textures);
+        }
         return out.isEmpty() ? List.of() : List.copyOf(out);
     }
 
@@ -121,6 +190,13 @@ public final class CopycatsShapeSource implements BlockModelSource {
             BlockState material,
             Direction surface,
             BlockRenderContext context) {
+        // The default Create copycat block is a material state, but its texture
+        // is a real sprite (create:block/copycat_base), not a missing/air model.
+        if ("create:copycat_base".equals(
+                BuiltInRegistries.BLOCK.getKey(material.getBlock()).toString())
+                && models.texture("create:block/copycat_base") != null) {
+            return new Appearance("create:block/copycat_base", 0xFFFFFF);
+        }
         List<ModelQuad> materialQuads = context == null
                 ? models.quadsFor(material)
                 : models.quadsFor(context.withState(material));
@@ -148,21 +224,43 @@ public final class CopycatsShapeSource implements BlockModelSource {
         return new Appearance("minecraft:block/stone", 0xFFFFFF);
     }
 
+    private static boolean isCreatePanelOrStep(BlockState state) {
+        if (state == null) return false;
+        var id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        return "create".equals(id.getNamespace())
+                && ("copycat_panel".equals(id.getPath())
+                    || "copycat_step".equals(id.getPath()));
+    }
+
+    private static boolean isDefaultCreateMaterial(BlockState material) {
+        if (material == null) return true;
+        String id = BuiltInRegistries.BLOCK.getKey(material.getBlock()).toString();
+        return "create:copycat_base".equals(id)
+                || "copycats:copycat_base".equals(id);
+    }
+
     private static List<AABB> boxesOf(BlockState state) {
         var id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         if ("create".equals(id.getNamespace()) && "copycat_panel".equals(id.getPath())) {
-            // Create's panel outline relies on a world-aware voxel shape. That lookup can
-            // fail against EmptyBlockGetter inside a moving contraption mesh worker.
-            // Use the panel's one-pixel-thick local slab explicitly instead.
-            String facing = property(state, "facing");
-            return switch (facing) {
-                case "down" -> List.of(new AABB(0, 15.0 / 16.0, 0, 1, 1, 1));
-                case "north" -> List.of(new AABB(0, 0, 15.0 / 16.0, 1, 1, 1));
-                case "south" -> List.of(new AABB(0, 0, 0, 1, 1, 1.0 / 16.0));
-                case "west" -> List.of(new AABB(15.0 / 16.0, 0, 0, 1, 1, 1));
-                case "east" -> List.of(new AABB(0, 0, 0, 1.0 / 16.0, 1, 1));
-                default -> List.of(new AABB(0, 0, 0, 1, 1.0 / 16.0, 1));
-            };
+            // Create's CopycatPanelBlock uses AllShapes.CASING_3PX. The prior
+            // one-pixel approximation made panels nearly invisible on trains.
+            // Its getShape is state-only, not world-dependent.
+            try {
+                VoxelShape shape = state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+                if (!shape.isEmpty()) return shape.toAabbs();
+            } catch (RuntimeException ignored) {
+                // Canonical 3px fallback below.
+            }
+            return createPanelFallback(property(state, "facing"));
+        }
+        if ("create".equals(id.getNamespace()) && "copycat_step".equals(id.getPath())) {
+            try {
+                VoxelShape shape = state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+                if (!shape.isEmpty()) return shape.toAabbs();
+            } catch (RuntimeException ignored) {
+                // Canonical STEP_BOTTOM / STEP_TOP fallback below.
+            }
+            return createStepFallback(property(state, "facing"), property(state, "half"));
         }
         try {
             VoxelShape shape = state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
@@ -173,6 +271,29 @@ public final class CopycatsShapeSource implements BlockModelSource {
         } catch (RuntimeException ignored) {
             return List.of();
         }
+    }
+
+    static List<AABB> createPanelFallback(String facing) {
+        double p = 3.0 / 16.0;
+        return switch (facing) {
+            case "down" -> List.of(new AABB(0, 1-p, 0, 1, 1, 1));
+            case "north" -> List.of(new AABB(0, 0, 0, 1, 1, p));
+            case "south" -> List.of(new AABB(0, 0, 1-p, 1, 1, 1));
+            case "west" -> List.of(new AABB(0, 0, 0, p, 1, 1));
+            case "east" -> List.of(new AABB(1-p, 0, 0, 1, 1, 1));
+            default -> List.of(new AABB(0, 0, 0, 1, p, 1));
+        };
+    }
+
+    static List<AABB> createStepFallback(String facing, String half) {
+        double bottom = "top".equals(half) ? 0.5 : 0.0;
+        double top = bottom + 0.5;
+        return switch (facing) {
+            case "north" -> List.of(new AABB(0, bottom, 0, 1, top, 0.5));
+            case "east" -> List.of(new AABB(0.5, bottom, 0, 1, top, 1));
+            case "west" -> List.of(new AABB(0, bottom, 0, 0.5, top, 1));
+            default -> List.of(new AABB(0, bottom, 0.5, 1, top, 1));
+        };
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

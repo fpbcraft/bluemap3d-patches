@@ -141,6 +141,111 @@ class PatchArchitectureTest(unittest.TestCase):
         removal = (ROOT / "overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionDeletionTracker.java").read_text()
         self.assertIn("entity instanceof CarriageContraptionEntity", removal)
 
+    def test_copycats_byte_moving_ct_samples_individual_material_parts(self) -> None:
+        source = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java").read_text()
+        self.assertIn('case "copycats:copycat_byte_panel" -> bytePanel(state, metadata)', source)
+        self.assertIn('case "copycats:copycat_byte" -> byteQuads(state, metadata)', source)
+        self.assertIn('private void addPart(Map<Integer,BlockState> parts', source)
+        self.assertIn('base.stateAtOffset(bx-base.x(), by-base.y(), bz-base.z())', source)
+        self.assertIn('parts.getOrDefault(cellKey(', source)
+        self.assertIn('models.quadsFor(context.withState(material))', source)
+
+    def test_copycats_diagnostics_are_opt_in_bounded_and_cover_both_renderers(self) -> None:
+        root = ROOT / "addon-compat/src/main/java/dev/duzo"
+        tracer = (root / "bluemapcopycats/CopycatsTrace.java").read_text()
+        terrain = (root / "bluemapcopycats/CopycatsTerrainRenderer.java").read_text()
+        model = (root / "bluemapcopycats/CopycatsAppearanceResolver.java").read_text()
+        ct = (root / "bluemapctm/CopiedMaterialConnectedTextures.java").read_text()
+        moving = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java").read_text()
+        shape = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java").read_text()
+        self.assertIn('Boolean.getBoolean("bluemap.copycats.trace")', tracer)
+        self.assertIn('"bluemap.copycats.trace.center"', tracer)
+        self.assertIn('AtomicInteger', tracer)
+        self.assertIn('CopycatsTrace.log(block, "ENTITY"', terrain)
+        self.assertIn('CopycatsTrace.log(block, "GEOMETRY"', terrain)
+        self.assertIn('CopycatsTrace.log(block, "ATLAS"', model)
+        self.assertIn('CopycatsTrace.log(owner, "CT"', ct)
+        self.assertIn('COPYCATS-MOVING-TRACE phase=SOURCE', moving)
+        self.assertIn('COPYCATS-MOVING-TRACE phase=SHAPE', shape)
+        resolver = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureResolver.java").read_text()
+        self.assertIn('COPYCATS-MOVING-TRACE phase={}', resolver)
+        self.assertIn('"reason=no-face-metadata"', resolver)
+        self.assertIn('"CT-NOMATCH"', resolver)
+        self.assertIn('"CT-MISSING-SHEET"', resolver)
+
+    def test_default_create_copycats_and_static_orientation_regressions(self) -> None:
+        addon = ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats"
+        materials = (addon / "CopycatsMaterialResolver.java").read_text()
+        renderer = (addon / "CopycatsTerrainRenderer.java").read_text()
+        appearance = (addon / "CopycatsAppearanceResolver.java").read_text()
+        moving = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java").read_text()
+        self.assertIn("createPanelOrStepMaterial(", materials)
+        self.assertIn('new CopycatsMaterial("create:copycat_base", Map.of())', materials)
+        self.assertIn('entity == null && !isCreatePanelOrStep(id)', renderer)
+        self.assertIn('CopycatsMaterialResolver.createPanelOrStepMaterial(entity)', renderer)
+        self.assertIn('CopycatsStaticFacing.panel(property("facing"))', renderer)
+        self.assertIn('CopycatsStaticFacing.verticalStep(property("facing"))', renderer)
+        self.assertIn('"create:block/copycat_base"', appearance)
+        self.assertIn('fallback=self-default', appearance)
+        self.assertIn('boolean createPanelOrStep = isCreatePanelOrStep(state)', moving)
+        self.assertIn('ResourceLocation.fromNamespaceAndPath("create", "copycat_base")', moving)
+        self.assertIn('metadata == null ? "<null>" : metadata.getAllKeys()', moving)
+        facing = (addon / "CopycatsStaticFacing.java").read_text()
+        self.assertIn('transform.rotateX(90).rotateY(180)', facing)
+        self.assertIn('transform.rotateZ(90).rotateY(180)', facing)
+        self.assertIn('rotateY(yRotation(facing) + 180)', facing)
+        self.assertIn("class CopycatsTerrainOrientationTest", (
+            ROOT / "addon-compat/src/test/java/dev/duzo/bluemapcopycats/CopycatsTerrainOrientationTest.java"
+        ).read_text())
+
+    def test_create_panel_and_step_render_in_static_and_moving_paths(self) -> None:
+        static_dispatch = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/ConnectedTerrainDispatch.java").read_text()
+        static_renderer = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/CopycatsTerrainRenderer.java").read_text()
+        moving = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java").read_text()
+
+        # Resource pack order must not suppress Create's static material renderer.
+        self.assertIn('"create:copycat_panel".equals(id)', static_dispatch)
+        self.assertIn('"create:copycat_step".equals(id)', static_dispatch)
+        self.assertIn('states.put(entry.getValue(), createCopycatDispatch)', static_dispatch)
+        self.assertIn('entry.getValue().setResource(createCopycatDispatch)', static_dispatch)
+        self.assertIn('paths.containsKey(id)', static_dispatch)
+        self.assertIn('"static Create copycat panels/steps routed %s id(s)"', static_dispatch)
+        self.assertIn('case "create:copycat_panel" -> createPanel(entity)', static_renderer)
+        self.assertIn('case "create:copycat_step" -> createStep(entity)', static_renderer)
+        self.assertIn('cuboid(out, transform, 0, 0, 0, 16, 3, 16, material)', static_renderer)
+
+        # Create's panel shape is CASING_3PX, not a one-pixel wafer. Evaluate the
+        # actual state shape first; still show the block if shape lookup fails.
+        self.assertIn("Create's CopycatPanelBlock uses AllShapes.CASING_3PX", moving)
+        self.assertIn('return createPanelFallback(property(state, "facing"))', moving)
+        self.assertIn('return createStepFallback(property(state, "facing"), property(state, "half"))', moving)
+        self.assertIn('double p = 3.0 / 16.0', moving)
+        self.assertIn('case "north" -> List.of(new AABB(0, 0, 0, 1, 1, p))', moving)
+        self.assertIn('phase=CREATE-SHAPE', moving)
+        self.assertIn('skip=missing-material-nbt', moving)
+        self.assertIn('skip=unusable-copied-material', moving)
+
+    def test_static_copycats_and_railways_compatibility_is_wired(self) -> None:
+        generator = (ROOT / "scripts/generate-static-resources.py").read_text()
+        registry = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/BlueMapCopycatsCompatAddon.java").read_text()
+        renderer = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/CopycatsTerrainRenderer.java").read_text()
+        appearance = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/CopycatsAppearanceResolver.java").read_text()
+        ctm_dispatch = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapctm/ConnectedTextureTerrainDispatch.java").read_text()
+        ctm_renderer = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapctm/ConnectedTextureTerrainRenderer.java").read_text()
+
+        self.assertIn('write_dispatch("create", ["copycat_panel", "copycat_step"]', generator)
+        self.assertIn('railways_windows = ("round_pane", "single_pane", "two_pane", "four_pane")', generator)
+        self.assertIn('"cullingIdentical": False', generator)
+        self.assertIn('new Key("create", "copycat")', registry)
+        self.assertIn('Registry.class.getDeclaredField("entries")', registry)
+        self.assertIn('CopycatsTerrainBlockEntity.class', registry)
+        self.assertIn('case "create:copycat_panel" -> createPanel(entity)', renderer)
+        self.assertIn('case "create:copycat_step" -> createStep(entity)', renderer)
+        self.assertIn('model.applyParent(resourcePack)', appearance)
+        self.assertIn('model.applyParent(resourcePack)', ctm_dispatch)
+        self.assertIn('modelResource.applyParent(resourcePack)', ctm_renderer)
+        self.assertIn('keepsTransparentWindowFaces(', ctm_renderer)
+
     def test_create_removal_tracking_is_wired_into_distribution(self) -> None:
         build = (ROOT / "build.sh").read_text()
         mixins = (ROOT / "overrides/addon-create/src/main/resources/bluemap3d_create.mixins.json").read_text()

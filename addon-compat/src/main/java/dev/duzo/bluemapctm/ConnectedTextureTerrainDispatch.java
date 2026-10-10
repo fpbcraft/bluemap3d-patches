@@ -155,7 +155,9 @@ public final class ConnectedTextureTerrainDispatch {
             de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState state) {
         for (Variant variant : allVariants(state)) {
             Model model = variant.getModel().getResource(resourcePack::getModel);
-            if (model == null || model.getElements() == null) continue;
+            if (model == null) continue;
+            model.applyParent(resourcePack);
+            if (model.getElements() == null) continue;
 
             for (Element element : model.getElements()) {
                 if (element == null) continue;

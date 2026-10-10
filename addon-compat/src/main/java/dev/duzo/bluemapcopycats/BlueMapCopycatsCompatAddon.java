@@ -1,12 +1,16 @@
 package dev.duzo.bluemapcopycats;
 
 import de.bluecolored.bluemap.api.BlueMapAPI;
+import de.bluecolored.bluemap.common.api.BlueMapAPIImpl;
 import de.bluecolored.bluemap.core.map.hires.block.BlockRendererType;
 import de.bluecolored.bluemap.core.util.Key;
 import de.bluecolored.bluemap.core.world.mca.blockentity.BlockEntityType;
 import de.bluecolored.bluemap.core.logger.Logger;
 
 import java.util.List;
+import java.util.Map;
+import java.lang.reflect.Field;
+import de.bluecolored.bluemap.core.util.Registry;
 
 /**
  * Native BlueMap addon entrypoint.
@@ -31,7 +35,8 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
             new Key("copycats", "copycat_fluid_pipe"),
             new Key("copycats", "copycat_glass_fluid_pipe"),
             new Key("copycats", "copycat_sliding_door"),
-            new Key("create_connected", "copycat")
+            new Key("create_connected", "copycat"),
+            new Key("create", "copycat")
     );
 
     @Override
@@ -47,7 +52,17 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
         // after those resources are baked but before the render manager starts, which is
         // the safe point to reroute every loaded fence/wall while retaining its original
         // parsed blockstate for material-specific rendering.
-        BlueMapAPI.onEnable(ConnectedTerrainDispatch::apply);
+        BlueMapAPI.onEnable(api -> {
+            registerBlockEntities();
+            // Some worlds may have decoded chunks before the competing decoder was
+            // replaced. Re-read their block-entity NBT with the authoritative registry
+            // before any static renderer starts using those cached instances.
+            if (api instanceof BlueMapAPIImpl implementation) {
+                implementation.blueMapService().getWorlds().values()
+                        .forEach(world -> world.invalidateChunkCache());
+            }
+            ConnectedTerrainDispatch.apply(api);
+        });
 
         Logger.global.logInfo("BlueMap Copycats Compat loaded: full Copycats+/Create Connected coverage + Bits & Bobs girders + connected fences/walls");
     }
@@ -124,23 +139,38 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
         ));
     }
 
+    /**
+     * CreateEntityAddon registers its own copycat block-entity decoder. Its DTO retains
+     * "Material" but discards Copycats+'s "material_data" map, so our procedural terrain
+     * renderer cannot recover per-part materials. BlueMap's Registry is put-if-absent:
+     * simply registering our type cannot supersede an already-installed decoder.
+     *
+     * Install one comprehensive decoder for known copycat NBT IDs. Recheck on API enable
+     * as addon startup order is not defined. We leave all other block-entity types alone.
+     */
+    @SuppressWarnings("unchecked")
     private static void registerBlockEntities() {
-        for (Key key : BLOCK_ENTITY_IDS) {
-            BlockEntityType existing = BlockEntityType.REGISTRY.get(key);
-            if (existing != null) {
-                if (!CopycatsTerrainBlockEntity.class.equals(existing.getBlockEntityClass())) {
-                    Logger.global.logWarning(String.format(
-                            "Block entity %s is already registered to %s; "
-                                    + "Copycats NBT decoding for that id may be unavailable",
+        try {
+            Field entriesField = Registry.class.getDeclaredField("entries");
+            entriesField.setAccessible(true);
+            Map<Key, BlockEntityType> entries =
+                    (Map<Key, BlockEntityType>) entriesField.get(BlockEntityType.REGISTRY);
+            for (Key key : BLOCK_ENTITY_IDS) {
+                BlockEntityType existing = entries.get(key);
+                if (existing != null
+                        && CopycatsTerrainBlockEntity.class.equals(existing.getBlockEntityClass())) {
+                    continue;
+                }
+                entries.put(key, new BlockEntityType.Impl(key, CopycatsTerrainBlockEntity.class));
+                if (existing != null) {
+                    Logger.global.logInfo(String.format(
+                            "Copycat block entity %s: replaced %s with complete Material/material_data decoder",
                             key, existing.getBlockEntityClass().getName()));
                 }
-                continue;
             }
-
-            BlockEntityType.REGISTRY.register(new BlockEntityType.Impl(
-                    key,
-                    CopycatsTerrainBlockEntity.class
-            ));
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            Logger.global.logError(
+                    "Could not install full Copycats/Create copycat NBT decoder", error);
         }
     }
 }

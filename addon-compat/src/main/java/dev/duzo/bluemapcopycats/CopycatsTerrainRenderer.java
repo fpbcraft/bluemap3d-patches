@@ -51,7 +51,25 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         this.block = block;
 
         String id = block.getBlockState().getFormatted();
-        if (!(block.getBlockEntity() instanceof CopycatsTerrainBlockEntity entity)) {
+        CopycatsTerrainBlockEntity entity = CopycatsTerrainBlockEntity.from(block.getBlockEntity());
+        if (CopycatsTrace.enabled(block)) {
+            Object direct = entity == null ? null : entity.material();
+            Object parts = entity == null ? null : entity.materialData();
+            String partKeys = parts instanceof java.util.Map<?, ?> map
+                    ? map.keySet().toString() : "<none>";
+            CopycatsMaterial primary = entity == null ? null
+                    : CopycatsMaterialResolver.materialFor(entity, null);
+            CopycatsTrace.log(block, "ENTITY",
+                    "block=" + id
+                    + " rawClass=" + (block.getBlockEntity() == null
+                        ? "<null>" : block.getBlockEntity().getClass().getName())
+                    + " entityId=" + (entity == null ? "<null>" : entity.getId())
+                    + " directType=" + (direct == null ? "<null>" : direct.getClass().getSimpleName())
+                    + " partsType=" + (parts == null ? "<null>" : parts.getClass().getSimpleName())
+                    + " partKeys=" + partKeys
+                    + " primary=" + (primary == null ? "<null>" : primary.id()));
+        }
+        if (entity == null && !isCreatePanelOrStep(id)) {
             if (TRACED.add(id + "#missing-entity")) {
                 Logger.global.logWarning(String.format("STATIC block=%s has no retained Copycats block entity (actual=%s)",
                         id,
@@ -63,6 +81,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         }
 
         List<Quad> quads = switch (id) {
+            case "create:copycat_panel" -> createPanel(entity);
+            case "create:copycat_step" -> createStep(entity);
             case "copycats:copycat_byte" -> byteQuads(entity);
             case "copycats:copycat_vertical_half_layer" -> verticalHalfLayer(entity);
             case "copycats:copycat_flat_pane" -> flatPane(entity);
@@ -102,6 +122,17 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             }
         }
         tileModel.initialize(renderStart);
+        if (CopycatsTrace.enabled(block)) {
+            java.util.Map<String, Long> materials = new java.util.TreeMap<>();
+            for (Quad quad : quads) {
+                String material = quad.material() == null ? "<null>" : quad.material().id();
+                materials.merge(material, 1L, Long::sum);
+            }
+            CopycatsTrace.log(block, "GEOMETRY",
+                    "block=" + id + " materialQuads=" + materials
+                    + " generated=" + quads.size() + " emitted=" + emitted
+                    + " missing=" + (quads.size() - emitted));
+        }
 
         if (emitted > 0) {
             blockColor.set(1f, 1f, 1f, 1f, true);
@@ -111,10 +142,38 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             Logger.global.logDebug(String.format("STATIC block=%s state=%s entity=%s geometryQuads=%s emittedQuads=%s",
                     id,
                     block.getBlockState(),
-                    entity.getId(),
+                    entity == null ? "<null>" : entity.getId(),
                     quads.size(),
                     emitted));
         }
+    }
+
+    private static boolean isCreatePanelOrStep(String id) {
+        return "create:copycat_panel".equals(id) || "create:copycat_step".equals(id);
+    }
+
+    /** Create's CASING_3PX profile, facing the clicked support surface. */
+    private List<Quad> createPanel(CopycatsTerrainBlockEntity entity) {
+        CopycatsMaterial material = CopycatsMaterialResolver.createPanelOrStepMaterial(entity);
+        if (material == null) return List.of();
+
+        CopycatsTransform transform = CopycatsStaticFacing.panel(property("facing"));
+        List<Quad> out = new ArrayList<>();
+        cuboid(out, transform, 0, 0, 0, 16, 3, 16, material);
+        return out;
+    }
+
+    /** Create's STEP_BOTTOM/STEP_TOP: half-height, half-depth, rotated about Y. */
+    private List<Quad> createStep(CopycatsTerrainBlockEntity entity) {
+        CopycatsMaterial material = CopycatsMaterialResolver.createPanelOrStepMaterial(entity);
+        if (material == null) return List.of();
+
+        CopycatsTransform transform = new CopycatsTransform()
+                .rotateY(yRotation(property("facing")));
+        List<Quad> out = new ArrayList<>();
+        boolean top = "top".equals(property("half"));
+        cuboid(out, transform, 0, top ? 8 : 0, 8, 16, top ? 16 : 8, 16, material);
+        return out;
     }
 
     private List<Quad> byteQuads(CopycatsTerrainBlockEntity entity) {
@@ -504,7 +563,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (!usable(material)) return List.of();
         List<Quad> out = new ArrayList<>();
         cuboid(out,
-                new CopycatsTransform().rotateY(yRotation(property("facing"))),
+                CopycatsStaticFacing.verticalStep(property("facing")),
                 8, 0, 8, 16, 16, 16, material);
         return out;
     }

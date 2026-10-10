@@ -43,6 +43,22 @@ final class ConnectedTextureResolver {
     private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/ConnectedTextures");
     private static final String VIRTUAL_PREFIX = "bluemap3d:connected/";
     private static final Set<String> WARNED = ConcurrentHashMap.newKeySet();
+    private static final boolean TRACE_COPYCATS =
+            Boolean.getBoolean("bluemap.copycats.trace");
+    private static final java.util.concurrent.atomic.AtomicInteger COPYCATS_TRACE_LINES =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    private static void traceCopycats(BlockRenderContext context, ModelQuad quad,
+            String phase, String explanation) {
+        if (!TRACE_COPYCATS
+                || !CopiedMaterialResolver.isMaterialWrapper(context.state())
+                || COPYCATS_TRACE_LINES.getAndIncrement() >= 80) return;
+        LOGGER.debug("COPYCATS-MOVING-TRACE phase={} wrapper={} pos=({},{},{}) source={} cullFace={} shadeFace={} {}",
+                phase, context.state().getBlock(),
+                context.x(), context.y(), context.z(),
+                quad.texture(), quad.cullFace(), quad.shadeFace(), explanation);
+    }
+
 
     private final AssetIndex assets;
     private final Function<BlockState, List<ModelQuad>> baseQuads;
@@ -97,10 +113,16 @@ final class ConnectedTextureResolver {
 
     private List<ModelQuad> resolveQuad(ModelQuad quad, BlockRenderContext context) {
         Direction face = quad.shadeFace() != null ? quad.shadeFace() : quad.cullFace();
-        if (face == null) return List.of(quad);
+        if (face == null) {
+            traceCopycats(context, quad, "CT-SKIP", "reason=no-face-metadata");
+            return List.of(quad);
+        }
 
         AxisPair axes = axesFor(quad, face);
-        if (axes == null) return List.of(quad);
+        if (axes == null) {
+            traceCopycats(context, quad, "CT-SKIP", "reason=no-uv-axes face=" + face);
+            return List.of(quad);
+        }
 
         FusionSpec fusion = fusionSpec(quad.texture());
         if (fusion != null) {
@@ -112,18 +134,29 @@ final class ConnectedTextureResolver {
                     (other, front, direction) ->
                             fusion.predicate().test(
                                     context.state(), other, front, face, direction));
+            traceCopycats(context, quad, "CT-FUSION", "face=" + face
+                    + " mask=0x" + Integer.toHexString(mask)
+                    + " layout=" + fusion.layout());
             return transformFusion(quad, fusion, mask);
         }
 
         CreateConnectedTextures.Spec create = createSpec(
                 quad.texture(), context.state());
-        if (create == null) return List.of(quad);
+        if (create == null) {
+            traceCopycats(context, quad, "CT-NOMATCH",
+                    "reason=no-spec-for-wrapper-or-material face=" + face);
+            return List.of(quad);
+        }
 
         String sheet = create.sheetTexture(context.x(), context.y(), context.z());
         boolean sheetAvailable = rawTexture(sheet) != null;
         ConnectedTextureDiagnostics.recordMovingCreate(
                 quad.texture(), sheet, sheetAvailable);
-        if (!sheetAvailable) return List.of(quad);
+        if (!sheetAvailable) {
+            traceCopycats(context, quad, "CT-MISSING-SHEET",
+                    "face=" + face + " sheet=" + sheet + " type=" + create.type());
+            return List.of(quad);
+        }
 
         int mask = connectionMask(
                 context,
@@ -134,6 +167,9 @@ final class ConnectedTextureResolver {
         mask = constrainCreateCorners(mask);
         ConnectedTextureLayout.Grid grid = ConnectedTextureLayout.createGrid(create.type());
         int tile = ConnectedTextureLayout.createTile(create.type(), mask);
+        traceCopycats(context, quad, "CT-CREATE", "face=" + face
+                + " sheet=" + sheet + " type=" + create.type()
+                + " mask=0x" + Integer.toHexString(mask) + " tile=" + tile);
         String key = "create|" + create.cacheKey(context.x(), context.y(), context.z())
                 + "|" + mask;
         return transformed.computeIfAbsent(
