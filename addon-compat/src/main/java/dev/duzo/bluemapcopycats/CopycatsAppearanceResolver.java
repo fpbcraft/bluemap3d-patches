@@ -14,6 +14,7 @@ import de.bluecolored.bluemap.core.util.math.Color;
 import de.bluecolored.bluemap.core.world.BlockState;
 import de.bluecolored.bluemap.core.world.block.BlockNeighborhood;
 import dev.duzo.bluemapctm.ConnectedTextureTerrainDispatch;
+import dev.duzo.bluemapctm.CopiedMaterialConnectedTextures;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,11 +27,13 @@ final class CopycatsAppearanceResolver {
 
     private final ResourcePack resourcePack;
     private final TextureGallery textureGallery;
+    private final CopiedMaterialConnectedTextures copiedConnectedTextures;
     private final BlockColorCalculatorFactory.BlockColorCalculator blockColorCalculator;
 
     CopycatsAppearanceResolver(ResourcePack resourcePack, TextureGallery textureGallery) {
         this.resourcePack = resourcePack;
         this.textureGallery = textureGallery;
+        this.copiedConnectedTextures = new CopiedMaterialConnectedTextures(resourcePack);
         this.blockColorCalculator = resourcePack.getColorCalculatorFactory().createCalculator();
     }
 
@@ -83,7 +86,8 @@ final class CopycatsAppearanceResolver {
         ResourcePath<Texture> texture =
                 selected.getTexture().getTexturePath(model.getTextures()::get);
         if (texture == null) texture = ResourcePack.MISSING_TEXTURE;
-        int textureIndex = textureGallery.get(texture);
+        var connected = copiedConnectedTextures.resolve(texture, materialState, wantedFace, block);
+        int textureIndex = textureGallery.get(connected.texture());
 
         Color tint = new Color().set(1f, 1f, 1f, 1f, true);
         if (selected.getTintindex() >= 0) {
@@ -92,9 +96,11 @@ final class CopycatsAppearanceResolver {
                     tint);
             if (tint.a < 0) tint.set(1f, 1f, 1f, 1f, true);
         }
-        return new Appearance(textureIndex, tint);
+        return new Appearance(textureIndex, tint,
+                connected.u0(), connected.v0(), connected.u1(), connected.v1());
     }
 
-    record Appearance(int textureIndex, Color tint) {
+    record Appearance(int textureIndex, Color tint,
+            float u0, float v0, float u1, float v1) {
     }
 }
