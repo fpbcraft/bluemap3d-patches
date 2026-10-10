@@ -222,6 +222,22 @@ final class ConnectedTextureResolver {
             return false;
         }
 
+        // The source is a copied material but the geometry owner is still
+        // a Create/Copycats wrapper. Neighbor snapshots can already have been
+        // decoded to their effective material states by VolumeMesher; in that
+        // case ResourcePackSource.quadsFor(other) may not be able to reconstruct
+        // a matching wrapper surface. Compare actual copied materials first,
+        // then retain the ordinary CT sheet/predicate path below.
+        if (CopiedMaterialResolver.isMaterialWrapper(context.state())) {
+            BlockState material = CopiedMaterialResolver.materialFor(
+                    context.blockEntityData(), null);
+            if (CopiedMaterialResolver.usable(material)
+                    && material.equals(other)
+                    && !current.positionVariant()) {
+                return true;
+            }
+        }
+
         int[] offset = offsetFor(direction, axes);
         int ox = context.x() + offset[0];
         int oy = context.y() + offset[1];
