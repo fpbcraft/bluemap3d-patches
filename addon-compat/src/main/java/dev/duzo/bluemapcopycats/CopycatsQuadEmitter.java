@@ -42,8 +42,10 @@ final class CopycatsQuadEmitter {
                 p[6]/16f,p[7]/16f,p[8]/16f,
                 p[9]/16f,p[10]/16f,p[11]/16f);
 
-        target.setUvs(f1, 0f,1f, 1f,1f, 1f,0f);
-        target.setUvs(f2, 0f,1f, 1f,0f, 0f,0f);
+        target.setUvs(f1, appearance.u0(),appearance.v1(),
+                appearance.u1(),appearance.v1(), appearance.u1(),appearance.v0());
+        target.setUvs(f2, appearance.u0(),appearance.v1(),
+                appearance.u1(),appearance.v0(), appearance.u0(),appearance.v0());
         target.setMaterialIndex(f1, appearance.textureIndex());
         target.setMaterialIndex(f2, appearance.textureIndex());
 
