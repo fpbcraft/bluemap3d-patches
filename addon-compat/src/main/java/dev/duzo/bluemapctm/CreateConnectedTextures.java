@@ -30,6 +30,9 @@ final class CreateConnectedTextures {
         Spec createDeco = createDeco(texture, blockId, properties);
         if (createDeco != null) return createDeco;
 
+        Spec railways = railways(texture);
+        if (railways != null) return railways;
+
         if (!texture.startsWith(PREFIX)) return null;
         String path = texture.substring(PREFIX.length());
         String blockPath = blockPath(blockId);
@@ -121,6 +124,30 @@ final class CreateConnectedTextures {
         return null;
     }
 
+    private static Spec railways(String texture) {
+        String prefix = "railways:block/palettes/";
+        if (!texture.startsWith(prefix)) return null;
+
+        String name = texture.substring(texture.lastIndexOf('/') + 1);
+        String type = railwaysType(name);
+        return type == null ? null : new Spec(type, texture + "_connected", false);
+    }
+
+    private static String railwaysType(String name) {
+        return switch (name) {
+            case "slashed", "riveted", "vent",
+                    "wrapped_slashed", "copper_wrapped_slashed", "iron_wrapped_slashed" ->
+                    "omnidirectional";
+            case "riveted_pillar_side", "tank_side",
+                    "wrapped_tank_side", "copper_wrapped_tank_side", "iron_wrapped_tank_side" ->
+                    "vertical_pinkmachine";
+            case "boiler_side", "wrapped_boiler_side",
+                    "copper_wrapped_boiler_side", "iron_wrapped_boiler_side" ->
+                    "horizontal_kryppers";
+            default -> name.endsWith("_window") ? "vertical" : null;
+        };
+    }
+
     private static Spec createDeco(
             String texture,
             String blockId,
@@ -149,6 +176,14 @@ final class CreateConnectedTextures {
 
     static String typeForSheet(String texture) {
         if (texture == null) return null;
+
+        String railwayPrefix = "railways:block/palettes/";
+        if (texture.startsWith(railwayPrefix) && texture.endsWith("_connected")) {
+            String name = texture.substring(texture.lastIndexOf('/') + 1,
+                    texture.length() - "_connected".length());
+            String type = railwaysType(name);
+            if (type != null) return type;
+        }
 
         if (texture.startsWith("createdeco:block/palettes/sheet_metal/")
                 && texture.endsWith("_sheet_metal_connected")) {
