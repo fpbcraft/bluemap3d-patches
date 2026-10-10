@@ -46,10 +46,12 @@ public final class TileRefreshQueue implements BlueMap3D.TileRefresher {
     private final Map<String, Set<Vector2i>> pendingTiles = new HashMap<>();
     /** Browser tiles whose forced BlueMap render has been scheduled but not yet completed. */
     private final Map<String, Set<Vector2i>> renderingTiles = new HashMap<>();
-    /** Tiles queued since the browser was last told, per map id. Guarded by itself. */
+    /** Latest completed refresh snapshot, repeated across feeds for slow clients. */
     private final Map<String, Set<Vector2i>> undelivered = new HashMap<>();
     private int ticks;
     private volatile int version;
+    /** Full browser refresh is required when a world-region render completes. */
+    private static final int FULL_MAP_REFRESH_SENTINEL = Integer.MIN_VALUE;
 
     /**
      * Hard cap on how many tile coordinates go into one feed.
@@ -61,11 +63,9 @@ public final class TileRefreshQueue implements BlueMap3D.TileRefresher {
     private static final int MAX_PUBLISHED_TILES = 64;
 
     /**
-     * Takes the tiles queued since the last call, so the browser can reload exactly those.
-     *
-     * <p>Draining rather than snapshotting: each tile needs to reach the browser once, and
-     * a viewer who joins later gets fresh tiles anyway because nothing is cached for them
-     * yet.
+     * Returns the latest completed change for every feed poll. A one-shot drain can
+     * be lost when the browser misses a poll and later observes the new version with no
+     * dirty coordinates. The set is replaced on the next completed refresh.
      */
     public Map<String, List<int[]>> drainUndelivered() {
         synchronized (undelivered) {
@@ -83,7 +83,6 @@ public final class TileRefreshQueue implements BlueMap3D.TileRefresher {
                 }
                 out.put(mapId, coords);
             });
-            undelivered.clear();
             return out;
         }
     }
@@ -121,8 +120,12 @@ public final class TileRefreshQueue implements BlueMap3D.TileRefresher {
                     // map tile coordinates the browser needs to evict after rendering.
                     pendingRegions.computeIfAbsent(map.getId(), key -> new HashSet<>())
                             .add(region);
+                    // A world-region render can rewrite many hires and lowres tiles.
+                    // A sampled block's single posToTile result is not an adequate
+                    // browser invalidation footprint. Signal a full visible-map refresh
+                    // after completion instead of advertising an incomplete tile list.
                     pendingTiles.computeIfAbsent(map.getId(), key -> new HashSet<>())
-                            .add(map.posToTile(position));
+                            .add(new Vector2i(FULL_MAP_REFRESH_SENTINEL, FULL_MAP_REFRESH_SENTINEL));
                 }
             }
         } catch (RuntimeException e) {
@@ -218,6 +221,7 @@ public final class TileRefreshQueue implements BlueMap3D.TileRefresher {
         }
 
         synchronized (undelivered) {
+            undelivered.clear();
             completed.forEach((mapId, tiles) ->
                     undelivered.computeIfAbsent(mapId, key -> new HashSet<>()).addAll(tiles));
         }
