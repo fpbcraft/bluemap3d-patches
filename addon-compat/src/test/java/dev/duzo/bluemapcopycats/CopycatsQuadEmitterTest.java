@@ -78,6 +78,25 @@ class CopycatsQuadEmitterTest {
     }
 
     @Test
+    void eightSampledBytePiecesEachExposeThreeFaces() {
+        int total = 0;
+        for (int y = 0; y < 2; y++) {
+            for (int z = 0; z < 2; z++) {
+                for (int x = 0; x < 2; x++) {
+                    int visible = 0;
+                    for (int face = 0; face < 6; face++) {
+                        if (!CopycatsTerrainRenderer.internalBytePieceFace(face, x, y, z))
+                            visible++;
+                    }
+                    assertEquals(3, visible);
+                    total += visible;
+                }
+            }
+        }
+        assertEquals(24, total);
+    }
+
+    @Test
     void remappedCopycatPieceSamplesCopiedSourcePixelsNotDestinationPixels() {
         // Source piece 12..16 is placed at destination 4..8. The copied
         // material must still come from the last four texture pixels.
