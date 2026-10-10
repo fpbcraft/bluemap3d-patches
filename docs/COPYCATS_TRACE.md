@@ -89,6 +89,37 @@ pass might skip generated geometry.
 Moving traces are capped independently at 60 samples per source. Static
 traces share the configured cap. Tracing is fully off unless explicitly enabled.
 
+## Findings from October 10, 10:50 trace
+
+The copied Railways material was successfully decoded on
+`copycats:copycat_byte_panel` at `(-889, 72, -411)`. A Create
+`omnidirectional` CT spec was found; the generated
+`wrapped_slashed_connected/sheet` was available; the expected atlas index
+and tile UVs were selected. Geometry also emitted successfully.
+This rules out missing NBT or a missing CT image **for the sampled static
+blocks**. In contrast, it does not confirm the connection mask is correct
+for each 8x8 material part.
+
+The earlier static emitter always mapped the *entire 16x16 material face*
+onto every partial quad. A new UV projection fix samples each quad's
+actual position within that 16x16 face. Tests assert that adjacent 8px
+panels share the same UVs along their common seam. This addresses a
+specific cause of repeated texture borders across individual copycat
+parts. It does not yet fix every form of neighbor connectivity.
+
+The original trace budget of 240 was reached after only about ten
+blocks due to repeated face lookups. Identical per-position events
+are now deduplicated before consuming the budget.
+
+**No** `COPYCATS-MOVING-TRACE` lines were captured. Static BlueMap renders
+do not force BlueMap3D to rebake the moving locomotive. Test an actual
+assembled-train remesh separately.
+
+If the objective is the locomotive around X=-907, Z=-387, reduce the
+radius to `8` to avoid collecting many blocks at the edge of the
+original 24-block window. For dedicated static samples at
+`(-889,-411)`, use `center=-889,-411` with a small radius.
+
 ## Minimal reproducible case
 
 Use a small cluster of unassembled blocks near the trace center:
