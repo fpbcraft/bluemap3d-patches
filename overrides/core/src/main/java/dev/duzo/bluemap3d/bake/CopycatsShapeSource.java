@@ -160,7 +160,8 @@ public final class CopycatsShapeSource implements BlockModelSource {
             LOGGER.debug("COPYCATS-MOVING-TRACE phase=SHAPE block={} pos={} material={} metaKeys={} boxes={} quads={} missingFace={} textures={}",
                     id, context == null ? "<none>" : context.x()+","+context.y()+","+context.z(),
                     BuiltInRegistries.BLOCK.getKey(material.getBlock()),
-                    metadata.getAllKeys(), boxes.size(), out.size(), missingFace, textures);
+                    metadata == null ? "<null>" : metadata.getAllKeys(),
+                    boxes.size(), out.size(), missingFace, textures);
         }
         return out.isEmpty() ? List.of() : List.copyOf(out);
     }
