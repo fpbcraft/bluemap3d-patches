@@ -101,6 +101,13 @@ class PatchArchitectureTest(unittest.TestCase):
         build = (ROOT / "build.sh").read_text()
         self.assertIn("CopycatsShapeSource.java", build)
 
+    def test_create_copycat_material_metadata_is_kept_in_carriage_snapshot(self) -> None:
+        patch = (ROOT / "patches/0015-base.patch").read_text()
+        self.assertIn('("create".equals(namespace) || "create_connected".equals(namespace))', patch)
+        self.assertIn('path.contains("copycat")', patch)
+        self.assertIn('("railways".equals(namespace) && path.startsWith("copycat_"))', patch)
+        self.assertIn('renderDataOf(updateTag, entry.getValue())', patch)
+
     def test_region_refresh_invalidates_loaded_hires_tiles_and_repeats_feed(self) -> None:
         queue = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java").read_text()
         transform = (ROOT / "scripts/transforms/terrain_reload.py").read_text()
