@@ -57,7 +57,7 @@ public final class CopiedMaterialConnectedTextures {
         return path != null && resources.getTextures().containsKey(path);
     }
 
-    private static Appearance tiled(
+    static Appearance tiled(
             ResourcePath<Texture> path, ConnectedTextureLayout.Grid grid, int tile) {
         int x = Math.floorMod(tile, grid.width());
         int y = Math.floorDiv(tile, grid.width());
@@ -66,7 +66,7 @@ public final class CopiedMaterialConnectedTextures {
                 (x + 1f) / grid.width(), (y + 1f) / grid.height());
     }
 
-    private static int constrainCorners(int mask) {
+    static int constrainCorners(int mask) {
         for (int c = 1; c < 8; c += 2) {
             int previous = (c + 7) % 8;
             int next = (c + 1) % 8;
