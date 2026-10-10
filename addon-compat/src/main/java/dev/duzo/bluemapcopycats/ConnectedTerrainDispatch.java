@@ -47,6 +47,28 @@ public final class ConnectedTerrainDispatch {
             }
             """;
 
+    private static final String HEADSTOCK_DISPATCH_JSON = """
+            {
+              "variants": {
+                "": {
+                  "renderer": "bluemap_copycats:headstock",
+                  "model": "bluemap_copycats:block/placeholder"
+                }
+              }
+            }
+            """;
+
+    private static final String BOGIE_DISPATCH_JSON = """
+            {
+              "variants": {
+                "": {
+                  "renderer": "bluemap_copycats:blocks_bogies",
+                  "model": "bluemap_copycats:block/placeholder"
+                }
+              }
+            }
+            """;
+
     private ConnectedTerrainDispatch() {
     }
 
@@ -94,6 +116,12 @@ public final class ConnectedTerrainDispatch {
             var createCopycatDispatch = ResourcesGson.INSTANCE.fromJson(
                     new StringReader(COPYCAT_DISPATCH_JSON),
                     de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState.class);
+            var headstockDispatch = ResourcesGson.INSTANCE.fromJson(
+                    new StringReader(HEADSTOCK_DISPATCH_JSON),
+                    de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState.class);
+            var bogieDispatch = ResourcesGson.INSTANCE.fromJson(
+                    new StringReader(BOGIE_DISPATCH_JSON),
+                    de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState.class);
 
             // Snapshot the parsed resources before installing any dispatch entries.
             var originalsByPath = new HashMap<>(states);
@@ -107,9 +135,27 @@ public final class ConnectedTerrainDispatch {
 
             int patched = 0;
             int patchedCreate = 0;
+            int patchedHeadstocks = 0;
+            int patchedBogies = 0;
             for (Map.Entry<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
                     entry : new ArrayList<>(paths.entrySet())) {
                 String id = entry.getKey();
+                if (isRailwaysCopycatHeadstock(id)) {
+                    var original = originalsByPath.get(entry.getValue());
+                    if (original != null) {
+                        ORIGINALS.put(id, original);
+                        states.put(entry.getValue(), headstockDispatch);
+                        entry.getValue().setResource(headstockDispatch);
+                        patchedHeadstocks++;
+                    }
+                    continue;
+                }
+                if (isBlocksBogiesBlock(id)) {
+                    states.put(entry.getValue(), bogieDispatch);
+                    entry.getValue().setResource(bogieDispatch);
+                    patchedBogies++;
+                    continue;
+                }
                 if (isCreateCopycat(id)) {
                     // A generated resource-pack JSON can lose priority to Create's
                     // original blockstate, leaving the normal renderer with no copycat
@@ -150,11 +196,20 @@ public final class ConnectedTerrainDispatch {
 
             Logger.global.logInfo(String.format(
                     "Connected fence/wall compatibility routed %s blockstate id(s), including %s diagonal alias(es); "
-                            + "static Create copycat panels/steps routed %s id(s)",
-                    patched, aliases, patchedCreate));
+                            + "static Create copycat panels/steps routed %s id(s); "
+                            + "Railways copycat headstocks routed %s id(s); Blocks & Bogies routed %s id(s)",
+                    patched, aliases, patchedCreate, patchedHeadstocks, patchedBogies));
         } catch (ReflectiveOperationException | RuntimeException error) {
             Logger.global.logError("Failed to install connected fence/wall compatibility", error);
         }
+    }
+
+    static boolean isRailwaysCopycatHeadstock(String id) {
+        return id != null && id.startsWith("railways:copycat_headstock");
+    }
+
+    static boolean isBlocksBogiesBlock(String id) {
+        return BlocksBogiesStaticShape.parse(id) != null;
     }
 
     static boolean isCreateCopycat(String id) {
