@@ -78,6 +78,23 @@ class CopycatsQuadEmitterTest {
     }
 
     @Test
+    void remappedCopycatPieceSamplesCopiedSourcePixelsNotDestinationPixels() {
+        // Source piece 12..16 is placed at destination 4..8. The copied
+        // material must still come from the last four texture pixels.
+        float[] source = new float[]{
+                12,0,16, 16,0,16, 16,16,16, 12,16,16};
+        float[] destination = new float[]{
+                4,0,16, 8,0,16, 8,16,16, 4,16,16};
+        float[] expected = CopycatsQuadEmitter.projectedUvs(
+                source, 0.25f, 0.125f, 0.375f, 0.25f);
+        float[] wronglyProjected = CopycatsQuadEmitter.projectedUvs(
+                destination, 0.25f, 0.125f, 0.375f, 0.25f);
+        close(expected[0], 0.34375f);
+        close(expected[2], 0.375f);
+        close(wronglyProjected[0], 0.28125f);
+    }
+
+    @Test
     void nonAxisAlignedSurfacesKeepExistingUvs() {
         float[] uv = CopycatsQuadEmitter.projectedUvs(new float[]{
                 0,0,0, 16,0,0, 16,16,16, 0,16,16
