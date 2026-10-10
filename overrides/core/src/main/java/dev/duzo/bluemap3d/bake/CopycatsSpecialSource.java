@@ -553,7 +553,7 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     }
 
     /** Recover the outward face after copying, rotating or mirroring geometry. */
-    private static Direction physicalFace(float[] vertices, Direction fallback) {
+    static Direction physicalFace(float[] vertices, Direction fallback) {
         if (vertices == null || vertices.length < 9) return fallback;
         float ax=vertices[3]-vertices[0], ay=vertices[4]-vertices[1],
                 az=vertices[5]-vertices[2];
