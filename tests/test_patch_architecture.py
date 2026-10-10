@@ -132,7 +132,7 @@ class PatchArchitectureTest(unittest.TestCase):
             transform,
         )
         self.assertIn(
-            "BlockPos worldPos = contraption.anchor.offset(local);",
+            "BlockPos world = contraption.anchor.offset(local);",
             transform,
         )
 
