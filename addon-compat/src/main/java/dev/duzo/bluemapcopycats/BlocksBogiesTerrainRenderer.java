@@ -69,6 +69,9 @@ public final class BlocksBogiesTerrainRenderer implements BlockRenderer {
             return;
         }
 
+        // The procedural fallback is already positioned in block space;
+        // only upstream OBJ meshes require the Create style transform.
+        this.terrainOffsetY = 0f;
         int frame = texture(spec.small() ? "create_bb:block/bogie/small_frame"
                 : "create_bb:block/bogie/frame2",
                 "create_bb:block/bogie/frame", "create:block/bogey/top");
