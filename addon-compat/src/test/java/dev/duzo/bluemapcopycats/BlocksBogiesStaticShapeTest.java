@@ -55,24 +55,30 @@ final class BlocksBogiesStaticShapeTest {
     }
 
     @Test
-    void terrainRailAlignmentKeepsWheelAndFrameTransformsTogether() {
-        // OBJ wheel radii: small 7/16, large 12/16, extra large 16/16.
-        // This tests the world-space wheel clearance when the whole model
-        // is offset, not an independent wheel translation.
-        var small = BlocksBogiesStaticShape.parse("create_bb:s_060");
+    void bogeyRenderOriginMatchesCreateStyleTransform() {
         var large = BlocksBogiesStaticShape.parse("create_bb:l_060");
-        var extraLarge = BlocksBogiesStaticShape.parse("create_bb:xl_060");
-        assertNotNull(small);
+        var extra = BlocksBogiesStaticShape.parse("create_bb:xl_060");
         assertNotNull(large);
-        assertNotNull(extraLarge);
+        assertNotNull(extra);
+        float origin = .5f - 1.5f - 1f/128f;
+        assertEquals(origin, large.staticTerrainOffsetY(), .00001f);
+        assertEquals(origin, extra.staticTerrainOffsetY(), .00001f);
+        // Upstream OBJ wheels are centered at local y=0 and their wheel
+        // radii are 12/16 and 1 respectively.
+        assertEquals(-.7578125f, large.wheelY() + origin - .75f, .00001f);
+        assertEquals(-.7578125f, extra.wheelY() + origin - 1f, .00001f);
+    }
 
-        assertEquals(-.1875f, small.staticTerrainOffsetY(), .00001f);
-        assertEquals(small.staticTerrainOffsetY(), large.staticTerrainOffsetY(), .00001f);
-        assertEquals(large.staticTerrainOffsetY(), extraLarge.staticTerrainOffsetY(), .00001f);
-
-        assertEquals(.125f, small.wheelY() + small.staticTerrainOffsetY() - 7f/16f, .00001f);
-        assertEquals(.0625f, large.wheelY() + large.staticTerrainOffsetY() - 12f/16f, .00001f);
-        assertEquals(.0625f, extraLarge.wheelY() + extraLarge.staticTerrainOffsetY() - 1f, .00001f);
+    @Test
+    void usesStyleRatherThanAxlesToSelectBogieFrameFamily() {
+        var bogie = BlocksBogiesStaticShape.parse("create_bb:l_060");
+        assertNotNull(bogie);
+        assertEquals("p", bogie.objVariant("create_bb:triple_axle_pistonless", "create_bb:l_060"));
+        assertEquals("l", bogie.objVariant("create_bb:triple_axle_long", "create_bb:l_060_rot"));
+        assertEquals("lw", bogie.objVariant("create_bb:triple_axle_walschaerts_long", "create_bb:l_060_rot"));
+        assertEquals("sw", bogie.objVariant("create_bb:triple_axle_walschaerts_short", "create_bb:l_060_rot"));
+        assertEquals("p", bogie.objVariant(null, "create_bb:l_060"));
+        assertEquals("l", bogie.objVariant(null, "create_bb:l_060_rot"));
     }
 
     @Test
