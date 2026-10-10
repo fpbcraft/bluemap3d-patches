@@ -554,23 +554,8 @@ public final class CopycatsSpecialSource implements BlockModelSource {
 
     /** Recover the outward face after copying, rotating or mirroring geometry. */
     static Direction physicalFace(float[] vertices, Direction fallback) {
-        if (vertices == null || vertices.length < 9) return fallback;
-        float ax=vertices[3]-vertices[0], ay=vertices[4]-vertices[1],
-                az=vertices[5]-vertices[2];
-        float bx=vertices[6]-vertices[0], by=vertices[7]-vertices[1],
-                bz=vertices[8]-vertices[2];
-        float x=ay*bz-az*by, y=az*bx-ax*bz, z=ax*by-ay*bx;
-        float largest=Math.max(Math.abs(x),Math.max(Math.abs(y),Math.abs(z)));
-        if (largest<0.0001f) return fallback;
-        // Sloped Copycats faces are not cardinal; preserve their original
-        // material-facing fallback rather than inventing a false CT direction.
-        int active = (Math.abs(x)>largest*.001f?1:0)
-                + (Math.abs(y)>largest*.001f?1:0)
-                + (Math.abs(z)>largest*.001f?1:0);
-        if (active!=1) return fallback;
-        if (Math.abs(x)==largest) return x>0 ? Direction.EAST : Direction.WEST;
-        if (Math.abs(y)==largest) return y>0 ? Direction.UP : Direction.DOWN;
-        return z>0 ? Direction.SOUTH : Direction.NORTH;
+        return Direction.valueOf(
+                CopycatsPhysicalFace.of(vertices, fallback.name()));
     }
 
     private static float[] p(float x, float y, float z) {
