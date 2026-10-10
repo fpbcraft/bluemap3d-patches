@@ -24,10 +24,8 @@ def apply() -> None:
     # serialized sizes) and can miss real block removal/re-addition. Replace the complete
     # method after the base patch with an exact structural hash cached behind Sable's
     # authoritative block-change signal.
-    _replace_file(
-        'if (!"copycats".equals(namespace)) {',
-        'if (!CompatRegistry.get().preserveMovingNamespace(namespace)) {',
-    )
+    # Material wrapper namespaces are now selected explicitly in base patch 0015.
+    # Do not replace their NBT capture condition with a broad namespace filter.
 
     source = TARGET.read_text()
     source = _apply_sable_integration(source)
