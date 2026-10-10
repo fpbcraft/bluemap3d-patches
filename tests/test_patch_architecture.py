@@ -123,6 +123,24 @@ class PatchArchitectureTest(unittest.TestCase):
         drain = drain.split("public int version()", 1)[0]
         self.assertNotIn("undelivered.clear()", drain)
 
+    def test_train_snapshots_are_pruned_only_on_authoritative_deletion(self) -> None:
+        interface = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/api/SceneObjectProvider.java").read_text()
+        persistent = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/api/PersistentSceneObjectProvider.java").read_text()
+        transform = (ROOT / "scripts/transforms/contraption_provider.py").read_text()
+
+        self.assertIn("isDefinitelyDeleted(ServerLevel level, String objectId)", interface)
+        self.assertIn("delegate.isDefinitelyDeleted(level, cached.id())", persistent)
+        self.assertIn("SceneObjectPersistenceStore.remove(id(), cached.id())", persistent)
+        self.assertIn("source = _apply_train_snapshot_cleanup(source)", transform)
+        self.assertIn("Create.RAILWAYS.trains.get(trainId)", transform)
+        self.assertIn("carriageIndex >= train.carriages.size()", transform)
+        self.assertIn("getTickCount() < 400", transform)
+        self.assertIn("suffix.indexOf('/', slash + 1) >= 0", transform)
+
+        # Carriage DISCARDED is normal during chunk unload, not deletion evidence.
+        removal = (ROOT / "overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionDeletionTracker.java").read_text()
+        self.assertIn("entity instanceof CarriageContraptionEntity", removal)
+
     def test_create_removal_tracking_is_wired_into_distribution(self) -> None:
         build = (ROOT / "build.sh").read_text()
         mixins = (ROOT / "overrides/addon-create/src/main/resources/bluemap3d_create.mixins.json").read_text()

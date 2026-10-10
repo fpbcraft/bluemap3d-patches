@@ -30,8 +30,59 @@ def apply() -> None:
     source = TARGET.read_text()
     source = _apply_sable_integration(source)
     source = _apply_terrain_invalidation(source)
+    source = _apply_train_snapshot_cleanup(source)
     TARGET.write_text(source)
 
+
+
+def _apply_train_snapshot_cleanup(s: str) -> str:
+    """Prune only disbanded or shortened trains, never unloaded carriage entities."""
+    needle = """    @Override
+    public Collection<String> deletedObjectIds(ServerLevel level) {
+        return ContraptionDeletionTracker.drain(level);
+    }"""
+    if s.count(needle) != 1:
+        raise SystemExit("ContraptionProvider train persistence cleanup anchor not found")
+    method = r'''    /**
+     * Train carriage entity DISCARDED events are not proof of deletion: Create destroys
+     * those entities whenever their chunks stop ticking, but the train continues to
+     * exist in Create.RAILWAYS.trains. Conversely, a disassembled train no longer has
+     * a registry entry and its previously persisted scene meshes must not remain as
+     * phantom locomotives after BlueMap's terrain tiles are refreshed.
+     */
+    @Override
+    public boolean isDefinitelyDeleted(ServerLevel level, String objectId) {
+        if (level.getServer() == null || level.getServer().getTickCount() < 400
+                || Create.RAILWAYS == null || objectId == null) {
+            // Give Create time to restore its saved train registry on startup.
+            return false;
+        }
+
+        ResourceLocation dimension = level.dimension().location();
+        String prefix = dimension.getNamespace() + "/" + dimension.getPath() + "/";
+        if (!objectId.startsWith(prefix)) return false;
+
+        String suffix = objectId.substring(prefix.length());
+        int slash = suffix.indexOf('/');
+        if (slash <= 0 || suffix.indexOf('/', slash + 1) >= 0) {
+            // Non-train contraption ids have no carriage-index suffix.
+            return false;
+        }
+
+        try {
+            UUID trainId = UUID.fromString(suffix.substring(0, slash));
+            int carriageIndex = Integer.parseInt(suffix.substring(slash + 1));
+            if (carriageIndex < 0) return false;
+
+            Train train = Create.RAILWAYS.trains.get(trainId);
+            return train == null || carriageIndex >= train.carriages.size();
+        } catch (IllegalArgumentException invalidId) {
+            return false;
+        }
+    }
+
+'''
+    return s.replace(needle, method + needle, 1)
 
 def _apply_sable_integration(s: str) -> str:
     """Add Sable projection, child persistence, and positive deletion semantics."""

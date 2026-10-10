@@ -128,6 +128,14 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
         Set<String> cachedIds = new HashSet<>();
         for (SceneObject cached
                 : SceneObjectPersistenceStore.cached(id(), dimension, level, liveIds)) {
+            // Some providers (notably Create's train registry) can positively confirm
+            // destruction even when the entity removal callback was never delivered.
+            // Never apply this rule to absent *but possibly unloaded* entities.
+            if (delegate.isDefinitelyDeleted(level, cached.id())) {
+                SceneObjectPersistenceStore.remove(id(), cached.id());
+                LOGGER.info("Pruned obsolete persisted {} object {}", id(), cached.id());
+                continue;
+            }
             cachedIds.add(cached.id());
             merged.putIfAbsent(cached.id(), cached);
         }
