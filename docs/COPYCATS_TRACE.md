@@ -9,8 +9,26 @@ texture, generated CT sheet, connectivity mask or UVs were selected. Also,
 
 ## Activate
 
-Add the following **JVM arguments** to the Minecraft server launch (before `-jar`)
-and restart with matching BlueMap3D and compatibility-addon artifacts:
+Add the following **JVM arguments** to the Minecraft server launch and
+restart with matching BlueMap3D and compatibility-addon artifacts:
+
+**Crafty / NeoForge startup argument placement:** These are Java system properties,
+not Minecraft server command-line options. Put them in Crafty's Java/JVM arguments
+field, **before** the main class `cpw.mods.bootstraplauncher.BootstrapLauncher`
+(or before `-jar` on jar-based launch commands), not in server/game/extra
+arguments that follow `--launchTarget forgeserver`. Placing `-D...` flags after
+the main class results in `joptsimple.UnrecognizedOptionException: D is not a
+recognized option`.
+
+If Crafty has no distinct Java-arguments field, insert these flags immediately
+after the `java` executable in the actual start command. Alternatively, edit
+`user_jvm_args.txt` **only if** the launch script references that file; direct
+bootstrap-launcher commands may bypass it.
+
+Example order: `java -Dbluemap.copycats.trace=true [other JVM arguments]
+cpw.mods.bootstraplauncher.BootstrapLauncher --launchTarget forgeserver ...`
+
+
 
 ```text
 -Dbluemap.copycats.trace=true
