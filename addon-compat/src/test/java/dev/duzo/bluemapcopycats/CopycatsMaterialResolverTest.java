@@ -80,6 +80,44 @@ final class CopycatsMaterialResolverTest {
     }
 
     @Test
+    void createDefaultCopycatIsRenderableOnlyForPanelAndStep() {
+        CopycatsMaterial missing = CopycatsMaterialResolver.createPanelOrStepMaterial(null);
+        assertEquals("create:copycat_base", missing.id());
+        assertEquals(Map.of(), missing.properties());
+
+        CopycatsMaterial own = CopycatsMaterialResolver.createPanelOrStepMaterial(
+                entity(state("create:copycat_base", Map.of())));
+        assertEquals("create:copycat_base", own.id());
+
+        CopycatsMaterial legacy = CopycatsMaterialResolver.createPanelOrStepMaterial(
+                entity(state("copycats:copycat_base", Map.of())));
+        assertEquals("create:copycat_base", legacy.id());
+
+        CopycatsMaterial custom = CopycatsMaterialResolver.createPanelOrStepMaterial(
+                entity(state("pretty_in_pink:black_brushed_steel", Map.of("axis", "y"))));
+        assertEquals("pretty_in_pink:black_brushed_steel", custom.id());
+        assertEquals(Map.of("axis", "y"), custom.properties());
+
+        // Keep air and unknown materials rejected; do not accidentally render
+        // every malformed copycat as a default Create panel.
+        assertNull(CopycatsMaterialResolver.createPanelOrStepMaterial(
+                entity(state("minecraft:air", Map.of()))));
+        assertFalse(CopycatsMaterialResolver.usable(own));
+    }
+
+    private static CopycatsTerrainBlockEntity entity(Object material) {
+        CopycatsTerrainBlockEntity blockEntity = new CopycatsTerrainBlockEntity();
+        try {
+            var field = CopycatsTerrainBlockEntity.class.getDeclaredField("material");
+            field.setAccessible(true);
+            field.set(blockEntity, material);
+        } catch (ReflectiveOperationException error) {
+            throw new AssertionError(error);
+        }
+        return blockEntity;
+    }
+
+    @Test
     void unusableMaterialsRemainRejected() {
         assertFalse(CopycatsMaterialResolver.usable(null));
         assertFalse(CopycatsMaterialResolver.usable(new CopycatsMaterial("minecraft:air", Map.of())));
