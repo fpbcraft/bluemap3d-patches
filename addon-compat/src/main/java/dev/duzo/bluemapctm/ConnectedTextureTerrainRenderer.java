@@ -124,6 +124,7 @@ public final class ConnectedTextureTerrainRenderer implements BlockRenderer {
         this.variant = variant;
         this.modelResource = variant.getModel().getResource(resourcePack::getModel);
         if (modelResource == null) return;
+        modelResource.applyParent(resourcePack);
 
         int modelStart = blockModel.getStart();
 
