@@ -167,6 +167,11 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn('CopycatsTrace.log(owner, "CT"', ct)
         self.assertIn('COPYCATS-MOVING-TRACE phase=SOURCE', moving)
         self.assertIn('COPYCATS-MOVING-TRACE phase=SHAPE', shape)
+        resolver = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureResolver.java").read_text()
+        self.assertIn('COPYCATS-MOVING-TRACE phase={}', resolver)
+        self.assertIn('"reason=no-face-metadata"', resolver)
+        self.assertIn('"CT-NOMATCH"', resolver)
+        self.assertIn('"CT-MISSING-SHEET"', resolver)
 
     def test_static_copycats_and_railways_compatibility_is_wired(self) -> None:
         generator = (ROOT / "scripts/generate-static-resources.py").read_text()
