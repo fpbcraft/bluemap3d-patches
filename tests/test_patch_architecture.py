@@ -141,6 +141,27 @@ class PatchArchitectureTest(unittest.TestCase):
         removal = (ROOT / "overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionDeletionTracker.java").read_text()
         self.assertIn("entity instanceof CarriageContraptionEntity", removal)
 
+    def test_static_copycats_and_railways_compatibility_is_wired(self) -> None:
+        generator = (ROOT / "scripts/generate-static-resources.py").read_text()
+        registry = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/BlueMapCopycatsCompatAddon.java").read_text()
+        renderer = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/CopycatsTerrainRenderer.java").read_text()
+        appearance = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/CopycatsAppearanceResolver.java").read_text()
+        ctm_dispatch = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapctm/ConnectedTextureTerrainDispatch.java").read_text()
+        ctm_renderer = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapctm/ConnectedTextureTerrainRenderer.java").read_text()
+
+        self.assertIn('write_dispatch("create", ["copycat_panel", "copycat_step"]', generator)
+        self.assertIn('railways_windows = ("round_pane", "single_pane", "two_pane", "four_pane")', generator)
+        self.assertIn('"cullingIdentical": False', generator)
+        self.assertIn('new Key("create", "copycat")', registry)
+        self.assertIn('Registry.class.getDeclaredField("entries")', registry)
+        self.assertIn('CopycatsTerrainBlockEntity.class', registry)
+        self.assertIn('case "create:copycat_panel" -> createPanel(entity)', renderer)
+        self.assertIn('case "create:copycat_step" -> createStep(entity)', renderer)
+        self.assertIn('model.applyParent(resourcePack)', appearance)
+        self.assertIn('model.applyParent(resourcePack)', ctm_dispatch)
+        self.assertIn('modelResource.applyParent(resourcePack)', ctm_renderer)
+        self.assertIn('keepsTransparentWindowFaces(', ctm_renderer)
+
     def test_create_removal_tracking_is_wired_into_distribution(self) -> None:
         build = (ROOT / "build.sh").read_text()
         mixins = (ROOT / "overrides/addon-create/src/main/resources/bluemap3d_create.mixins.json").read_text()
