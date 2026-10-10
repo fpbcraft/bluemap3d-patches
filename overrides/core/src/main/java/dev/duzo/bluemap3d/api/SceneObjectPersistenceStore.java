@@ -38,7 +38,7 @@ final class SceneObjectPersistenceStore {
     private static final Path FILE =
             Path.of("config", "bluemap3d", "cache", "scene-objects.json");
     private static final long SAVE_INTERVAL_NANOS = 5_000_000_000L;
-    private static final int CACHE_FORMAT_VERSION = 6;
+    private static final int CACHE_FORMAT_VERSION = 7;
 
     private static final Object LOCK = new Object();
     private static final Map<String, SavedObject> SAVED = new ConcurrentHashMap<>();
@@ -83,6 +83,7 @@ final class SceneObjectPersistenceStore {
                         boolean preV3 = sourceFormat < 3;
                         boolean preV4 = sourceFormat < 4;
                         boolean preV5 = sourceFormat < 5;
+                        boolean preV7 = sourceFormat < 7;
 
                         for (JsonElement element : entries) {
                             SavedObject saved = GSON.fromJson(element, SavedObject.class);
@@ -95,7 +96,7 @@ final class SceneObjectPersistenceStore {
 
                             if (ScenePersistencePolicy.shouldDropForMigration(
                                     saved.provider, sourceFormat)) {
-                                if (preV3 && "create_contraptions".equals(saved.provider)) {
+                                if (preV7 && "create_contraptions".equals(saved.provider)) {
                                     droppedCreate++;
                                 } else if (preV4 && "sable_ships".equals(saved.provider)) {
                                     droppedSable++;

@@ -93,6 +93,88 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertNotIn("BlueMap3DMod procedural import insertion point", script)
         self.assertNotIn("BlueMap3DMod procedural source insertion point", script)
 
+    def test_create_removal_tracking_is_wired_into_distribution(self) -> None:
+        build = (ROOT / "build.sh").read_text()
+        mixins = (ROOT / "overrides/addon-create/src/main/resources/bluemap3d_create.mixins.json").read_text()
+        transform = (ROOT / "scripts/transforms/contraption_provider.py").read_text()
+
+        self.assertIn("ContraptionDeletionTracker.java", build)
+        self.assertIn("ContraptionRemovalMixin.java", build)
+        self.assertIn('"ContraptionRemovalMixin"', mixins)
+        self.assertIn("ContraptionDeletionTracker.drain(level)", transform)
+        self.assertIn("ContraptionDeletionTracker.record(level, objectId)", transform)
+
+    def test_terrain_refresh_waits_for_saved_world_and_completed_render(self) -> None:
+        build = (ROOT / "build.sh").read_text()
+        transform = (ROOT / "scripts/transforms/contraption_provider.py").read_text()
+        queue = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java").read_text()
+
+        self.assertIn("TileRefreshQueue.java", build)
+        self.assertIn("level.save(null, true, false)", transform)
+        self.assertIn("terrainPersistTicks", transform)
+        self.assertIn("scheduleMapUpdateTask(map, regions, true)", queue)
+        self.assertIn("worldRegionFor(pos)", queue)
+        self.assertIn("Math.floorDiv(pos.getX(), 512)", queue)
+        self.assertIn("pendingTiles", queue)
+        self.assertIn("deliverCompletedRenders()", queue)
+        self.assertIn("renderQueueSize() != 0", queue)
+
+    def test_train_assembly_queues_the_original_carriage_footprint(self) -> None:
+        transform = (ROOT / "scripts/transforms/contraption_provider.py").read_text()
+
+        self.assertIn("entry.assemblyFootprint = assemblyFootprintOf(live.getContraption())", transform)
+        self.assertIn("entry.assemblyFootprint = assemblyFootprintOf(contraption)", transform)
+        self.assertIn("terrainContraptions.add(objectId)", transform)
+        self.assertIn("trackTerrainFootprint(", transform)
+        self.assertIn(
+            "entry.assemblyFootprint,\n"
+            "                        footprintOf(object)",
+            transform,
+        )
+        self.assertIn(
+            "BlockPos world = contraption.anchor.offset(local);",
+            transform,
+        )
+
+    def test_create_persistence_and_diagnostics_are_transition_based(self) -> None:
+        persistence = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/api/PersistentSceneObjectProvider.java").read_text()
+        removal = (ROOT / "overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/ContraptionRemovalMixin.java").read_text()
+        transform = (ROOT / "scripts/transforms/contraption_provider.py").read_text()
+
+        self.assertIn("CONTRAPTION-SOURCE-DIAG", persistence)
+        self.assertIn("ObjectSource.LIVE", persistence)
+        self.assertIn("ObjectSource.PERSISTED", persistence)
+        self.assertIn("previous == source", persistence)
+        self.assertIn("CONTRAPTION-REMOVAL-DIAG", removal)
+        self.assertIn("reason != Entity.RemovalReason.DISCARDED", removal)
+        self.assertIn("dimensionPrefix + objectId", persistence)
+
+        # Provider enumeration is used both by BlueMap3D publishing and Player History.
+        # It must never persist the Minecraft level on every poll. Terrain persistence
+        # belongs only to refreshFootprint(), which runs on assembly/disassembly transitions.
+        self.assertEqual(transform.count("persistTerrainOnce(level);"), 1)
+        self.assertNotIn("diagnoseAssemblyWorldState", transform)
+        self.assertNotIn("diagnoseNativeEntityRenderer", transform)
+        self.assertNotIn("CONTRAPTION-WORLD-DIAG", transform)
+        self.assertNotIn("CONTRAPTION-ENTITY-RENDERER-DIAG", transform)
+
+    def test_mca_region_boundaries_use_floor_division(self) -> None:
+        queue = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/publish/TileRefreshQueue.java").read_text()
+
+        self.assertIn("Math.floorDiv(pos.getX(), 512)", queue)
+        self.assertIn("Math.floorDiv(pos.getZ(), 512)", queue)
+
+        cases = {
+            0: 0,
+            511: 0,
+            512: 1,
+            -1: -1,
+            -512: -1,
+            -513: -2,
+        }
+        for block, region in cases.items():
+            self.assertEqual(block // 512, region)
+
     def test_patch_driver_stays_small_and_delegates_create_transform(self) -> None:
         script = (ROOT / "scripts" / "patch-upstream.py").read_text()
         transform = (ROOT / "scripts" / "transforms" / "contraption_provider.py").read_text()
