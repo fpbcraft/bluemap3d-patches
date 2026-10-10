@@ -173,6 +173,27 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn('"CT-NOMATCH"', resolver)
         self.assertIn('"CT-MISSING-SHEET"', resolver)
 
+    def test_default_create_copycats_and_static_orientation_regressions(self) -> None:
+        addon = ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats"
+        materials = (addon / "CopycatsMaterialResolver.java").read_text()
+        renderer = (addon / "CopycatsTerrainRenderer.java").read_text()
+        appearance = (addon / "CopycatsAppearanceResolver.java").read_text()
+        moving = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java").read_text()
+        self.assertIn("createPanelOrStepMaterial(", materials)
+        self.assertIn('new CopycatsMaterial("create:copycat_base", Map.of())', materials)
+        self.assertIn('entity == null && !isCreatePanelOrStep(id)', renderer)
+        self.assertIn('CopycatsMaterialResolver.createPanelOrStepMaterial(entity)', renderer)
+        self.assertIn('panelTransform(property("facing"))', renderer)
+        self.assertIn('verticalStepTransform(property("facing"))', renderer)
+        self.assertIn('"create:block/copycat_base"', appearance)
+        self.assertIn('fallback=self-default', appearance)
+        self.assertIn('boolean createPanelOrStep = isCreatePanelOrStep(state)', moving)
+        self.assertIn('ResourceLocation.fromNamespaceAndPath("create", "copycat_base")', moving)
+        self.assertIn('metadata == null ? "<null>" : metadata.getAllKeys()', moving)
+        self.assertIn("CopycatsTerrainOrientationTest", (
+            ROOT / "addon-compat/src/test/java/dev/duzo/bluemapcopycats/CopycatsTerrainOrientationTest.java"
+        ).read_text().replace("class CopycatsTerrainOrientationTest", "CopycatsTerrainOrientationTest"))
+
     def test_create_panel_and_step_render_in_static_and_moving_paths(self) -> None:
         static_dispatch = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/ConnectedTerrainDispatch.java").read_text()
         static_renderer = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/CopycatsTerrainRenderer.java").read_text()
