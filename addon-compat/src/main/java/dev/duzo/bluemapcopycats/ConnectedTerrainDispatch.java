@@ -36,6 +36,17 @@ public final class ConnectedTerrainDispatch {
             }
             """;
 
+    private static final String COPYCAT_DISPATCH_JSON = """
+            {
+              "variants": {
+                "": {
+                  "renderer": "bluemap_copycats:terrain",
+                  "model": "bluemap_copycats:block/placeholder"
+                }
+              }
+            }
+            """;
+
     private ConnectedTerrainDispatch() {
     }
 
@@ -80,6 +91,10 @@ public final class ConnectedTerrainDispatch {
                     new StringReader(DISPATCH_JSON),
                     de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState.class);
 
+            var createCopycatDispatch = ResourcesGson.INSTANCE.fromJson(
+                    new StringReader(COPYCAT_DISPATCH_JSON),
+                    de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState.class);
+
             // Snapshot the parsed resources before installing any dispatch entries.
             var originalsByPath = new HashMap<>(states);
 
@@ -91,9 +106,20 @@ public final class ConnectedTerrainDispatch {
             int aliases = installDiagonalAliases(paths, states, originalsByPath, dispatch);
 
             int patched = 0;
+            int patchedCreate = 0;
             for (Map.Entry<String, ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>>
                     entry : new ArrayList<>(paths.entrySet())) {
                 String id = entry.getKey();
+                if (isCreateCopycat(id)) {
+                    // A generated resource-pack JSON can lose priority to Create's
+                    // original blockstate, leaving the normal renderer with no copycat
+                    // material support. Install the dispatch on the fully loaded
+                    // resource pack, just as we do for connected fences and walls.
+                    states.put(entry.getValue(), createCopycatDispatch);
+                    entry.getValue().setResource(createCopycatDispatch);
+                    patchedCreate++;
+                    continue;
+                }
                 if (!isConnectedBlock(id)) continue;
 
                 var original = originalsByPath.get(entry.getValue());
@@ -110,13 +136,30 @@ public final class ConnectedTerrainDispatch {
                 patched++;
             }
 
+            // Some mod loader versions omit paths for resource-pack-only copies.
+            // Create synthetic routes even in that case, rather than silently
+            // leaving CREATE:copycat_panel/step unrendered.
+            for (String id : java.util.List.of("create:copycat_panel", "create:copycat_step")) {
+                if (paths.containsKey(id)) continue;
+                var path = new ResourcePath<de.bluecolored.bluemap.core.resources.pack.resourcepack.blockstate.BlockState>(id);
+                paths.put(id, path);
+                states.put(path, createCopycatDispatch);
+                path.setResource(createCopycatDispatch);
+                patchedCreate++;
+            }
+
             Logger.global.logInfo(String.format(
-                    "Connected fence/wall compatibility routed %s blockstate id(s), including %s diagonal alias(es)",
-                    patched,
-                    aliases));
+                    "Connected fence/wall compatibility routed %s blockstate id(s), including %s diagonal alias(es); "
+                            + "static Create copycat panels/steps routed %s id(s)",
+                    patched, aliases, patchedCreate));
         } catch (ReflectiveOperationException | RuntimeException error) {
             Logger.global.logError("Failed to install connected fence/wall compatibility", error);
         }
+    }
+
+    static boolean isCreateCopycat(String id) {
+        return "create:copycat_panel".equals(id)
+                || "create:copycat_step".equals(id);
     }
 
     static String diagonalAlias(String id) {
