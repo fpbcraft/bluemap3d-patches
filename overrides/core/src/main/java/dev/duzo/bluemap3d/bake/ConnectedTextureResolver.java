@@ -222,20 +222,22 @@ final class ConnectedTextureResolver {
             return false;
         }
 
-        // The source is a copied material but the geometry owner is still
-        // a Create/Copycats wrapper. Neighbor snapshots can already have been
-        // decoded to their effective material states by VolumeMesher; in that
-        // case ResourcePackSource.quadsFor(other) may not be able to reconstruct
-        // a matching wrapper surface. Compare actual copied materials first,
-        // then retain the ordinary CT sheet/predicate path below.
-        if (CopiedMaterialResolver.isMaterialWrapper(context.state())) {
-            BlockState material = CopiedMaterialResolver.materialFor(
-                    context.blockEntityData(), null);
-            if (CopiedMaterialResolver.usable(material)
-                    && material.equals(other)
-                    && !current.positionVariant()) {
-                return true;
-            }
+        // The bake pipeline resolves copied material *before* requesting its
+        // material model quads (context.withState(material)). That means the
+        // context state here is generally the copied material, not the wrapper.
+        // The previous isMaterialWrapper(context.state()) gate was therefore
+        // false and never fixed CT for assembled copied panels.
+        //
+        // Restrict this fast path to copied-material NBT and identical neighbor
+        // states: unrelated block entities / dissimilar palette materials still
+        // follow the normal sheet-compatible face matching below.
+        BlockState copied = CopiedMaterialResolver.materialFor(
+                context.blockEntityData(), null);
+        boolean copiedContext = CopiedMaterialResolver.usable(copied);
+        if (!current.positionVariant()
+                && copiedContext
+                && context.state().equals(other)) {
+            return true;
         }
 
         int[] offset = offsetFor(direction, axes);
