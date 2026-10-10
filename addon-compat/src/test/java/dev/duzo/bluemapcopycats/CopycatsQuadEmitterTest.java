@@ -10,6 +10,24 @@ class CopycatsQuadEmitterTest {
     }
 
     @Test
+    void rotatedCopycatFacesUseTheirPhysicalNormalsForMaterialAndCt() {
+        // Axis-aligned face orientation changes when a Create copycat panel
+        // rotates 180 degrees in the terrain renderer.
+        assertEquals(de.bluecolored.bluemap.core.util.Direction.SOUTH,
+                CopycatsQuadEmitter.physicalFace(new float[]{
+                        0,0,16, 16,0,16, 16,16,16, 0,16,16},
+                        de.bluecolored.bluemap.core.util.Direction.NORTH));
+        assertEquals(de.bluecolored.bluemap.core.util.Direction.WEST,
+                CopycatsQuadEmitter.physicalFace(new float[]{
+                        0,0,0, 0,0,16, 0,16,16, 0,16,0},
+                        de.bluecolored.bluemap.core.util.Direction.EAST));
+        assertEquals(de.bluecolored.bluemap.core.util.Direction.UP,
+                CopycatsQuadEmitter.physicalFace(new float[]{
+                        0,16,0, 0,16,16, 16,16,16, 16,16,0},
+                        de.bluecolored.bluemap.core.util.Direction.DOWN));
+    }
+
+    @Test
     void twoAdjacentBytePanelsSampleAdjacentHalvesOfTheSameCtTile() {
         float[] left = CopycatsQuadEmitter.projectedUvs(new float[]{
                 0,0,16, 8,0,16, 8,8,16, 0,8,16
