@@ -141,6 +141,15 @@ class PatchArchitectureTest(unittest.TestCase):
         removal = (ROOT / "overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/ContraptionDeletionTracker.java").read_text()
         self.assertIn("entity instanceof CarriageContraptionEntity", removal)
 
+    def test_copycats_byte_moving_ct_samples_individual_material_parts(self) -> None:
+        source = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java").read_text()
+        self.assertIn('case "copycats:copycat_byte_panel" -> bytePanel(state, metadata)', source)
+        self.assertIn('case "copycats:copycat_byte" -> byteQuads(state, metadata)', source)
+        self.assertIn('private void addPart(Map<Integer,BlockState> parts', source)
+        self.assertIn('base.stateAtOffset(bx-base.x(), by-base.y(), bz-base.z())', source)
+        self.assertIn('parts.getOrDefault(cellKey(', source)
+        self.assertIn('models.quadsFor(context.withState(material))', source)
+
     def test_static_copycats_and_railways_compatibility_is_wired(self) -> None:
         generator = (ROOT / "scripts/generate-static-resources.py").read_text()
         registry = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/BlueMapCopycatsCompatAddon.java").read_text()
