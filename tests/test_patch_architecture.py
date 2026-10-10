@@ -150,6 +150,24 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn('parts.getOrDefault(cellKey(', source)
         self.assertIn('models.quadsFor(context.withState(material))', source)
 
+    def test_copycats_diagnostics_are_opt_in_bounded_and_cover_both_renderers(self) -> None:
+        root = ROOT / "addon-compat/src/main/java/dev/duzo"
+        tracer = (root / "bluemapcopycats/CopycatsTrace.java").read_text()
+        terrain = (root / "bluemapcopycats/CopycatsTerrainRenderer.java").read_text()
+        model = (root / "bluemapcopycats/CopycatsAppearanceResolver.java").read_text()
+        ct = (root / "bluemapctm/CopiedMaterialConnectedTextures.java").read_text()
+        moving = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java").read_text()
+        shape = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsShapeSource.java").read_text()
+        self.assertIn('Boolean.getBoolean("bluemap.copycats.trace")', tracer)
+        self.assertIn('"bluemap.copycats.trace.center"', tracer)
+        self.assertIn('AtomicInteger', tracer)
+        self.assertIn('CopycatsTrace.log(block, "ENTITY"', terrain)
+        self.assertIn('CopycatsTrace.log(block, "GEOMETRY"', terrain)
+        self.assertIn('CopycatsTrace.log(block, "ATLAS"', model)
+        self.assertIn('CopycatsTrace.log(owner, "CT"', ct)
+        self.assertIn('COPYCATS-MOVING-TRACE phase=SOURCE', moving)
+        self.assertIn('COPYCATS-MOVING-TRACE phase=SHAPE', shape)
+
     def test_static_copycats_and_railways_compatibility_is_wired(self) -> None:
         generator = (ROOT / "scripts/generate-static-resources.py").read_text()
         registry = (ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats/BlueMapCopycatsCompatAddon.java").read_text()
