@@ -12,6 +12,9 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Material-aware fallback for copycats whose client geometry is emitted in code.
@@ -22,6 +25,10 @@ import java.util.List;
 public final class CopycatsShapeSource implements BlockModelSource {
 
     private static final int MAX_BOXES = 128;
+    private static final Logger LOGGER = LoggerFactory.getLogger("BlueMap3D/CopycatsTrace");
+    private static final boolean TRACE = Boolean.getBoolean("bluemap.copycats.trace");
+    private static final AtomicInteger TRACE_LINES = new AtomicInteger();
+
 
     private final ResourcePackSource models;
 
@@ -94,6 +101,19 @@ public final class CopycatsShapeSource implements BlockModelSource {
             }
         }
 
+        if (TRACE && TRACE_LINES.getAndIncrement() < 60) {
+            long missingFace = out.stream()
+                    .filter(q -> q.shadeFace() == null && q.cullFace() == null).count();
+            java.util.Set<String> textures = new java.util.TreeSet<>();
+            for (ModelQuad quad : out) {
+                if (quad.texture() != null && textures.size() < 12)
+                    textures.add(quad.texture());
+            }
+            LOGGER.debug("COPYCATS-MOVING-TRACE phase=SHAPE block={} pos={} material={} metaKeys={} boxes={} quads={} missingFace={} textures={}",
+                    id, context == null ? "<none>" : context.x()+","+context.y()+","+context.z(),
+                    BuiltInRegistries.BLOCK.getKey(material.getBlock()),
+                    metadata.getAllKeys(), boxes.size(), out.size(), missingFace, textures);
+        }
         return out.isEmpty() ? List.of() : List.copyOf(out);
     }
 
