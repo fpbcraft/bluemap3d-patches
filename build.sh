@@ -193,6 +193,7 @@ cp "$ROOT/compat/local-template.json" addon-compat/src/main/resources/bluemap3d-
 cp "$ROOT/compat/local-template.json" core/src/main/resources/bluemap3d-compat/local-template.json
 
 python3 "$ROOT/scripts/patch-upstream.py"
+python3 "$ROOT/scripts/transforms/terrain_reload.py"
 
 # Shared-instance tracker is a maintained full override. Apply it after structural
 # transforms so the deterministic upstream patch anchors remain valid.
