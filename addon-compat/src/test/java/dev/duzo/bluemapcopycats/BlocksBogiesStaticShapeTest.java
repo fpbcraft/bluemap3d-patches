@@ -34,6 +34,27 @@ final class BlocksBogiesStaticShapeTest {
     }
 
     @Test
+    void realObjWheelPartsFollowMinecraftLargeTripleAxlePositions() {
+        var large = BlocksBogiesStaticShape.parse("create_bb:l_060");
+        assertNotNull(large);
+        assertArrayEquals(new float[]{-1.6875f, 0f, 1.6875f},
+                large.wheelPositions(), .00001f);
+        assertEquals(1f, large.wheelY(), .00001f);
+
+        var extraLarge = BlocksBogiesStaticShape.parse("create_bb:xl_060");
+        assertNotNull(extraLarge);
+        assertArrayEquals(new float[]{-2.25f, 0f, 2.25f},
+                extraLarge.wheelPositions(), .00001f);
+        assertEquals(1.25f, extraLarge.wheelY(), .00001f);
+
+        var small = BlocksBogiesStaticShape.parse("create_bb:s_060");
+        assertNotNull(small);
+        assertArrayEquals(new float[]{-1f, 0f, 1f},
+                small.wheelPositions(), .00001f);
+        assertEquals(.75f, small.wheelY(), .00001f);
+    }
+
+    @Test
     void ignoresOtherModsAndNonBogeyEntries() {
         for(String id:new String[]{"create:large_bogey","railways:copycat_headstock",
                 "create_bb:bogey","create_bb:sign","create_bb:xl_0120",
