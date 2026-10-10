@@ -44,6 +44,20 @@ final class ConnectedTerrainDispatchTest {
     }
 
     @Test
+    void createCopycatPanelsAndStepsUseDedicatedMaterialRenderer() {
+        assertEquals(true, ConnectedTerrainDispatch.isCreateCopycat("create:copycat_panel"));
+        assertEquals(true, ConnectedTerrainDispatch.isCreateCopycat("create:copycat_step"));
+        assertEquals(false, ConnectedTerrainDispatch.isCreateCopycat("copycats:copycat_byte_panel"));
+        assertEquals(false, ConnectedTerrainDispatch.isCreateCopycat("create:copycat_base"));
+        assertEquals(false, ConnectedTerrainDispatch.isCreateCopycat("railways:copycat_headstock"));
+
+        // They must bypass the fence/wall renderer rather than being mistaken for
+        // normal connected blocks or diverted away from procedural geometry.
+        assertEquals(false, ConnectedTerrainDispatch.isConnectedBlock("create:copycat_panel"));
+        assertEquals(false, ConnectedTerrainDispatch.isConnectedBlock("create:copycat_step"));
+    }
+
+    @Test
     void generatedWindowAliasesAreConnectedBlocks() {
         assertEquals(true, ConnectedTerrainDispatch.isConnectedBlock(
                 "diagonalwindows:createdeco/industrial_iron_bars"));
