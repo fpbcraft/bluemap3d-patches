@@ -51,7 +51,10 @@ final class ConnectedTextureResolver {
     private static void traceCopycats(BlockRenderContext context, ModelQuad quad,
             String phase, String explanation) {
         if (!TRACE_COPYCATS
-                || !CopiedMaterialResolver.isMaterialWrapper(context.state())
+                || !(CopiedMaterialResolver.isMaterialWrapper(context.state())
+                     || CopiedMaterialResolver.usable(
+                         CopiedMaterialResolver.materialFor(
+                             context.blockEntityData(), null)))
                 || COPYCATS_TRACE_LINES.getAndIncrement() >= 80) return;
         LOGGER.debug("COPYCATS-MOVING-TRACE phase={} wrapper={} pos=({},{},{}) source={} cullFace={} shadeFace={} {}",
                 phase, context.state().getBlock(),
