@@ -40,7 +40,11 @@ final class CopycatsMaterialResolver {
      * their existing material validation behavior.
      */
     static CopycatsMaterial createPanelOrStepMaterial(CopycatsTerrainBlockEntity entity) {
-        CopycatsMaterial material = entity == null ? null : materialFor(entity, null);
+        return createDefaultMaterial(entity == null ? null : materialFor(entity, null));
+    }
+
+    /** Pure default-material resolution; safe for unit tests without BlueMap's runtime. */
+    static CopycatsMaterial createDefaultMaterial(CopycatsMaterial material) {
         if (usable(material)) return material;
         if (material == null || "create:copycat_base".equals(material.id())
                 || "copycats:copycat_base".equals(material.id())) {
