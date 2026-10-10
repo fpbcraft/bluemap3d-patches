@@ -238,10 +238,13 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn("BlocksBogiesObjMesh.load(modelRoot + \"/frame\")", renderer)
         self.assertIn("BlocksBogiesObjMesh.load(\"bogie/\" + size + \"/shared/wheels\")", renderer)
         self.assertIn('geometry=mod-obj', renderer)
+        self.assertIn('spec.wheelPositions()', renderer)
+        self.assertIn('spec.wheelY()', renderer)
         self.assertIn('CopycatsQuadEmitter.physicalFace(positions, materialFace)', copycats)
         self.assertIn('static Direction physicalFace(float[] p, Direction fallback)', emitter)
         self.assertIn('CopiedMaterialResolver.materialFor(', moving)
-        self.assertIn('material.equals(other)', moving)
+        self.assertIn('context.state().equals(other)', moving)
+        self.assertIn('boolean copiedContext = CopiedMaterialResolver.usable(copied)', moving)
 
     def test_static_copycats_and_railways_compatibility_is_wired(self) -> None:
         generator = (ROOT / "scripts/generate-static-resources.py").read_text()
