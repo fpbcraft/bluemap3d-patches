@@ -36,13 +36,14 @@ final class BlocksBogiesStaticShape {
         }
 
         /**
-         * The upstream renderer positions these OBJ meshes inside the bogey's
-         * animated render pose, not directly at a BlueMap terrain block origin.
-         * Move the complete stationary mesh toward the rail bed; keep the
-         * original wheel/frame/rod offsets relative to each other intact.
+         * Mirror the real Create rendering chain:
+         * BogeyBlockEntityRenderer.translate(.5,.5,.5) followed by
+         * BogeyStyle.render.translate(0,-1.5-1/128,0).
+         * The previous experimental -3/16 translation ignored the -1.5
+         * style transform, lifting the wheels almost an entire block.
          */
         float staticTerrainOffsetY() {
-            return -3f / 16f;
+            return .5f - 1.5f - 1f / 128f;
         }
 
         float wheelSpacing() {
