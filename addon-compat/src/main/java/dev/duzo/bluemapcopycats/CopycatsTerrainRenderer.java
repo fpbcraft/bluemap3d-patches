@@ -114,6 +114,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         for (Quad quad : quads) {
             if (quadEmitter.emit(
                     quad.positions(),
+                    quad.samplePositions(),
                     quad.face(),
                     quad.material(),
                     block,
@@ -648,7 +649,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
 
         List<Quad> out = new ArrayList<>(templateQuads.size());
         for (CopycatsTemplateGeometry.TemplateQuad quad : templateQuads) {
-            out.add(new Quad(quad.positions(), quad.face(), material));
+            out.add(new Quad(quad.positions(), quad.positions(), quad.face(), material));
         }
         return out;
     }
@@ -660,12 +661,23 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             float sx1, float sy1, float sz1,
             float sx2, float sy2, float sz2,
             CopycatsMaterial material) {
+        // A Copycats+ piece is often placed at one location but samples a
+        // different part of the copied block. Retain the original source
+        // bounds instead of projecting CT UVs from the destination bounds.
+        int start = out.size();
         cuboid(out, transform,
                 dx, dy, dz,
                 dx + (sx2 - sx1),
                 dy + (sy2 - sy1),
                 dz + (sz2 - sz1),
                 material);
+        List<Quad> sourceFaces = new ArrayList<>(6);
+        cuboid(sourceFaces, transform, sx1, sy1, sz1, sx2, sy2, sz2, material);
+        for (int i = 0; i < sourceFaces.size(); i++) {
+            Quad destination = out.get(start + i);
+            out.set(start + i, new Quad(destination.positions(),
+                    sourceFaces.get(i).positions(), destination.face(), material));
+        }
     }
 
     private void cuboid(
@@ -701,7 +713,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
                 d[0],d[1],d[2]
         };
         transform.applyQuad(positions);
-        out.add(new Quad(positions,
+        out.add(new Quad(positions, positions,
                 CopycatsQuadEmitter.physicalFace(positions, materialFace), material));
     }
 
@@ -743,7 +755,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         return new float[]{x,y,z};
     }
 
-    private record Quad(float[] positions, Direction face, CopycatsMaterial material) {
+    private record Quad(float[] positions, float[] samplePositions,
+                        Direction face, CopycatsMaterial material) {
     }
 
 
