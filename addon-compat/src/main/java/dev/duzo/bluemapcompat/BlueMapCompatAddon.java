@@ -8,6 +8,7 @@ import dev.duzo.bluemaptrafficcraft.TrafficCraftAdapter;
 import dev.duzo.bluemapdynamictrees.DynamicTreesTerrainAdapter;
 import dev.duzo.bluemapdynamictrees.DynamicTreesTerrainDispatch;
 import dev.duzo.bluemapfurniture.ImmersiveFurnitureAdapter;
+import dev.duzo.bluemapseasons.EclipticSeasonsAdapter;
 
 /**
  * Single native BlueMap compatibility entrypoint.
@@ -34,6 +35,7 @@ public final class BlueMapCompatAddon implements Runnable {
             ConfiguredModelAliasHook.install(api);
             ConfiguredTintHook.install(api);
             TrafficCraftAdapter.onBlueMapEnable(api);
+            EclipticSeasonsAdapter.onEnable(api);
 
             // Reclaim Dynamic Trees after generic aliases first, then install
             // Immersive Furniture last so no other resource-pack mutator in this
@@ -45,6 +47,8 @@ public final class BlueMapCompatAddon implements Runnable {
             // compatibility renderer remain authoritative.
             ConnectedTextureTerrainAdapter.onBlueMapEnable(api);
         });
+
+        BlueMapAPI.onDisable(api -> EclipticSeasonsAdapter.onDisable());
 
         Logger.global.logInfo(
                 "BlueMap Compat loaded: config-driven rules + TrafficCraft + Dynamic Trees + Fusion/Create connected textures");
