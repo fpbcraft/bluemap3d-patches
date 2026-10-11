@@ -209,7 +209,7 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn('states.put(entry.getValue(), createCopycatDispatch)', static_dispatch)
         self.assertIn('entry.getValue().setResource(createCopycatDispatch)', static_dispatch)
         self.assertIn('paths.containsKey(id)', static_dispatch)
-        self.assertIn('"static Create copycat panels/steps routed %s id(s)"', static_dispatch)
+        self.assertIn('static Create copycat panels/steps routed %s id(s)', static_dispatch)
         self.assertIn('case "create:copycat_panel" -> createPanel(entity)', static_renderer)
         self.assertIn('case "create:copycat_step" -> createStep(entity)', static_renderer)
         self.assertIn('cuboid(out, transform, 0, 0, 0, 16, 3, 16, material)', static_renderer)
@@ -224,6 +224,31 @@ class PatchArchitectureTest(unittest.TestCase):
         self.assertIn('phase=CREATE-SHAPE', moving)
         self.assertIn('skip=missing-material-nbt', moving)
         self.assertIn('skip=unusable-copied-material', moving)
+
+    def test_blocks_bogies_static_obj_and_dual_copycat_ct_fixes(self) -> None:
+        base = ROOT / "addon-compat/src/main/java/dev/duzo/bluemapcopycats"
+        meshes = (base / "BlocksBogiesObjMesh.java").read_text()
+        renderer = (base / "BlocksBogiesTerrainRenderer.java").read_text()
+        copycats = (base / "CopycatsTerrainRenderer.java").read_text()
+        emitter = (base / "CopycatsQuadEmitter.java").read_text()
+        moving = (ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/ConnectedTextureResolver.java").read_text()
+        self.assertIn("new ZipFile(", meshes)
+        self.assertIn("assets/create_bb/models/block/", meshes)
+        self.assertIn("static List<Triangle> parse(String obj)", meshes)
+        self.assertIn("BlocksBogiesObjMesh.load(modelRoot + \"/frame\")", renderer)
+        self.assertIn("BlocksBogiesObjMesh.load(\"bogie/\" + size + \"/shared/wheels\")", renderer)
+        self.assertIn('geometry=mod-obj', renderer)
+        self.assertIn('spec.wheelPositions()', renderer)
+        self.assertIn('spec.wheelY()', renderer)
+        self.assertIn('CopycatsQuadEmitter.physicalFace(positions, materialFace)', copycats)
+        self.assertIn('static Direction physicalFace(float[] p, Direction fallback)', emitter)
+        self.assertIn('CopiedMaterialResolver.materialFor(', moving)
+        self.assertIn('context.state().equals(other)', moving)
+        self.assertIn('CopycatsPhysicalFace.of(vertices, fallback.name())', (
+            ROOT / "overrides/core/src/main/java/dev/duzo/bluemap3d/bake/CopycatsSpecialSource.java"
+        ).read_text())
+        self.assertIn('CopycatsPhysicalFace.java', (ROOT / "build.sh").read_text())
+        self.assertIn('boolean copiedContext = CopiedMaterialResolver.usable(copied)', moving)
 
     def test_static_copycats_and_railways_compatibility_is_wired(self) -> None:
         generator = (ROOT / "scripts/generate-static-resources.py").read_text()

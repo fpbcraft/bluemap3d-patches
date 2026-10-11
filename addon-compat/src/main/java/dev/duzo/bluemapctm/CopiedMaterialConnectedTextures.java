@@ -19,6 +19,8 @@ import dev.duzo.bluemapcopycats.CopycatsTrace;
  * No allowlist of material mods or copycat shapes is required.
  */
 public final class CopiedMaterialConnectedTextures {
+    private static final boolean TRACE_NEIGHBORS =
+            Boolean.getBoolean("bluemap.copycats.trace.neighbors");
     private final ResourcePack resources;
     private final ConnectedTextureResourceExtension extension;
 
@@ -30,6 +32,17 @@ public final class CopiedMaterialConnectedTextures {
     public Appearance resolve(
             ResourcePath<Texture> source, BlockState material,
             Direction face, BlockNeighborhood owner) {
+        return resolve(source, material, face, owner, null);
+    }
+
+    /**
+     * Sample CT at the actual 8px byte-panel cell occupied by this quad.
+     * A single world block can contain four independently textured panel
+     * quadrants; comparing only the enclosing block cannot reproduce Create.
+     */
+    public Appearance resolve(
+            ResourcePath<Texture> source, BlockState material,
+            Direction face, BlockNeighborhood owner, float[] quadPositions) {
         Appearance plain = new Appearance(source, 0f, 0f, 1f, 1f);
         if (extension == null || source == null || material == null || face == null) {
             if (CopycatsTrace.enabled(owner)) CopycatsTrace.log(owner, "CT", "material=" + material + " face=" + face
@@ -46,7 +59,10 @@ public final class CopiedMaterialConnectedTextures {
             return plain;
         }
 
-        int mask = mask(material, face, owner, fusion, create);
+        int mask = "copycats:copycat_byte_panel".equals(owner.getBlockState().getFormatted())
+                && quadPositions != null && quadPositions.length == 12
+                ? BytePanelConnectedTextureMask.mask(material, face, owner, fusion, create, quadPositions)
+                : mask(material, face, owner, fusion, create);
         if (fusion != null) {
             ResourcePath<Texture> path = extension.fusionMaterial(id, fusion, mask);
             int tile = ConnectedTextureLayout.fusionTile(fusion.layout(), mask);
@@ -153,12 +169,28 @@ public final class CopiedMaterialConnectedTextures {
                         && material.getFormatted().equals(other.getFormatted())
                         && material.getProperties().equals(other.getProperties());
             }
+            // For persistent static seams, report the four cardinal
+            // directions that *failed* to join; the existing CT trace reports
+            // only the resulting mask, not why an adjacent copied panel missed.
+            // Keep this opt-in because BlueMap calls the shader per tiny quad.
+            if (!connects && create != null && TRACE_NEIGHBORS
+                    && (i % 2 == 0) && CopycatsTrace.enabled(block)) {
+                CopycatsTrace.log(block, "CT-EDGE",
+                        "face=" + face + " dir=" + dirs[i]
+                        + " copied=" + material.getFormatted()
+                        + " sourceNeighbor=" + neighbour.getBlockState().getFormatted()
+                        + " resolvedNeighbor=" + (other == null ? "<null>"
+                                : other.getFormatted())
+                        + " hasNeighborEntity=" + (neighbour.getBlockEntity() != null)
+                        + " frontOccludes=" + front.getProperties().isOccluding()
+                        + " frontBlock=" + front.getBlockState().getFormatted());
+            }
             if (connects) mask |= 1 << i;
         }
         return mask;
     }
 
-    private static int faceOffset(Direction d, int axis) {
+    static int faceOffset(Direction d, int axis) {
         return switch (axis) {
             case 0 -> d == Direction.EAST ? 1 : d == Direction.WEST ? -1 : 0;
             case 1 -> d == Direction.UP ? 1 : d == Direction.DOWN ? -1 : 0;
@@ -172,7 +204,7 @@ public final class CopiedMaterialConnectedTextures {
      * variants with shared material_data to participate in a CT neighbourhood.
      * A material not carried by the neighbour never connects.
      */
-    private static BlockState effectiveMaterial(ExtendedBlock block, BlockState requested) {
+    static BlockState effectiveMaterial(ExtendedBlock block, BlockState requested) {
         BlockState original = block.getBlockState();
         String id = original.getFormatted();
         if (!(id.startsWith("copycats:")
@@ -198,7 +230,7 @@ public final class CopiedMaterialConnectedTextures {
         return direct != null ? direct : original;
     }
 
-    private static BlockState materialState(Object raw) {
+    static BlockState materialState(Object raw) {
         if (!(raw instanceof Map<?, ?> value)) return null;
         Object name = value.containsKey("Name") ? value.get("Name") : value.get("name");
         if (!(name instanceof String id) || id.isBlank()) return null;

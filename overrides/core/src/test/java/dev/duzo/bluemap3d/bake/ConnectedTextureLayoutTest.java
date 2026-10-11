@@ -106,6 +106,42 @@ final class ConnectedTextureLayoutTest {
                                 | ConnectedTextureLayout.BOTTOM));
     }
     @Test
+    void movingCopiedMaterialConnectsAfterWrapperSubstitution() {
+        // The sampler replaces the wrapper with the copied material before
+        // connected-texture resolution. A wrapper-only check always failed.
+        assertTrue(ConnectedTextureResolver.connectsResolvedCopiedMaterial(
+                true, true, false));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                ConnectedTextureResolver.connectsResolvedCopiedMaterial(false, true, false));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                ConnectedTextureResolver.connectsResolvedCopiedMaterial(true, false, false));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                ConnectedTextureResolver.connectsResolvedCopiedMaterial(true, true, true));
+    }
+
+    @Test
+    void assembledRotatedCopycatsUsePhysicalSurfaceNormals() {
+        assertEquals("SOUTH",
+                CopycatsPhysicalFace.of(new float[]{
+                        0,0,16, 16,0,16, 16,16,16, 0,16,16},
+                        "NORTH"));
+        assertEquals("WEST",
+                CopycatsPhysicalFace.of(new float[]{
+                        0,0,0, 0,0,16, 0,16,16, 0,16,0},
+                        "EAST"));
+        assertEquals("UP",
+                CopycatsPhysicalFace.of(new float[]{
+                        0,16,0, 0,16,16, 16,16,16, 16,16,0},
+                        "DOWN"));
+        // A sloped face is not a cardinal surface; do not corrupt its
+        // originally selected material direction to force CT.
+        assertEquals("NORTH",
+                CopycatsPhysicalFace.of(new float[]{
+                        0,0,0, 16,0,0, 16,16,16, 0,16,16},
+                        "NORTH"));
+    }
+
+    @Test
     void railwaysVerticalPinkmachineUsesItsCustomTwoByTwoOrdering() {
         assertEquals(0, ConnectedTextureLayout.createTile("vertical_pinkmachine", 0));
         assertEquals(

@@ -155,15 +155,35 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     private void addBytePieces(
             List<ModelQuad> result, int ox, int oy, int oz, BlockState material) {
         Transform t = new Transform();
-        // Retain the original Copycats+ eight source samples per byte.
-        piece(result,t,ox,oy,oz,0,0,0,4,4,4,material);
-        piece(result,t,ox+4,oy,oz,12,0,0,16,4,4,material);
-        piece(result,t,ox,oy,oz+4,0,0,12,4,4,16,material);
-        piece(result,t,ox+4,oy,oz+4,12,0,12,16,4,16,material);
-        piece(result,t,ox,oy+4,oz,0,12,0,4,16,4,material);
-        piece(result,t,ox+4,oy+4,oz,12,12,0,16,16,4,material);
-        piece(result,t,ox,oy+4,oz+4,0,12,12,4,16,16,material);
-        piece(result,t,ox+4,oy+4,oz+4,12,12,12,16,16,16,material);
+        // Recreate CopycatMultiByteModelCore's eight 4px source samples
+        // and cull the three internal faces of each piece. Previously all
+        // six faces were emitted, allowing internal texture seams to leak.
+        for (int subY = 0; subY < 2; subY++) {
+            for (int subZ = 0; subZ < 2; subZ++) {
+                for (int subX = 0; subX < 2; subX++) {
+                    float sx = subX == 0 ? 0 : 12;
+                    float sy = subY == 0 ? 0 : 12;
+                    float sz = subZ == 0 ? 0 : 12;
+                    List<ModelQuad> faces = new ArrayList<>(6);
+                    piece(faces, t,
+                            ox + subX * 4, oy + subY * 4, oz + subZ * 4,
+                            sx, sy, sz, sx + 4, sy + 4, sz + 4, material);
+                    // Direction.values() is DOWN, UP, NORTH, SOUTH, WEST, EAST.
+                    for (int face = 0; face < faces.size(); face++) {
+                        boolean internal = switch (face) {
+                            case 0 -> subY == 1;
+                            case 1 -> subY == 0;
+                            case 2 -> subZ == 1;
+                            case 3 -> subZ == 0;
+                            case 4 -> subX == 1;
+                            case 5 -> subX == 0;
+                            default -> false;
+                        };
+                        if (!internal) result.add(faces.get(face));
+                    }
+                }
+            }
+        }
     }
 
     private List<ModelQuad> bytePanel(BlockState state, CompoundTag metadata) {
@@ -201,14 +221,54 @@ public final class CopycatsSpecialSource implements BlockModelSource {
                             new float[]{i,0,j},new float[]{i+8,3,j+8},
                             new float[]{i,0,j},new float[]{i+8,3,j+8},material);
                 } else {
+                    // The real Copycats+ model uses 4 corner pieces per layer,
+                    // with independent 4px source samples. Preserve the source
+                    // UVs and omit faces inside the assembled byte panel.
                     Transform rotation = new Transform().rotateY(yRotation(facing));
-                    addMappedCuboid(out,rotation,
-                            new float[]{i,j,13},new float[]{i+8,j+8,16},
-                            new float[]{i,j,13},new float[]{i+8,j+8,16},material);
+                    for (int subY = 0; subY < 2; subY++) {
+                        for (int subX = 0; subX < 2; subX++) {
+                            float dx = i + subX * 4f;
+                            float dy = j + subY * 4f;
+                            float sx = subX == 0 ? 0 : 12;
+                            float sy = subY == 0 ? 0 : 12;
+                            addPanelSampleSlice(out, rotation, material,
+                                    dx, dy, 13, sx, sy, 0, 2,
+                                    subX, subY, false);
+                            addPanelSampleSlice(out, rotation, material,
+                                    dx, dy, 15, sx, sy, 15, 1,
+                                    subX, subY, true);
+                        }
+                    }
                 }
             });
         }
         return List.copyOf(out);
+    }
+
+    private void addPanelSampleSlice(
+            List<ModelQuad> out, Transform transform, BlockState material,
+            float dx, float dy, float dz, float sx, float sy, float sz, float depth,
+            int subX, int subY, boolean rear) {
+        List<ModelQuad> faces = new ArrayList<>(6);
+        addMappedCuboid(faces, transform,
+                new float[]{dx,dy,dz}, new float[]{dx+4,dy+4,dz+depth},
+                new float[]{sx,sy,sz}, new float[]{sx+4,sy+4,sz+depth},
+                material);
+        // Direction.values() is DOWN, UP, NORTH, SOUTH, WEST, EAST.
+        // Cull the three internal faces of each sub-piece just as the
+        // original CopycatMultiBytePanelModelCore's cull masks do.
+        for (int face = 0; face < faces.size(); face++) {
+            boolean internal = switch (face) {
+                case 0 -> subY == 1;
+                case 1 -> subY == 0;
+                case 2 -> rear;
+                case 3 -> !rear;
+                case 4 -> subX == 1;
+                case 5 -> subX == 0;
+                default -> false;
+            };
+            if (!internal) out.add(faces.get(face));
+        }
     }
 
     private void addPart(Map<Integer,BlockState> parts,
@@ -519,13 +579,17 @@ public final class CopycatsSpecialSource implements BlockModelSource {
             float[] sourceTo,
             BlockState material) {
         for (Direction face : Direction.values()) {
-            Appearance appearance = appearance(material, face);
             float[] positions = ResourcePackGeometry.faceCorners(destFrom, destTo, face);
             transform.apply(positions);
             float[] uvs = ResourcePackGeometry.uvCorners(
                     ResourcePackGeometry.autoUv(sourceFrom, sourceTo, face), 0);
             if (transform.mirrored()) reverseWinding(positions, uvs);
-            out.add(new ModelQuad(null, null, positions, uvs,
+            // The copied material is evaluated in world orientation. Sampling
+            // the pre-rotation face used the wrong CT neighbors on assembled
+            // rotated byte panels, even when the underlying material matched.
+            Direction worldFace = physicalFace(positions, face);
+            Appearance appearance = appearance(material, worldFace);
+            out.add(new ModelQuad(null, worldFace, positions, uvs,
                     appearance.texture(), appearance.tint()));
         }
     }
@@ -542,9 +606,16 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         transform.apply(positions);
         float[] uvs = new float[]{0,16, 16,16, 16,0, 0,0};
         if (transform.mirrored()) reverseWinding(positions, uvs);
-        Appearance appearance = appearance(material, sourceFace);
-        out.add(new ModelQuad(null, null, positions, uvs,
+        Direction worldFace = physicalFace(positions, sourceFace);
+        Appearance appearance = appearance(material, worldFace);
+        out.add(new ModelQuad(null, worldFace, positions, uvs,
                 appearance.texture(), appearance.tint()));
+    }
+
+    /** Recover the outward face after copying, rotating or mirroring geometry. */
+    static Direction physicalFace(float[] vertices, Direction fallback) {
+        return Direction.valueOf(
+                CopycatsPhysicalFace.of(vertices, fallback.name()));
     }
 
     private static float[] p(float x, float y, float z) {

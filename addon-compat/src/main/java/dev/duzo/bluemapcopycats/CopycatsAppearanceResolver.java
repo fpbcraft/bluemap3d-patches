@@ -40,7 +40,7 @@ final class CopycatsAppearanceResolver {
     Appearance resolve(
             CopycatsMaterial material,
             Direction wantedFace,
-            BlockNeighborhood block) {
+            BlockNeighborhood block, float[] quadPositions) {
         BlockState materialState = material.asBlockState();
         String materialId = materialState.getFormatted();
 
@@ -118,7 +118,7 @@ final class CopycatsAppearanceResolver {
         ResourcePath<Texture> texture =
                 selected.getTexture().getTexturePath(model.getTextures()::get);
         if (texture == null) texture = ResourcePack.MISSING_TEXTURE;
-        var connected = copiedConnectedTextures.resolve(texture, materialState, wantedFace, block);
+        var connected = copiedConnectedTextures.resolve(texture, materialState, wantedFace, block, quadPositions);
         int textureIndex = textureGallery.get(connected.texture());
         if (CopycatsTrace.enabled(block)) CopycatsTrace.log(block, "ATLAS", "material=" + materialId + " face=" + wantedFace
                 + " baseTexture=" + texture + " chosenTexture=" + connected.texture()

@@ -120,6 +120,32 @@ radius to `8` to avoid collecting many blocks at the edge of the
 original 24-block window. For dedicated static samples at
 `(-889,-411)`, use `center=-889,-411` with a small radius.
 
+## Static copied-material CT neighbor mismatch (October 10)
+
+If adjacent Copycats panels still show seams on the **stationary** BlueMap
+locomotive, opt into one more diagnostic alongside normal `CopycatsTrace`:
+
+```text
+-Dbluemap.copycats.trace=true
+-Dbluemap.copycats.trace.center=-890,-410
+-Dbluemap.copycats.trace.radius=8
+-Dbluemap.copycats.trace.limit=300
+-Dbluemap.copycats.trace.neighbors=true
+```
+
+The new `COPYCATS-TRACE phase=CT-EDGE` events report only rejected **cardinal**
+connections, including the wrapper block ID, effective copied material, whether
+the neighboring block entity was retained and whether the block ahead of the
+face was occluding. Compare these with the existing `phase=CT` mask/tile logs.
+This separates missing neighbor NBT, material-state differences, and face
+occlusion from a bad CT sheet or UV projection without logging raw NBT.
+The additional neighbor logging is disabled by default.
+
+For **moving/assembled** trains use `COPYCATS-MOVING-TRACE`: the resolver
+now detects copied-material contexts *after* their wrapper state was replaced
+by `context.withState(material)`. Ensure the train actually rebakes its mesh
+after installing the patched BlueMap3D JAR; a terrain render is insufficient.
+
 ## Missing Create copycat panels and steps (ground + locomotive)
 
 The October 10 comparison shows some `create:copycat_panel` and

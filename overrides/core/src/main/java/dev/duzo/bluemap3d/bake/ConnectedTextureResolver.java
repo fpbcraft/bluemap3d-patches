@@ -51,7 +51,10 @@ final class ConnectedTextureResolver {
     private static void traceCopycats(BlockRenderContext context, ModelQuad quad,
             String phase, String explanation) {
         if (!TRACE_COPYCATS
-                || !CopiedMaterialResolver.isMaterialWrapper(context.state())
+                || !(CopiedMaterialResolver.isMaterialWrapper(context.state())
+                     || CopiedMaterialResolver.usable(
+                         CopiedMaterialResolver.materialFor(
+                             context.blockEntityData(), null)))
                 || COPYCATS_TRACE_LINES.getAndIncrement() >= 80) return;
         LOGGER.debug("COPYCATS-MOVING-TRACE phase={} wrapper={} pos=({},{},{}) source={} cullFace={} shadeFace={} {}",
                 phase, context.state().getBlock(),
@@ -222,6 +225,23 @@ final class ConnectedTextureResolver {
             return false;
         }
 
+        // The bake pipeline resolves copied material *before* requesting its
+        // material model quads (context.withState(material)). That means the
+        // context state here is generally the copied material, not the wrapper.
+        // The previous isMaterialWrapper(context.state()) gate was therefore
+        // false and never fixed CT for assembled copied panels.
+        //
+        // Restrict this fast path to copied-material NBT and identical neighbor
+        // states: unrelated block entities / dissimilar palette materials still
+        // follow the normal sheet-compatible face matching below.
+        BlockState copied = CopiedMaterialResolver.materialFor(
+                context.blockEntityData(), null);
+        boolean copiedContext = CopiedMaterialResolver.usable(copied);
+        if (connectsResolvedCopiedMaterial(
+                copiedContext, context.state().equals(other), current.positionVariant())) {
+            return true;
+        }
+
         int[] offset = offsetFor(direction, axes);
         int ox = context.x() + offset[0];
         int oy = context.y() + offset[1];
@@ -244,6 +264,16 @@ final class ConnectedTextureResolver {
             }
         }
         return false;
+    }
+
+    /**
+     * In the moving pipeline, context.state is the effective copied material,
+     * not the original Copycats wrapper. Make this part of the CT policy explicit
+     * so the regression can be exercised independently of live train rendering.
+     */
+    static boolean connectsResolvedCopiedMaterial(
+            boolean hasCopiedMaterialData, boolean sameMaterial, boolean positionVariant) {
+        return hasCopiedMaterialData && sameMaterial && !positionVariant;
     }
 
     private CreateConnectedTextures.Spec createSpec(

@@ -18,12 +18,13 @@ final class CopycatsQuadEmitter {
 
     boolean emit(
             float[] positions,
+            float[] sampledPositions,
             Direction face,
             CopycatsMaterial material,
             BlockNeighborhood block,
             TileModelView tileModel) {
         CopycatsAppearanceResolver.Appearance appearance =
-                appearanceResolver.resolve(material, face, block);
+                appearanceResolver.resolve(material, face, block, positions);
         if (appearance == null) return false;
 
         float[] p = positions;
@@ -42,11 +43,10 @@ final class CopycatsQuadEmitter {
                 p[6]/16f,p[7]/16f,p[8]/16f,
                 p[9]/16f,p[10]/16f,p[11]/16f);
 
-        // A copycat quad can occupy only a fraction of the 16x16 block face.
-        // Mapping the *entire* connected tile onto every 8x8 byte repeats its
-        // border pattern at internal seams. Project vertex UVs in block space so
-        // adjoining parts sample adjoining portions of the same CT tile.
-        float[] uv = projectedUvs(p, appearance.u0(), appearance.v0(),
+        // The sampled material positions may differ from the geometry's world
+        // positions, especially for Copycats+ pieces with remapped source
+        // cuboids. Keep their CT UVs in the copied material's pixel space.
+        float[] uv = projectedUvs(sampledPositions, appearance.u0(), appearance.v0(),
                 appearance.u1(), appearance.v1());
         target.setUvs(f1, uv[0],uv[1], uv[2],uv[3], uv[4],uv[5]);
         target.setUvs(f2, uv[0],uv[1], uv[4],uv[5], uv[6],uv[7]);
@@ -65,6 +65,13 @@ final class CopycatsQuadEmitter {
         target.setAOs(f1, 1f,1f,1f);
         target.setAOs(f2, 1f,1f,1f);
         return true;
+    }
+
+    /** A transformed copycat quad must use its actual world-facing normal
+     * when sampling the material model and evaluating its CT neighbours.
+     * The original unrotated face label is wrong for any rotated panel/step. */
+    static Direction physicalFace(float[] p, Direction fallback) {
+        return Direction.valueOf(CopycatsFaceOrientation.of(p, fallback.name()));
     }
 
     /**

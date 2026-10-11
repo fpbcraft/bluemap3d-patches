@@ -44,6 +44,26 @@ final class ConnectedTerrainDispatchTest {
     }
 
     @Test
+    void staticHeadstocksAndBlocksBogiesUseDistinctRenderers() {
+        assertEquals(true, ConnectedTerrainDispatch.isRailwaysCopycatHeadstock(
+                "railways:copycat_headstock"));
+        assertEquals(true, ConnectedTerrainDispatch.isRailwaysCopycatHeadstock(
+                "railways:copycat_headstock_bars"));
+        assertEquals(false, ConnectedTerrainDispatch.isRailwaysCopycatHeadstock(
+                "railways:headstock"));
+        assertEquals(true, ConnectedTerrainDispatch.isBlocksBogiesBlock(
+                "create_bb:l_060"));
+        assertEquals(true, ConnectedTerrainDispatch.isBlocksBogiesBlock(
+                "create_bb:xl_0100_rot"));
+        assertEquals(true, ConnectedTerrainDispatch.isBlocksBogiesBlock(
+                "create_bb:s_020_trailing"));
+        assertEquals(false, ConnectedTerrainDispatch.isBlocksBogiesBlock(
+                "create_bb:bogie_top"));
+        assertEquals(false, ConnectedTerrainDispatch.isBlocksBogiesBlock(
+                "create:large_bogey"));
+    }
+
+    @Test
     void createCopycatPanelsAndStepsUseDedicatedMaterialRenderer() {
         assertEquals(true, ConnectedTerrainDispatch.isCreateCopycat("create:copycat_panel"));
         assertEquals(true, ConnectedTerrainDispatch.isCreateCopycat("create:copycat_step"));

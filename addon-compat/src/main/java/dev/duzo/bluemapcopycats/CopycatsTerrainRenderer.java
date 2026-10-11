@@ -114,6 +114,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         for (Quad quad : quads) {
             if (quadEmitter.emit(
                     quad.positions(),
+                    quad.samplePositions(),
                     quad.face(),
                     quad.material(),
                     block,
@@ -199,7 +200,27 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         if (!propertyBool(key)) return;
         CopycatsMaterial material = materialFor(entity, key);
         if (!usable(material)) return;
-        cuboid(out, new CopycatsTransform(), x, y, z, x + 8, y + 8, z + 8, material);
+        // Like CopycatMultiByteModelCore, a byte has 8 separate 4px
+        // source samples, not one 8px cube with stretched source UVs.
+        for (int subY = 0; subY < 2; subY++) {
+            for (int subZ = 0; subZ < 2; subZ++) {
+                for (int subX = 0; subX < 2; subX++) {
+                    float sx = subX == 0 ? 0 : 12;
+                    float sy = subY == 0 ? 0 : 12;
+                    float sz = subZ == 0 ? 0 : 12;
+                    List<Quad> faces = new ArrayList<>(6);
+                    piece(faces, new CopycatsTransform(),
+                            x + subX * 4, y + subY * 4, z + subZ * 4,
+                            sx, sy, sz, sx + 4, sy + 4, sz + 4, material);
+                    // Internal directions match Copycats+'s eight cull masks.
+                    // Face order is DOWN, UP, NORTH, SOUTH, WEST, EAST.
+                    for (int face = 0; face < faces.size(); face++) {
+                        boolean internal = CopycatsPieceCull.internalBytePieceFace(face, subX, subY, subZ);
+                        if (!internal) out.add(faces.get(face));
+                    }
+                }
+            }
+        }
     }
 
     private List<Quad> verticalHalfLayer(CopycatsTerrainBlockEntity entity) {
@@ -611,10 +632,42 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
                     i * 8f + 8, 3, j * 8f + 8,
                     material);
         } else {
-            cuboid(out, new CopycatsTransform().rotateY(yRotation(facing)),
-                    i * 8f, j * 8f, 13,
-                    i * 8f + 8, j * 8f + 8, 16,
-                    material);
+            // CopycatMultiBytePanelModelCore samples four 4px corner regions,
+            // each in two depth slices (2px front, 1px back). A single
+            // 8x8x3 cuboid loses the source UV remapping that Create applies.
+            CopycatsTransform transform = new CopycatsTransform()
+                    .rotateY(yRotation(facing));
+            for (int subY = 0; subY < 2; subY++) {
+                for (int subX = 0; subX < 2; subX++) {
+                    float dx = i * 8f + subX * 4f;
+                    float dy = j * 8f + subY * 4f;
+                    float sx = subX == 0 ? 0 : 12;
+                    float sy = subY == 0 ? 0 : 12;
+                    panelSampledSlice(out, transform, material,
+                            dx, dy, 13, sx, sy, 0, 2,
+                            subX, subY, false);
+                    panelSampledSlice(out, transform, material,
+                            dx, dy, 15, sx, sy, 15, 1,
+                            subX, subY, true);
+                }
+            }
+        }
+    }
+
+    private void panelSampledSlice(
+            List<Quad> out, CopycatsTransform transform, CopycatsMaterial material,
+            float dx, float dy, float dz, float sx, float sy, float sz, float depth,
+            int subX, int subY, boolean rear) {
+        List<Quad> faces = new ArrayList<>(6);
+        piece(faces, transform, dx, dy, dz,
+                sx, sy, sz, sx + 4, sy + 4, sz + depth, material);
+
+        // Mirror Copycats+'s cull flags: internal up/down, left/right,
+        // and the seam between the front and back depth slices are hidden.
+        // Face order from cuboid(): DOWN, UP, NORTH, SOUTH, WEST, EAST.
+        for (int face = 0; face < faces.size(); face++) {
+            boolean internal = CopycatsPieceCull.internalBytePieceFace(face, subX, subY, rear ? 1 : 0);
+            if (!internal) out.add(faces.get(face));
         }
     }
 
@@ -648,7 +701,7 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
 
         List<Quad> out = new ArrayList<>(templateQuads.size());
         for (CopycatsTemplateGeometry.TemplateQuad quad : templateQuads) {
-            out.add(new Quad(quad.positions(), quad.face(), material));
+            out.add(new Quad(quad.positions(), quad.positions(), quad.face(), material));
         }
         return out;
     }
@@ -660,12 +713,23 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
             float sx1, float sy1, float sz1,
             float sx2, float sy2, float sz2,
             CopycatsMaterial material) {
+        // A Copycats+ piece is often placed at one location but samples a
+        // different part of the copied block. Retain the original source
+        // bounds instead of projecting CT UVs from the destination bounds.
+        int start = out.size();
         cuboid(out, transform,
                 dx, dy, dz,
                 dx + (sx2 - sx1),
                 dy + (sy2 - sy1),
                 dz + (sz2 - sz1),
                 material);
+        List<Quad> sourceFaces = new ArrayList<>(6);
+        cuboid(sourceFaces, transform, sx1, sy1, sz1, sx2, sy2, sz2, material);
+        for (int i = 0; i < sourceFaces.size(); i++) {
+            Quad destination = out.get(start + i);
+            out.set(start + i, new Quad(destination.positions(),
+                    sourceFaces.get(i).positions(), destination.face(), material));
+        }
     }
 
     private void cuboid(
@@ -701,7 +765,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
                 d[0],d[1],d[2]
         };
         transform.applyQuad(positions);
-        out.add(new Quad(positions, materialFace, material));
+        out.add(new Quad(positions, positions,
+                CopycatsQuadEmitter.physicalFace(positions, materialFace), material));
     }
 
     private CopycatsMaterial materialFor(CopycatsTerrainBlockEntity entity, String part) {
@@ -742,7 +807,8 @@ public final class CopycatsTerrainRenderer implements BlockRenderer {
         return new float[]{x,y,z};
     }
 
-    private record Quad(float[] positions, Direction face, CopycatsMaterial material) {
+    private record Quad(float[] positions, float[] samplePositions,
+                        Direction face, CopycatsMaterial material) {
     }
 
 
