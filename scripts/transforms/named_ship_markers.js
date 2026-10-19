@@ -70,6 +70,7 @@ function createNamedShipMarkers(app, api) {
         var marker = entry.shipMarker;
         if (!marker || !point) return;
         marker.position.set(point.x, point.y + 3, point.z);
+        marker.shipPoint = {x: point.x, y: point.y, z: point.z};
         if (openEntry === entry) {
             marker.shipCoords.textContent = "Position: " +
                 Math.round(point.x) + ", " + Math.round(point.y) +
@@ -139,6 +140,7 @@ function createNamedShipMarkers(app, api) {
                     // Refresh details even when the map render loop is paused.
                     var p = entry.to && entry.to.pos;
                     if (p) position(entry, {x: p[0], y: p[1], z: p[2]});
+                    else if (marker.shipPoint) position(entry, marker.shipPoint);
                 }
             });
             root.add(marker);
@@ -146,6 +148,7 @@ function createNamedShipMarkers(app, api) {
 
         // Only textContent: user-supplied ship names must not be interpreted as HTML.
         marker.shipButton.textContent = label;
+        marker.shipButton.setAttribute("aria-label", "Show details for " + label);
         marker.shipTitle.textContent = label;
         marker.shipDimension.textContent = "Dimension: " + row.dimension;
         position(entry, {x: row.pos[0], y: row.pos[1], z: row.pos[2]});
