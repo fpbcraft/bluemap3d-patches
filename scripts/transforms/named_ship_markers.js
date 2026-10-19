@@ -92,7 +92,9 @@ function createNamedShipMarkers(app, api) {
     function sync(entry, row) {
         var label = row.provider === "sable_ships" && typeof row.label === "string"
             ? row.label.trim() : "";
-        if (!label || !Array.isArray(row.pos) || row.pos.length < 3) {
+        // Hide flyover utility vehicles without affecting other named ships.
+        if (!label || label.toLowerCase() === "flyover" ||
+                !Array.isArray(row.pos) || row.pos.length < 3) {
             remove(entry);
             return;
         }
@@ -118,11 +120,13 @@ function createNamedShipMarkers(app, api) {
             icon.setAttribute("viewBox", "0 0 24 24");
             icon.setAttribute("aria-hidden", "true");
             icon.setAttribute("focusable", "false");
-            var hull = document.createElementNS(svgNS, "path");
-            hull.setAttribute("d", "M3 10c0-4.2 4-7 9-7s9 2.8 9 7-4 4-9 4-9-1.8-9-4Z");
-            var gondola = document.createElementNS(svgNS, "path");
-            gondola.setAttribute("d", "m7 13 2 4h6l2-4M10 17v2m4-2v2m-4 0h4");
-            icon.append(hull, gondola);
+            var gear = document.createElementNS(svgNS, "path");
+            gear.setAttribute("d", "M10 2h4l.5 2.3 1.8.8 2-1.3 2.9 2.9-1.3 2 .8 1.8L23 11v2l-2.3.5-.8 1.8 1.3 2-2.9 2.9-2-1.3-1.8.8L14 22h-4l-.5-2.3-1.8-.8-2 1.3-2.9-2.9 1.3-2-.8-1.8L1 13v-2l2.3-.5.8-1.8-1.3-2 2.9-2.9 2 1.3 1.8-.8L10 2Z");
+            var hub = document.createElementNS(svgNS, "circle");
+            hub.setAttribute("cx", "12");
+            hub.setAttribute("cy", "12");
+            hub.setAttribute("r", "3");
+            icon.append(gear, hub);
             button.appendChild(icon);
             pin.appendChild(button);
 
