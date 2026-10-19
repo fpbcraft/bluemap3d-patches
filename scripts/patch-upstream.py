@@ -42,3 +42,9 @@ runpy.run_path(
     Path(__file__).parent / "transforms" / "instanced_scene_runtime.py",
     run_name="__bluemap3d_instanced_scene_runtime__",
 )
+
+# Keep the ship marker integration separate from the instance/geometry renderer.
+runpy.run_path(
+    Path(__file__).parent / "transforms" / "named_ship_markers.py",
+    run_name="__bluemap3d_named_ship_markers__",
+)
