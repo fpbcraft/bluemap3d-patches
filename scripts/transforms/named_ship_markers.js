@@ -20,10 +20,14 @@ function createNamedShipMarkers(app, api) {
     css.textContent = [
         ".bm3d-ship-pin{position:relative;transform:translate(-50%,-100%);",
         "font:600 12px/1.35 system-ui,sans-serif;white-space:nowrap;pointer-events:auto}",
-        ".bm3d-ship-name{appearance:none;border:1px solid #b5cadb;",
-        "border-radius:14px;background:#172b3be8;color:#fff;padding:4px 10px;",
-        "box-shadow:0 2px 9px #0008;cursor:pointer;font:inherit}",
-        ".bm3d-ship-name:hover,.bm3d-ship-name:focus-visible{background:#29465e;",
+        ".bm3d-ship-icon{appearance:none;display:grid;place-items:center;",
+        "width:32px;height:32px;padding:0;border:1px solid #b5cadb;",
+        "border-radius:50%;background:#172b3be8;color:#fff;",
+        "box-shadow:0 2px 9px #0008;cursor:pointer}",
+        ".bm3d-ship-icon svg{display:block;width:20px;height:20px;",
+        "fill:none;stroke:currentColor;stroke-width:1.8;",
+        "stroke-linecap:round;stroke-linejoin:round}",
+        ".bm3d-ship-icon:hover,.bm3d-ship-icon:focus-visible{background:#29465e;",
         "outline:2px solid #a8d6ff;outline-offset:2px}",
         ".bm3d-ship-details{position:absolute;top:calc(100% + 6px);left:50%;",
         "transform:translateX(-50%);background:#182632f5;color:#fff;",
@@ -102,9 +106,24 @@ function createNamedShipMarkers(app, api) {
             pin.className = "bm3d-ship-pin";
             var button = document.createElement("button");
             button.type = "button";
-            button.className = "bm3d-ship-name";
+            button.className = "bm3d-ship-icon";
             button.setAttribute("aria-expanded", "false");
             button.setAttribute("aria-label", "Show ship details");
+            button.setAttribute("aria-haspopup", "true");
+
+            // The ship name belongs in the details popup, not on the map marker.
+            // Build the icon as SVG nodes so names never pass through innerHTML.
+            var svgNS = "http://www.w3.org/2000/svg";
+            var icon = document.createElementNS(svgNS, "svg");
+            icon.setAttribute("viewBox", "0 0 24 24");
+            icon.setAttribute("aria-hidden", "true");
+            icon.setAttribute("focusable", "false");
+            var hull = document.createElementNS(svgNS, "path");
+            hull.setAttribute("d", "M3 10c0-4.2 4-7 9-7s9 2.8 9 7-4 4-9 4-9-1.8-9-4Z");
+            var gondola = document.createElementNS(svgNS, "path");
+            gondola.setAttribute("d", "m7 13 2 4h6l2-4M10 17v2m4-2v2m-4 0h4");
+            icon.append(hull, gondola);
+            button.appendChild(icon);
             pin.appendChild(button);
 
             var details = document.createElement("div");
@@ -147,7 +166,7 @@ function createNamedShipMarkers(app, api) {
         }
 
         // Only textContent: user-supplied ship names must not be interpreted as HTML.
-        marker.shipButton.textContent = label;
+        // The icon stays unchanged when a ship is renamed.
         marker.shipButton.setAttribute("aria-label", "Show details for " + label);
         marker.shipTitle.textContent = label;
         marker.shipDimension.textContent = "Dimension: " + row.dimension;
