@@ -8,6 +8,7 @@ function fixture() {
     const listeners = new Map();
     const document = {
         head: null,
+        createElementNS(_namespace, tag) { return this.createElement(tag); },
         createElement(tag) {
             return {
                 tag, children: [], attributes: {}, hidden: false, textContent: "",
@@ -73,19 +74,32 @@ test("named Sable ships get one reusable accessible marker and safe details", ()
     const entry = {};
     manager.sync(entry, shipRow({label: "<img src=x onerror=alert(1)>"}));
     assert.equal(children().size, 1);
-    assert.equal(entry.shipMarker.shipButton.textContent, "<img src=x onerror=alert(1)>");
+    // The name is only in the initially hidden popup; the button stays icon-only.
+    assert.equal(entry.shipMarker.shipButton.textContent, "");
+    assert.equal(entry.shipMarker.shipButton.className, "bm3d-ship-icon");
+    assert.equal(entry.shipMarker.shipButton.children.length, 1);
+    assert.equal(entry.shipMarker.shipButton.children[0].tag, "svg");
+    assert.equal(entry.shipMarker.shipButton.children[0].children.length, 2);
+    assert.equal(entry.shipMarker.shipButton.attributes["aria-label"],
+        "Show details for <img src=x onerror=alert(1)>");
     assert.equal(entry.shipMarker.shipTitle.textContent, "<img src=x onerror=alert(1)>");
+    assert.equal(entry.shipMarker.shipDetails.hidden, true);
     assert.equal(entry.shipMarker.position.x, 100);
     assert.equal(entry.shipMarker.position.y, 83);
 
     manager.sync(entry, shipRow({label: "The Peregrine"}));
     assert.equal(children().size, 1);
-    assert.equal(entry.shipMarker.shipButton.textContent, "The Peregrine");
+    assert.equal(entry.shipMarker.shipButton.textContent, "");
+    assert.equal(entry.shipMarker.shipButton.children.length, 1);
+    assert.equal(entry.shipMarker.shipButton.attributes["aria-label"],
+        "Show details for The Peregrine");
+    assert.equal(entry.shipMarker.shipTitle.textContent, "The Peregrine");
 
     const event = {preventDefault() {}, stopPropagation() {}};
     entry.shipMarker.shipButton.handlers.click(event);
     assert.equal(entry.shipMarker.shipDetails.hidden, false);
     assert.equal(entry.shipMarker.shipButton.attributes["aria-expanded"], "true");
+    assert.equal(entry.shipMarker.shipTitle.textContent, "The Peregrine");
     assert.equal(entry.shipMarker.shipCoords.textContent, "Position: 100, 80, -25");
     assert.equal(entry.shipMarker.shipDimension.textContent, "Dimension: minecraft:overworld");
 
@@ -94,6 +108,10 @@ test("named Sable ships get one reusable accessible marker and safe details", ()
     assert.equal(entry.shipMarker.shipCoords.textContent, "Position: 125, 90, -10");
 
     listeners.get("keydown")({key: "Escape"});
+    assert.equal(entry.shipMarker.shipDetails.hidden, true);
+    entry.shipMarker.shipButton.handlers.click(event);
+    assert.equal(entry.shipMarker.shipDetails.hidden, false);
+    entry.shipMarker.shipButton.handlers.click(event);
     assert.equal(entry.shipMarker.shipDetails.hidden, true);
     manager.dispose();
 });
