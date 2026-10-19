@@ -80,6 +80,9 @@ test("named Sable ships get one reusable accessible marker and safe details", ()
     assert.equal(entry.shipMarker.shipButton.children.length, 1);
     assert.equal(entry.shipMarker.shipButton.children[0].tag, "svg");
     assert.equal(entry.shipMarker.shipButton.children[0].children.length, 2);
+    assert.equal(entry.shipMarker.shipButton.children[0].children[0].tag, "path");
+    assert.equal(entry.shipMarker.shipButton.children[0].children[1].tag, "circle");
+    assert.equal(entry.shipMarker.shipButton.children[0].children[1].attributes.r, "3");
     assert.equal(entry.shipMarker.shipButton.attributes["aria-label"],
         "Show details for <img src=x onerror=alert(1)>");
     assert.equal(entry.shipMarker.shipTitle.textContent, "<img src=x onerror=alert(1)>");
@@ -136,4 +139,24 @@ test("unnamed or different-provider objects get no labels, and stale markers are
     assert.equal(root.markers.size, 0);
     assert.equal(document.head.children[0].removed, true);
     assert.equal(listeners.size, 0);
+});
+
+test("flyover vehicles never get markers, including rename transitions", () => {
+    const {manager, children} = fixture();
+    const entry = {};
+
+    manager.sync(entry, shipRow({label: "flyover"}));
+    assert.equal(children().size, 0);
+    manager.sync(entry, shipRow({label: " FlyOver "}));
+    assert.equal(children().size, 0);
+
+    manager.sync(entry, shipRow({label: "The Peregrine"}));
+    assert.equal(children().size, 1);
+    manager.sync(entry, shipRow({label: "FLYOVER"}));
+    assert.equal(children().size, 0);
+    assert.equal(entry.shipMarker, null);
+
+    manager.sync(entry, shipRow({label: "Flyover II"}));
+    assert.equal(children().size, 1);
+    manager.dispose();
 });
