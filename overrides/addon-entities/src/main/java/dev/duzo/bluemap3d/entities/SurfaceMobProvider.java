@@ -5,6 +5,7 @@ import dev.duzo.bluemap3d.api.ModelAttachment;
 import dev.duzo.bluemap3d.api.SceneObject;
 import dev.duzo.bluemap3d.api.SceneObjectLifecycle;
 import dev.duzo.bluemap3d.api.SceneObjectProvider;
+import dev.duzo.bluemap3d.compat.CompatRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -31,6 +32,7 @@ import java.util.Locale;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -48,6 +50,11 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
     }
 
     @Override
+    public boolean enabled(ServerLevel level) {
+        return CompatRegistry.get().featureEnabled("entities.surfaceMobs", true);
+    }
+
+    @Override
     public SceneObjectLifecycle lifecycle() {
         // Keep the last published transform while the backing chunk is unloaded, but do
         // not record ordinary mobs into Player History.
@@ -55,6 +62,7 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
     }
 
     void entityLeft(Entity entity, Level level) {
+        if (!CompatRegistry.get().featureEnabled("entities.surfaceMobs", true)) return;
         if (!(entity instanceof Mob) || level.isClientSide()) return;
 
         Entity.RemovalReason reason = entity.getRemovalReason();
@@ -82,6 +90,7 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
 
     @Override
     public Collection<? extends SceneObject> objects(ServerLevel level) {
+        if (!enabled(level)) return List.of();
         List<SceneObject> out = new ArrayList<>();
 
         for (Entity entity : level.getAllEntities()) {
@@ -163,6 +172,45 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
     /** Reflection discovery is per entity class, not per mob per publish tick. */
     private static final Map<Class<?>, List<Method>> APPEARANCE_METHODS =
             new ConcurrentHashMap<>();
+
+    /** Cache positive and negative convention lookups by concrete mob/palette class. */
+    private static final Map<Class<?>, List<IndexedAccessors>> INDEXED_ACCESSORS =
+            new ConcurrentHashMap<>();
+    private static final Map<PaletteGetterKey, Optional<Method>> PALETTE_GETTERS =
+            new ConcurrentHashMap<>();
+
+    private record IndexedAccessors(IndexedAppearanceConvention convention,
+                                    Method indexGetter, Method paletteGetter) {}
+    private record PaletteGetterKey(Class<?> type, String method, boolean texture) {}
+
+    private static List<IndexedAccessors> indexedAccessors(Class<?> type) {
+        List<IndexedAccessors> accessors = new ArrayList<>();
+        for (IndexedAppearanceConvention convention : INDEXED_APPEARANCE_CONVENTIONS) {
+            try {
+                Method index = type.getMethod(convention.indexGetter());
+                Method palette = type.getMethod(convention.paletteGetter());
+                if (index.getParameterCount() == 0 && palette.getParameterCount() == 0) {
+                    accessors.add(new IndexedAccessors(convention, index, palette));
+                }
+            } catch (NoSuchMethodException | SecurityException ignored) {
+                // An unsupported convention is discovered once per entity class.
+            }
+        }
+        return List.copyOf(accessors);
+    }
+
+    private static Method paletteGetter(Class<?> type, String method, boolean texture) {
+        return PALETTE_GETTERS.computeIfAbsent(
+                new PaletteGetterKey(type, method, texture), key -> {
+                    try {
+                        return Optional.of(texture
+                                ? type.getMethod(method, int.class, boolean.class)
+                                : type.getMethod(method, int.class));
+                    } catch (NoSuchMethodException | SecurityException ignored) {
+                        return Optional.empty();
+                    }
+                }).orElse(null);
+    }
 
     static Map<String, String> diagnosticMetadata(Mob mob) {
         return appearanceMetadata(
@@ -248,20 +296,16 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
 
     private static int appendIndexedAppearance(
             Object subject, Map<String, String> metadata, int visual) {
-        for (IndexedAppearanceConvention convention : INDEXED_APPEARANCE_CONVENTIONS) {
+        for (IndexedAccessors accessors : INDEXED_ACCESSORS.computeIfAbsent(
+                subject.getClass(), SurfaceMobProvider::indexedAccessors)) {
+            IndexedAppearanceConvention convention = accessors.convention();
             try {
-                Method indexGetter = subject.getClass().getMethod(convention.indexGetter());
-                Method paletteGetter = subject.getClass().getMethod(convention.paletteGetter());
-                if (indexGetter.getParameterCount() != 0 || paletteGetter.getParameterCount() != 0) {
-                    continue;
-                }
-
-                Object rawIndex = indexGetter.invoke(subject);
-                Object palette = paletteGetter.invoke(subject);
+                Object rawIndex = accessors.indexGetter().invoke(subject);
+                Object palette = accessors.paletteGetter().invoke(subject);
                 if (!(rawIndex instanceof Number index) || palette == null) continue;
 
-                Method idGetter =
-                        palette.getClass().getMethod(convention.idGetter(), int.class);
+                Method idGetter = paletteGetter(palette.getClass(), convention.idGetter(), false);
+                if (idGetter == null) continue;
                 String token = appearanceToken(idGetter.invoke(palette, index.intValue()));
                 if (token != null && !token.isBlank()) {
                     metadata.put("__bm3d_visual_" + visual++, token);
@@ -272,12 +316,14 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
                 // asking the generic filename scorer to rediscover it. Icy's Better Horses
                 // uses BreedCoatSet#texture(coat, baby) for BhHorseRenderer#getTextureLocation.
                 if (convention.textureGetter() != null) {
-                    Method textureGetter = palette.getClass().getMethod(
-                            convention.textureGetter(), int.class, boolean.class);
-                    boolean baby = subject instanceof AgeableMob ageable && ageable.isBaby();
-                    Object texture = textureGetter.invoke(palette, index.intValue(), baby);
-                    if (texture instanceof ResourceLocation location) {
-                        metadata.put("__bm3d_texture_main", location.toString());
+                    Method textureGetter = paletteGetter(
+                            palette.getClass(), convention.textureGetter(), true);
+                    if (textureGetter != null) {
+                        boolean baby = subject instanceof AgeableMob ageable && ageable.isBaby();
+                        Object texture = textureGetter.invoke(palette, index.intValue(), baby);
+                        if (texture instanceof ResourceLocation location) {
+                            metadata.put("__bm3d_texture_main", location.toString());
+                        }
                     }
                 }
             } catch (ReflectiveOperationException | RuntimeException ignored) {

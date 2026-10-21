@@ -94,8 +94,20 @@ final class PersistentSceneObjectProvider implements SceneObjectProvider {
     }
 
     @Override
+    public boolean enabled(ServerLevel level) {
+        return delegate.enabled(level);
+    }
+
+    @Override
     public Collection<? extends SceneObject> objects(ServerLevel level) {
         SceneObjectPersistenceStore.ensureLoaded();
+        if (!delegate.enabled(level)) {
+            // Disabling a provider must also suppress previously restored objects.
+            // Drop stale snapshots so reenabling starts with the current live world.
+            SceneObjectPersistenceStore.removeProvider(id());
+            SceneObjectPersistenceStore.flushIfDue();
+            return List.of();
+        }
 
         Collection<? extends SceneObject> live = delegate.objects(level);
         Map<String, SceneObject> merged = new LinkedHashMap<>();

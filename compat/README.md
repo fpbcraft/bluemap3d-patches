@@ -141,7 +141,8 @@ without rebuilding:
       "create.chainConveyorAnimation": false,
       "create.mechanicalBeltAnimation": false,
       "simulated.ropeRendering": true,
-      "simulated.springRendering": true
+      "simulated.springRendering": true,
+      "entities.surfaceMobs": false
     }
   },
   "rules": []
@@ -153,3 +154,16 @@ Their ordinary static BlueMap geometry remains visible. Create: Simulated physic
 rendering defaults on and can be disabled with `simulated.ropeRendering: false`.
 Create: Simulated spring rendering also defaults on and can be disabled with
 `simulated.springRendering: false`.
+
+
+### Surface-mob rendering
+
+To disable live surface mobs in BlueMap3D, add `"entities.surfaceMobs": false`
+under `moving.features` in `config/bluemap3d/compat/local.json`. The default
+is `true`. The setting hot-reloads with the existing compatibility rules;
+publication stops at the next scene tick, and persistent last-known mob
+snapshots are removed. Re-enable it by setting the flag to `true` (only
+currently loaded or subsequently loaded surface mobs will reappear).
+
+This setting only controls the BlueMap3D 3D surface-mob layer. It does not
+suppress mob ticking, change vanilla/BlueMap entities, or affect Player History.

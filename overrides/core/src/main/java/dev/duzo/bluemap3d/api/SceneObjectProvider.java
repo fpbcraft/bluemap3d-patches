@@ -19,6 +19,11 @@ public interface SceneObjectProvider {
 
     Collection<? extends SceneObject> objects(ServerLevel level);
 
+    /** Whether this provider should publish or restore objects in this level. */
+    default boolean enabled(ServerLevel level) {
+        return true;
+    }
+
     /**
      * Lifecycle policy for every object returned by this provider.
      *
