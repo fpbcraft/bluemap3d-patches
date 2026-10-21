@@ -74,6 +74,19 @@ public final class SceneObjectTracker {
     private final AtomicLong bakeCount = new AtomicLong();
     private final AtomicLong bakeNanos = new AtomicLong();
 
+    /**
+     * Latest server-thread scene enumeration. Consumers (notably Player History) can
+     * reuse the same snapshot rather than invoking persistent providers twice.
+     * Read only on the Minecraft server thread; scene objects may contain mutable transforms.
+     */
+    public record ProviderSnapshot(long sampledAtMillis,
+                                   Map<String, List<SceneObject>> objectsByProvider) {}
+    private static volatile ProviderSnapshot latestSnapshot;
+
+    public static ProviderSnapshot latestProviderSnapshot() {
+        return latestSnapshot;
+    }
+
     private int tickCounter;
     private int lastPublishedCount = -1;
     private int lastFeedBytes;
@@ -135,13 +148,17 @@ public final class SceneObjectTracker {
         Set<String> seenObjects = new HashSet<>();
         Map<String, List<String>> dimensionMaps = new LinkedHashMap<>();
         Map<String, MutablePerf> perf = new LinkedHashMap<>();
+        Map<String, List<SceneObject>> snapshot = new LinkedHashMap<>();
+        Set<String> failedProviders = new HashSet<>();
 
         for (ServerLevel level : server.getAllLevels()) {
             boolean any = false;
             for (SceneObjectProvider provider : BlueMap3D.providers()) {
                 MutablePerf providerPerf =
                         perf.computeIfAbsent(provider.id(), ignored -> new MutablePerf());
-                any |= collect(provider, level, rows, seenObjects, providerPerf);
+                any |= collect(
+                        provider, level, rows, seenObjects, providerPerf,
+                        snapshot, failedProviders);
             }
             if (any) {
                 dimensionMaps.computeIfAbsent(
@@ -149,6 +166,13 @@ public final class SceneObjectTracker {
                         ignored -> mapLookup.mapIdsFor(level));
             }
         }
+
+        // Only expose complete enumerations; a failed provider should be retried by consumers.
+        for (String failed : failedProviders) snapshot.remove(failed);
+        Map<String, List<SceneObject>> frozenSnapshot = new LinkedHashMap<>();
+        snapshot.forEach((id, objects) -> frozenSnapshot.put(id, List.copyOf(objects)));
+        latestSnapshot = new ProviderSnapshot(
+                System.currentTimeMillis(), Map.copyOf(frozenSnapshot));
 
         // Publication identity is logical-object scoped. Shared mesh files themselves are
         // deliberately retained: another live object or historical replay may still use
@@ -178,7 +202,9 @@ public final class SceneObjectTracker {
             ServerLevel level,
             List<Row> rows,
             Set<String> seen,
-            MutablePerf perf) {
+            MutablePerf perf,
+            Map<String, List<SceneObject>> snapshot,
+            Set<String> failedProviders) {
         String providerId = provider.id();
         long started = System.nanoTime();
         Iterable<? extends SceneObject> objects;
@@ -188,6 +214,7 @@ public final class SceneObjectTracker {
         } catch (RuntimeException error) {
             perf.nanos += System.nanoTime() - started;
             LOGGER.error("Provider '{}' threw while listing objects", providerId, error);
+            failedProviders.add(providerId);
             return false;
         }
 
@@ -197,6 +224,9 @@ public final class SceneObjectTracker {
                 if (object == null) continue;
                 any = true;
                 perf.objects++;
+                if (!failedProviders.contains(providerId)) {
+                    snapshot.computeIfAbsent(providerId, ignored -> new ArrayList<>()).add(object);
+                }
 
                 String objectKey = providerId + "/" + object.id();
                 seen.add(objectKey);
@@ -568,6 +598,7 @@ public final class SceneObjectTracker {
 
     public void shutdown() {
         baker.shutdownNow();
+        latestSnapshot = null;
         geometryReady.clear();
         baking.clear();
         objectPublications.clear();
