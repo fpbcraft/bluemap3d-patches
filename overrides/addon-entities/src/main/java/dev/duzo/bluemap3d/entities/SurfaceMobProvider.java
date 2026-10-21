@@ -5,6 +5,7 @@ import dev.duzo.bluemap3d.api.ModelAttachment;
 import dev.duzo.bluemap3d.api.SceneObject;
 import dev.duzo.bluemap3d.api.SceneObjectLifecycle;
 import dev.duzo.bluemap3d.api.SceneObjectProvider;
+import dev.duzo.bluemap3d.compat.CompatRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -48,6 +49,11 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
     }
 
     @Override
+    public boolean enabled(ServerLevel level) {
+        return CompatRegistry.get().featureEnabled("entities.surfaceMobs", true);
+    }
+
+    @Override
     public SceneObjectLifecycle lifecycle() {
         // Keep the last published transform while the backing chunk is unloaded, but do
         // not record ordinary mobs into Player History.
@@ -55,6 +61,7 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
     }
 
     void entityLeft(Entity entity, Level level) {
+        if (!CompatRegistry.get().featureEnabled("entities.surfaceMobs", true)) return;
         if (!(entity instanceof Mob) || level.isClientSide()) return;
 
         Entity.RemovalReason reason = entity.getRemovalReason();
@@ -82,6 +89,7 @@ public final class SurfaceMobProvider implements SceneObjectProvider {
 
     @Override
     public Collection<? extends SceneObject> objects(ServerLevel level) {
+        if (!enabled(level)) return List.of();
         List<SceneObject> out = new ArrayList<>();
 
         for (Entity entity : level.getAllEntities()) {
