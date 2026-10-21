@@ -24,6 +24,7 @@ The build produces two installable JARs:
 
 1. **`bluemap3d-bundle-*.jar`** — patched BlueMap3D bundle
    - persistent Sable/Create moving objects
+   - named Sable/Aeronautics ship markers; click a name for position and dimension
    - persistent Sable child contraptions (including Aeronautics propeller/sail assemblies), retained across distance unloads and server restarts
    - optional Create chain-conveyor and mechanical-belt animations (disabled by default)
    - live Create: Simulated physics ropes, using the server strand points and streamed segment transforms
