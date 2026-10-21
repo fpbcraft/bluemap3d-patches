@@ -190,7 +190,7 @@ final class SceneObjectPersistenceStore {
     /** Clear all durable and pending snapshots owned by a disabled scene provider. */
     static void removeProvider(String provider) {
         if (provider == null) return;
-        String prefix = provider + "\\u0000";
+        String prefix = provider + Character.toString((char) 0);
         for (String key : List.copyOf(SAVED.keySet())) {
             if (!key.startsWith(prefix)) continue;
             PENDING.remove(key);
