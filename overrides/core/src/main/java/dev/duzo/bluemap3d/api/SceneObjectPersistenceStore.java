@@ -187,6 +187,20 @@ final class SceneObjectPersistenceStore {
         if (SAVED.remove(key) != null) dirty = true;
     }
 
+    /** Clear all durable and pending snapshots owned by a disabled scene provider. */
+    static void removeProvider(String provider) {
+        if (provider == null) return;
+        String prefix = provider + "\\u0000";
+        for (String key : List.copyOf(SAVED.keySet())) {
+            if (!key.startsWith(prefix)) continue;
+            PENDING.remove(key);
+            PUBLISHED.remove(key);
+            if (SAVED.remove(key) != null) dirty = true;
+        }
+        PENDING.keySet().removeIf(key -> key.startsWith(prefix));
+        PUBLISHED.keySet().removeIf(key -> key.startsWith(prefix));
+    }
+
     static void pruneAuthoritativelyMissing(
             String provider,
             String dimension,
