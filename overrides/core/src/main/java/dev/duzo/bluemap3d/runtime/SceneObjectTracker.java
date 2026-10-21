@@ -32,6 +32,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Tracks logical scene objects separately from immutable mesh resources.
@@ -58,6 +60,9 @@ public final class SceneObjectTracker {
     private final VolumeMesher mesher;
     private final MapLookup mapLookup;
     private final ExecutorService baker;
+    private final ExecutorService feedWriter;
+    private final AtomicReference<FeedFrame> pendingFeed = new AtomicReference<>();
+    private final AtomicBoolean writingFeed = new AtomicBoolean();
 
     @FunctionalInterface
     public interface MapLookup {
@@ -89,7 +94,7 @@ public final class SceneObjectTracker {
 
     private int tickCounter;
     private int lastPublishedCount = -1;
-    private int lastFeedBytes;
+    private volatile int lastFeedBytes;
     private volatile Map<String, ProviderPerf> lastProviderPerf = Map.of();
 
     private record Ready(long version, String meshUrl) {}
@@ -105,6 +110,14 @@ public final class SceneObjectTracker {
             Vector3f scale,
             List<GroupRow> groups) {}
     private record ProviderPerf(long enumerateNanos, int objects, int groups, int instances) {}
+
+    // Detached from live scene objects before entering the IO/serialization worker.
+    private record FeedFrame(List<Row> rows, Map<String, List<String>> maps, int intervalTicks,
+                             int tilesVersion, int tileReloadMinSeconds,
+                             Map<String, List<int[]>> dirtyTiles,
+                             Map<String, ProviderPerf> perf, int previousFeedBytes,
+                             long bakeCount, long bakeNanos, int bakesInFlight) {}
+
     private static final class MutablePerf {
         long nanos;
         int objects;
@@ -133,6 +146,12 @@ public final class SceneObjectTracker {
         this.mapLookup = mapLookup;
         this.baker = Executors.newSingleThreadExecutor(runnable -> {
             Thread thread = new Thread(runnable, "BlueMap3D-Baker");
+            thread.setDaemon(true);
+            thread.setPriority(Thread.NORM_PRIORITY - 2);
+            return thread;
+        });
+        this.feedWriter = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "BlueMap3D-FeedWriter");
             thread.setDaemon(true);
             thread.setPriority(Thread.NORM_PRIORITY - 2);
             return thread;
@@ -436,41 +455,96 @@ public final class SceneObjectTracker {
         return geometryKey + "/@bake-" + MESH_BAKE_REVISION;
     }
 
+    /** Serialize and publish complete immutable frames off the Minecraft tick thread. */
     private void publish(
             List<Row> rows,
             Map<String, List<String>> dimensionMaps,
             int intervalTicks) {
-        try {
-            String json = toJson(
-                    rows,
-                    dimensionMaps,
-                    intervalTicks,
-                    tilesVersion.getAsInt(),
-                    dev.duzo.bluemap3d.Config.TILE_RELOAD_MIN_SECONDS.get(),
-                    dirtyTiles.get(),
-                    lastProviderPerf,
-                    lastFeedBytes,
-                    bakeCount.get(),
-                    bakeNanos.get(),
-                    baking.size());
-            byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
-            publisher.writeFeed(json);
-            lastFeedBytes = bytes.length;
-
-            if (rows.size() != lastPublishedCount) {
-                int instances = rows.stream()
-                        .flatMap(row -> row.groups().stream())
-                        .mapToInt(group -> group.instances().size())
-                        .sum();
-                LOGGER.debug(
-                        "Publishing {} logical 3D object(s), {} instance(s), {} bytes",
-                        rows.size(),
-                        instances,
-                        bytes.length);
-                lastPublishedCount = rows.size();
+        // Quaternionf and Vector3f are mutable; freeze them before handing work to a thread.
+        List<Row> immutableRows = new ArrayList<>(rows.size());
+        for (Row row : rows) {
+            List<GroupRow> groups = new ArrayList<>(row.groups().size());
+            for (GroupRow group : row.groups()) {
+                List<SceneInstance> instances = new ArrayList<>(group.instances().size());
+                for (SceneInstance instance : group.instances()) {
+                    instances.add(new SceneInstance(
+                            instance.position(), instance.rotation(), instance.scale()));
+                }
+                groups.add(new GroupRow(group.id(), group.meshUrl(), List.copyOf(instances)));
             }
-        } catch (IOException error) {
-            LOGGER.error("Could not write the live feed", error);
+            immutableRows.add(new Row(row.provider(), row.id(), row.label(),
+                    row.dimension(), row.meshUrl(), row.position(),
+                    new Quaternionf(row.rotation()), new Vector3f(row.scale()),
+                    List.copyOf(groups)));
+        }
+        Map<String, List<int[]>> dirty = new LinkedHashMap<>();
+        dirtyTiles.get().forEach((key, tiles) -> {
+            List<int[]> copied = new ArrayList<>(tiles.size());
+            for (int[] tile : tiles) copied.add(tile.clone());
+            dirty.put(key, List.copyOf(copied));
+        });
+
+        FeedFrame next = new FeedFrame(List.copyOf(immutableRows),
+                Map.copyOf(dimensionMaps), intervalTicks, tilesVersion.getAsInt(),
+                dev.duzo.bluemap3d.Config.TILE_RELOAD_MIN_SECONDS.get(),
+                Map.copyOf(dirty), lastProviderPerf, lastFeedBytes,
+                bakeCount.get(), bakeNanos.get(), baking.size());
+
+        // Bounded coalescing: do not let slow storage create an unbounded writer queue.
+        // Preserve dirty tiles from skipped frames so the browser never misses reloads.
+        pendingFeed.getAndUpdate(previous -> previous == null
+                ? next : withAccumulatedDirtyTiles(next, previous.dirtyTiles()));
+        scheduleFeedWriter();
+    }
+
+    private static FeedFrame withAccumulatedDirtyTiles(
+            FeedFrame newest, Map<String, List<int[]>> olderDirty) {
+        Map<String, List<int[]>> merged = new LinkedHashMap<>();
+        olderDirty.forEach((key, tiles) -> merged.put(key, new ArrayList<>(tiles)));
+        newest.dirtyTiles().forEach((key, tiles) ->
+                merged.computeIfAbsent(key, ignored -> new ArrayList<>()).addAll(tiles));
+        Map<String, List<int[]>> frozen = new LinkedHashMap<>();
+        merged.forEach((key, tiles) -> frozen.put(key, List.copyOf(tiles)));
+        return new FeedFrame(newest.rows(), newest.maps(), newest.intervalTicks(),
+                newest.tilesVersion(), newest.tileReloadMinSeconds(), Map.copyOf(frozen),
+                newest.perf(), newest.previousFeedBytes(), newest.bakeCount(),
+                newest.bakeNanos(), newest.bakesInFlight());
+    }
+
+    private void scheduleFeedWriter() {
+        if (!writingFeed.compareAndSet(false, true)) return;
+        feedWriter.execute(this::drainFeed);
+    }
+
+    private void drainFeed() {
+        try {
+            FeedFrame frame;
+            while ((frame = pendingFeed.getAndSet(null)) != null) {
+                try {
+                    String json = toJson(frame.rows(), frame.maps(), frame.intervalTicks(),
+                            frame.tilesVersion(), frame.tileReloadMinSeconds(),
+                            frame.dirtyTiles(), frame.perf(), frame.previousFeedBytes(),
+                            frame.bakeCount(), frame.bakeNanos(), frame.bakesInFlight());
+                    publisher.writeFeed(json);
+                    lastFeedBytes = json.getBytes(StandardCharsets.UTF_8).length;
+                    if (frame.rows().size() != lastPublishedCount) {
+                        int instances = frame.rows().stream()
+                                .flatMap(row -> row.groups().stream())
+                                .mapToInt(group -> group.instances().size())
+                                .sum();
+                        LOGGER.debug("Publishing {} logical 3D object(s), {} instance(s), {} bytes",
+                                frame.rows().size(), instances, lastFeedBytes);
+                        lastPublishedCount = frame.rows().size();
+                    }
+                } catch (IOException | RuntimeException error) {
+                    LOGGER.error("Could not write the live feed", error);
+                }
+            }
+        } finally {
+            writingFeed.set(false);
+            if (pendingFeed.get() != null && !feedWriter.isShutdown()) {
+                scheduleFeedWriter();
+            }
         }
     }
 
@@ -597,6 +671,8 @@ public final class SceneObjectTracker {
     }
 
     public void shutdown() {
+        pendingFeed.set(null);
+        feedWriter.shutdownNow();
         baker.shutdownNow();
         latestSnapshot = null;
         geometryReady.clear();
