@@ -96,7 +96,7 @@ public final class SimulatedCoasterTrackProvider implements SceneObjectProvider 
     private static SceneObject createTrack(ServerLevel level, BlockEntity anchor, BlockPos peer,
             BezierConnection curve, CoasterApi api) throws ReflectiveOperationException {
         // Each Create curve has primary and reciprocal entries: only the primary is rendered.
-        int segments = Math.max(8, Math.min(192, curve.getSegmentCount() * 2));
+        int segments = Math.max(8, Math.min(128, curve.getSegmentCount() * 2));
         SubLevel subLevel = Sable.HELPER.getContaining(anchor);
         List<Vec3> points = new ArrayList<>(segments + 1);
         List<Vec3> lateral = new ArrayList<>(segments + 1);
@@ -135,7 +135,9 @@ public final class SimulatedCoasterTrackProvider implements SceneObjectProvider 
             if (i == 1 || i == segments || i % 4 == 0) {
                 Vec3 rail = lateral.get(i);
                 Vec3 offset = rail.scale(0.51);
-                Vec3 center = to.add(0, -0.08, 0);
+                Vec3 tangent = to.subtract(from).normalize();
+                Vec3 up = tangent.cross(rail).normalize();
+                Vec3 center = to.subtract(up.scale(0.08));
                 ties.add(SceneInstance.between(center.subtract(offset), center.add(offset), 0.24f));
             }
         }
