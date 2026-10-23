@@ -29,6 +29,7 @@ The build produces two installable JARs:
    - optional Create chain-conveyor and mechanical-belt animations (disabled by default)
    - live Create: Simulated physics ropes, using the server strand points and streamed segment transforms
    - live Create: Simulated springs, mirroring the renderer's Bézier curve across world/Sable endpoints
+   - Coasters Simulated Bézier tracks as banked, instanced rails, beams and ties (world and Sable sublevels)
    - generic restore-on-launch for persistent scene providers (position, rotation, scale and mesh version)
    - generic history eligibility for persistent scene providers
    - trains/bogeys
@@ -84,7 +85,8 @@ Rules support:
 - separate `terrain` and `moving` scopes;
 - no tint / fixed RGB / NBT-or-adapter-backed palette tint;
 - wildcard moving-model namespace include/exclude policy;
-- moving runtime feature flags, including `simulated.ropeRendering` and `simulated.springRendering` (enabled by default).
+- moving runtime feature flags, including `simulated.ropeRendering`, `simulated.springRendering` and
+  `simulated.coasterTrackRendering` (enabled by default).
 
 Example:
 
@@ -131,6 +133,13 @@ Create: Simulated ropes use a small optional runtime adapter backed by the reusa
 `DynamicModelSegment` scene-object capability. Each physics edge keeps one stable mesh
 while BlueMap3D streams midpoint, orientation and scale. Rope/spring stretching therefore
 does not re-bake geometry, and a small overlap prevents cracks between adjacent segments.
+Coasters Simulated uses the same optional adapter approach. Its track anchor block
+entities supply primary Bézier connections; BlueMap3D samples Coasters' own banked
+curve frames to publish rail, beam and tie prototypes as GPU instances. These are
+approximated geometry, not exact Flywheel models or custom dyed track styles. Removing
+tracks explicitly drops their persistent snapshots; unloading a chunk does not. Coaster
+carts are Sable sublevels and are intentionally left to the existing Sable renderer.
+
 The Simulated-specific adapters are reflection-based, so Simulated is not a
 hard dependency of the bundle.
 
