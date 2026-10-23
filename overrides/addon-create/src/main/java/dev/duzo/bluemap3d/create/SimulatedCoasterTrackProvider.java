@@ -54,6 +54,10 @@ public final class SimulatedCoasterTrackProvider implements SceneObjectProvider 
 
     @Override public String id() { return "simulated_coaster_tracks"; }
 
+    @Override public boolean enabled(ServerLevel level) {
+        return CompatRegistry.get().featureEnabled("simulated.coasterTrackRendering", true);
+    }
+
     @Override
     public Collection<? extends SceneObject> objects(ServerLevel level) {
         if (!CompatRegistry.get().featureEnabled("simulated.coasterTrackRendering", true)) {
@@ -64,7 +68,7 @@ public final class SimulatedCoasterTrackProvider implements SceneObjectProvider 
         CoasterApi access = api();
         if (access == null) return List.of();
 
-        deleted.put(level, SimulatedCoasterTrackRegistry.drainDeleted(level));
+        Set<String> pendingRemoved = SimulatedCoasterTrackRegistry.drainDeleted(level);
         List<SceneObject> result = new ArrayList<>();
         try {
             for (BlockEntity anchor : SimulatedCoasterTrackRegistry.loaded(level)) {
@@ -86,6 +90,11 @@ public final class SimulatedCoasterTrackProvider implements SceneObjectProvider 
                         SimulatedReflection.rootMessage(error));
             }
         }
+        // The same curve can be edited and recreated before this publish. A live
+        // curve wins over earlier removal evidence, avoiding accidental cache eviction.
+        Set<String> trulyRemoved = new java.util.HashSet<>(pendingRemoved);
+        for (SceneObject track : result) trulyRemoved.remove(track.id());
+        deleted.put(level, Set.copyOf(trulyRemoved));
         return List.copyOf(result);
     }
 
