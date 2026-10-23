@@ -6,7 +6,8 @@
     "modelNamespaces": {
       "include": [
         "copycats",
-        "create_connected"
+        "create_connected",
+        "simulatedcoasters"
       ],
       "exclude": []
     },
