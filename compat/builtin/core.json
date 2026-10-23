@@ -14,7 +14,8 @@
       "create.chainConveyorAnimation": false,
       "create.mechanicalBeltAnimation": false,
       "simulated.ropeRendering": true,
-      "simulated.springRendering": true
+      "simulated.springRendering": true,
+      "simulated.coasterTrackRendering": true
     }
   },
   "rules": []
