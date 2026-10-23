@@ -21,6 +21,8 @@ Current ownership:
 - `0015-base.patch`: historical base integration patch.
 - `0020-build-and-provider-wiring.patch`: module inclusion, Create/Sable compile and mixin
   wiring, Create provider registration, and core test wiring.
+- `0025-simulated-coasters.patch`: optional Coasters Simulated track provider registration,
+  after the base Create providers have been introduced.
 - `0030-core-runtime-wiring.patch`: generic persistent-provider lifecycle hooks, static
   model-source registration, and dynamic model attachment translation.
 - `0040-sable-persistence.patch`: Sable deletion evidence, cache migration, and exact
