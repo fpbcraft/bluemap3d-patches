@@ -157,6 +157,10 @@ cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/Simulat
    addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringProvider.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringRegistry.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedSpringRegistry.java
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedCoasterTrackProvider.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedCoasterTrackProvider.java
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedCoasterTrackRegistry.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/SimulatedCoasterTrackRegistry.java
 mkdir -p addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/ContraptionRemovalMixin.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/ContraptionRemovalMixin.java
@@ -164,6 +168,8 @@ cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/S
    addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedSpringBlockEntityMixin.java
 cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedRopeStrandHolderMixin.java" \
    addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedRopeStrandHolderMixin.java
+cp "$ROOT/overrides/addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedCoasterAnchorMixin.java" \
+   addon-create/src/main/java/dev/duzo/bluemap3d/create/mixin/SimulatedCoasterAnchorMixin.java
 cp "$ROOT/overrides/addon-create/src/main/resources/bluemap3d_create.mixins.json" \
    addon-create/src/main/resources/bluemap3d_create.mixins.json
 
