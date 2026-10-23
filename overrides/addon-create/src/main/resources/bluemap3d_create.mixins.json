@@ -6,7 +6,8 @@
   "mixins": [
     "ContraptionRemovalMixin",
     "SimulatedSpringBlockEntityMixin",
-    "SimulatedRopeStrandHolderMixin"
+    "SimulatedRopeStrandHolderMixin",
+    "SimulatedCoasterAnchorMixin"
   ],
   "client": [],
   "injectors": {
