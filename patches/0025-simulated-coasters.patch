@@ -1,0 +1,27 @@
+diff --git a/addon-create/src/main/java/dev/duzo/bluemap3d/create/CreateAddon.java b/addon-create/src/main/java/dev/duzo/bluemap3d/create/CreateAddon.java
+--- a/addon-create/src/main/java/dev/duzo/bluemap3d/create/CreateAddon.java
++++ b/addon-create/src/main/java/dev/duzo/bluemap3d/create/CreateAddon.java
+@@ -26,6 +26,7 @@ public final class CreateAddon {
+     private final BeltProvider belts = new BeltProvider(chunks);
+     private final SimulatedRopeProvider simulatedRopes = new SimulatedRopeProvider();
+     private final SimulatedSpringProvider simulatedSprings = new SimulatedSpringProvider(chunks);
++    private final SimulatedCoasterTrackProvider simulatedCoasterTracks = new SimulatedCoasterTrackProvider();
+     private final ContraptionProvider contraptions = new ContraptionProvider();
+     private final StationFlagProvider stationFlags = new StationFlagProvider();
+ 
+@@ -35,6 +36,7 @@ public final class CreateAddon {
+         BlueMap3D.register(belts);
+         BlueMap3D.register(simulatedRopes);
+         BlueMap3D.register(simulatedSprings);
++        BlueMap3D.register(simulatedCoasterTracks);
+         BlueMap3D.register(stationFlags);
+     }
+ 
+@@ -46,6 +48,7 @@ public final class CreateAddon {
+         belts.clear();
+         simulatedRopes.clear();
+         simulatedSprings.clear();
++        simulatedCoasterTracks.clear();
+         contraptions.clear();
+         stationFlags.clear();
+     }

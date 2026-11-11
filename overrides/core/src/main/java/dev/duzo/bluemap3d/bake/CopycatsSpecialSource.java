@@ -13,7 +13,10 @@ import org.slf4j.LoggerFactory;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Set;
+import net.minecraft.world.level.block.Blocks;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -26,6 +29,12 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     private static final Set<String> TRACED = ConcurrentHashMap.newKeySet();
 
     private final ResourcePackSource models;
+    private final ThreadLocal<BlockRenderContext> renderContext = new ThreadLocal<>();
+    private static final boolean TRACE =
+            Boolean.getBoolean("bluemap.copycats.trace");
+    private static final java.util.concurrent.atomic.AtomicInteger TRACE_LINES =
+            new java.util.concurrent.atomic.AtomicInteger();
+
 
     public CopycatsSpecialSource(ResourcePackSource models) {
         this.models = models;
@@ -37,15 +46,27 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     }
 
     @Override
+    public List<ModelQuad> quadsFor(BlockRenderContext context) {
+        renderContext.set(context);
+        try {
+            return quadsFor(context.state(), context.blockEntityData());
+        } finally {
+            renderContext.remove();
+        }
+    }
+
+    @Override
     public List<ModelQuad> quadsFor(BlockState state, CompoundTag metadata) {
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
         if (!isTarget(id)) return List.of();
 
         List<ModelQuad> result = metadata == null ? List.of() : switch (id) {
             case "copycats:copycat_byte" -> byteQuads(state, metadata);
+            case "copycats:copycat_byte_panel" -> bytePanel(state, metadata);
             case "copycats:copycat_vertical_half_layer" -> verticalHalfLayer(state, metadata);
             case "copycats:copycat_flat_pane" -> flatPane(state, metadata);
             case "copycats:copycat_vertical_stairs" -> verticalStairs(state, metadata);
+            case "copycats:copycat_slope" -> slope(state, metadata);
             case "copycats:copycat_slope_layer" -> slopeLayer(state, metadata);
             case "copycats:copycat_slab" -> copycatsSlab(state, metadata);
             case "create_connected:copycat_slab" -> connectedSlab(state, metadata);
@@ -57,8 +78,25 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         // old "copycat voxel shape" fallback.
         if (TRACED.add(id)) {
             String keys = materialKeys(metadata);
-            LOGGER.info("V21 MOVING block={} state={} metadata={} materialKeys={} quads={}",
+            LOGGER.debug("V21 MOVING block={} state={} metadata={} materialKeys={} quads={}",
                     id, state, metadata == null ? "missing" : "present", keys, result.size());
+        }
+        if (TRACE && TRACE_LINES.getAndIncrement() < 60) {
+            long noFace = result.stream()
+                    .filter(quad -> quad.shadeFace() == null && quad.cullFace() == null)
+                    .count();
+            java.util.Set<String> textures = new java.util.TreeSet<>();
+            for (ModelQuad quad : result) {
+                if (quad.texture() != null && textures.size() < 12)
+                    textures.add(quad.texture());
+            }
+            BlockRenderContext current = renderContext.get();
+            LOGGER.debug("COPYCATS-MOVING-TRACE phase=SOURCE block={} coords={} metadata={} materialKeys={} quads={} missingFace={} textures={}",
+                    id,
+                    current == null ? "<none>" :
+                            current.x() + "," + current.y() + "," + current.z(),
+                    metadata == null ? "<null>" : "present",
+                    materialKeys(metadata), result.size(), noFace, textures);
         }
         return result;
     }
@@ -74,10 +112,12 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     }
 
     private static boolean isTarget(String id) {
-        return id.equals("copycats:copycat_byte")
+        return id.equals("copycats:copycat_byte_panel")
+                || id.equals("copycats:copycat_byte")
                 || id.equals("copycats:copycat_vertical_half_layer")
                 || id.equals("copycats:copycat_flat_pane")
                 || id.equals("copycats:copycat_vertical_stairs")
+                || id.equals("copycats:copycat_slope")
                 || id.equals("copycats:copycat_slope_layer")
                 || id.equals("copycats:copycat_slab")
                 || id.equals("create_connected:copycat_slab");
@@ -87,43 +127,199 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     // Copycat Byte
     // -------------------------------------------------------------------------
 
+    /**
+     * Eight bytes are independently populated and independently textured. Evaluate
+     * their connected textures on the 2x2x2 part lattice, including seams INSIDE the
+     * same block, rather than treating every 8px byte as a separate whole block.
+     */
     private List<ModelQuad> byteQuads(BlockState state, CompoundTag metadata) {
+        Map<Integer, BlockState> parts = new HashMap<>();
+        for (int y = 0; y < 2; y++) for (int z = 0; z < 2; z++) for (int x = 0; x < 2; x++) {
+            String key = byteKey(x, y, z);
+            BlockState material = materialFor(metadata, key);
+            if (booleanProperty(state, key) && usable(material))
+                parts.put(cellKey(x, y, z), material);
+        }
+
+        List<ModelQuad> result = new ArrayList<>();
+        for (int y = 0; y < 2; y++) for (int z = 0; z < 2; z++) for (int x = 0; x < 2; x++) {
+            BlockState material = parts.get(cellKey(x, y, z));
+            if (material == null) continue;
+            final int ox=x*8, oy=y*8, oz=z*8;
+            addPart(parts, x, y, z, () ->
+                    addBytePieces(result, ox, oy, oz, material));
+        }
+        return List.copyOf(result);
+    }
+
+    private void addBytePieces(
+            List<ModelQuad> result, int ox, int oy, int oz, BlockState material) {
+        Transform t = new Transform();
+        // Recreate CopycatMultiByteModelCore's eight 4px source samples
+        // and cull the three internal faces of each piece. Previously all
+        // six faces were emitted, allowing internal texture seams to leak.
+        for (int subY = 0; subY < 2; subY++) {
+            for (int subZ = 0; subZ < 2; subZ++) {
+                for (int subX = 0; subX < 2; subX++) {
+                    float sx = subX == 0 ? 0 : 12;
+                    float sy = subY == 0 ? 0 : 12;
+                    float sz = subZ == 0 ? 0 : 12;
+                    List<ModelQuad> faces = new ArrayList<>(6);
+                    piece(faces, t,
+                            ox + subX * 4, oy + subY * 4, oz + subZ * 4,
+                            sx, sy, sz, sx + 4, sy + 4, sz + 4, material);
+                    // Direction.values() is DOWN, UP, NORTH, SOUTH, WEST, EAST.
+                    for (int face = 0; face < faces.size(); face++) {
+                        boolean internal = switch (face) {
+                            case 0 -> subY == 1;
+                            case 1 -> subY == 0;
+                            case 2 -> subZ == 1;
+                            case 3 -> subZ == 0;
+                            case 4 -> subX == 1;
+                            case 5 -> subX == 0;
+                            default -> false;
+                        };
+                        if (!internal) result.add(faces.get(face));
+                    }
+                }
+            }
+        }
+    }
+
+    private List<ModelQuad> bytePanel(BlockState state, CompoundTag metadata) {
+        record PanelPart(String name, int x, int y) {}
+        PanelPart[] items = {
+                new PanelPart("bottom_left", 1, 0),
+                new PanelPart("bottom_right", 0, 0),
+                new PanelPart("top_left", 1, 1),
+                new PanelPart("top_right", 0, 1)
+        };
+        String facing = stringProperty(state, "facing");
+        Map<Integer, BlockState> parts = new HashMap<>();
+        for (PanelPart part : items) {
+            if (!booleanProperty(state, part.name())) continue;
+            BlockState material = materialFor(metadata, part.name());
+            if (!usable(material)) continue;
+            int[] xyz = panelCell(facing, part.x(), part.y());
+            parts.put(cellKey(xyz[0], xyz[1], xyz[2]), material);
+        }
+
         List<ModelQuad> out = new ArrayList<>();
-        addByte(out, state, metadata, "bottom_northwest", 0, 0, 0);
-        addByte(out, state, metadata, "bottom_northeast", 8, 0, 0);
-        addByte(out, state, metadata, "bottom_southwest", 0, 0, 8);
-        addByte(out, state, metadata, "bottom_southeast", 8, 0, 8);
-        addByte(out, state, metadata, "top_northwest", 0, 8, 0);
-        addByte(out, state, metadata, "top_northeast", 8, 8, 0);
-        addByte(out, state, metadata, "top_southwest", 0, 8, 8);
-        addByte(out, state, metadata, "top_southeast", 8, 8, 8);
+        for (PanelPart part : items) {
+            int[] xyz = panelCell(facing, part.x(), part.y());
+            BlockState material = parts.get(cellKey(xyz[0], xyz[1], xyz[2]));
+            if (material == null) continue;
+            addPart(parts, xyz[0], xyz[1], xyz[2], () -> {
+                float i = part.x() * 8f;
+                float j = part.y() * 8f;
+                if ("up".equals(facing)) {
+                    addMappedCuboid(out,new Transform(),
+                            new float[]{i,13,8-j},new float[]{i+8,16,16-j},
+                            new float[]{i,13,8-j},new float[]{i+8,16,16-j},material);
+                } else if ("down".equals(facing)) {
+                    addMappedCuboid(out,new Transform(),
+                            new float[]{i,0,j},new float[]{i+8,3,j+8},
+                            new float[]{i,0,j},new float[]{i+8,3,j+8},material);
+                } else {
+                    // The real Copycats+ model uses 4 corner pieces per layer,
+                    // with independent 4px source samples. Preserve the source
+                    // UVs and omit faces inside the assembled byte panel.
+                    Transform rotation = new Transform().rotateY(yRotation(facing));
+                    for (int subY = 0; subY < 2; subY++) {
+                        for (int subX = 0; subX < 2; subX++) {
+                            float dx = i + subX * 4f;
+                            float dy = j + subY * 4f;
+                            float sx = subX == 0 ? 0 : 12;
+                            float sy = subY == 0 ? 0 : 12;
+                            addPanelSampleSlice(out, rotation, material,
+                                    dx, dy, 13, sx, sy, 0, 2,
+                                    subX, subY, false);
+                            addPanelSampleSlice(out, rotation, material,
+                                    dx, dy, 15, sx, sy, 15, 1,
+                                    subX, subY, true);
+                        }
+                    }
+                }
+            });
+        }
         return List.copyOf(out);
     }
 
-    private void addByte(
-            List<ModelQuad> out,
-            BlockState state,
-            CompoundTag metadata,
-            String key,
-            int ox,
-            int oy,
-            int oz) {
-        if (!booleanProperty(state, key)) return;
-        BlockState material = materialFor(metadata, key);
-        if (!usable(material)) return;
+    private void addPanelSampleSlice(
+            List<ModelQuad> out, Transform transform, BlockState material,
+            float dx, float dy, float dz, float sx, float sy, float sz, float depth,
+            int subX, int subY, boolean rear) {
+        List<ModelQuad> faces = new ArrayList<>(6);
+        addMappedCuboid(faces, transform,
+                new float[]{dx,dy,dz}, new float[]{dx+4,dy+4,dz+depth},
+                new float[]{sx,sy,sz}, new float[]{sx+4,sy+4,sz+depth},
+                material);
+        // Direction.values() is DOWN, UP, NORTH, SOUTH, WEST, EAST.
+        // Cull the three internal faces of each sub-piece just as the
+        // original CopycatMultiBytePanelModelCore's cull masks do.
+        for (int face = 0; face < faces.size(); face++) {
+            boolean internal = switch (face) {
+                case 0 -> subY == 1;
+                case 1 -> subY == 0;
+                case 2 -> rear;
+                case 3 -> !rear;
+                case 4 -> subX == 1;
+                case 5 -> subX == 0;
+                default -> false;
+            };
+            if (!internal) out.add(faces.get(face));
+        }
+    }
 
-        Transform t = new Transform();
-        // CopycatByteModelCore: eight 4x4x4 samples make each 8x8x8 byte. Keeping those
-        // source sample regions preserves the copied block's texture layout instead of
-        // stretching one 8x8 auto-UV cube over the byte as V15 did.
-        piece(out, t, ox,     oy,     oz,     0,  0,  0,  4,  4,  4,  material);
-        piece(out, t, ox + 4, oy,     oz,     12, 0,  0,  16, 4,  4,  material);
-        piece(out, t, ox,     oy,     oz + 4, 0,  0,  12, 4,  4,  16, material);
-        piece(out, t, ox + 4, oy,     oz + 4, 12, 0,  12, 16, 4,  16, material);
-        piece(out, t, ox,     oy + 4, oz,     0,  12, 0,  4,  16, 4,  material);
-        piece(out, t, ox + 4, oy + 4, oz,     12, 12, 0,  16, 16, 4,  material);
-        piece(out, t, ox,     oy + 4, oz + 4, 0,  12, 12, 4,  16, 16, material);
-        piece(out, t, ox + 4, oy + 4, oz + 4, 12, 12, 12, 16, 16, 16, material);
+    private void addPart(Map<Integer,BlockState> parts,
+            int x, int y, int z, Runnable build) {
+        BlockRenderContext base = renderContext.get();
+        if (base == null) {
+            build.run();
+            return;
+        }
+        // Temporarily use a virtual 8px lattice. An adjacent byte uses its own
+        // copied material; positions beyond the block fall through to the original
+        // world/contraption lookup, which already resolves neighbouring copycats.
+        BlockRenderContext lookup = new BlockRenderContext(
+                parts.get(cellKey(x,y,z)), base.blockEntityData(),
+                base.x()*2 + x, base.y()*2 + y, base.z()*2 + z,
+                (vx,vy,vz) -> {
+                    int bx = Math.floorDiv(vx,2), by = Math.floorDiv(vy,2);
+                    int bz = Math.floorDiv(vz,2);
+                    if (bx == base.x() && by == base.y() && bz == base.z()) {
+                        return parts.getOrDefault(cellKey(Math.floorMod(vx,2),
+                                Math.floorMod(vy,2),Math.floorMod(vz,2)),
+                                Blocks.AIR.defaultBlockState());
+                    }
+                    return base.stateAtOffset(bx-base.x(), by-base.y(), bz-base.z());
+                });
+        renderContext.set(lookup);
+        try {
+            build.run();
+        } finally {
+            renderContext.set(base);
+        }
+    }
+
+    private static int cellKey(int x,int y,int z) {
+        return (x << 2) | (y << 1) | z;
+    }
+
+    private static String byteKey(int x,int y,int z) {
+        return (y==0?"bottom_":"top_")
+                + (z==0?"north":"south") + (x==0?"west":"east");
+    }
+
+    private static int[] panelCell(String facing, int i, int j) {
+        return switch(facing) {
+            case "up" -> new int[]{i,1,1-j};
+            case "down" -> new int[]{i,0,j};
+            case "north" -> new int[]{1-i,j,0};
+            case "east" -> new int[]{1,j,1-i};
+            case "west" -> new int[]{0,j,i};
+            default -> new int[]{i,j,1};
+        };
     }
 
     // -------------------------------------------------------------------------
@@ -307,6 +503,12 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     // Copycat Slope Layer
     // -------------------------------------------------------------------------
 
+    private List<ModelQuad> slope(BlockState state, CompoundTag metadata) {
+        BlockState material = materialFor(metadata, null);
+        if (!usable(material)) return List.of();
+        return slopePrism(state, material, 0, 16);
+    }
+
     private List<ModelQuad> slopeLayer(BlockState state, CompoundTag metadata) {
         BlockState material = materialFor(metadata, null);
         if (!usable(material)) return List.of();
@@ -315,7 +517,11 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         if (layer <= 0) return List.of();
         float minHeight = layer <= 4 ? 0 : (layer - 4) * 4f;
         float maxHeight = layer <= 4 ? layer * 4f : 16f;
+        return slopePrism(state, material, minHeight, maxHeight);
+    }
 
+    private List<ModelQuad> slopePrism(
+            BlockState state, BlockState material, float minHeight, float maxHeight) {
         Transform transform = new Transform()
                 .rotateY(yRotation(stringProperty(state, "facing")))
                 .flipY("top".equals(stringProperty(state, "half")));
@@ -373,13 +579,17 @@ public final class CopycatsSpecialSource implements BlockModelSource {
             float[] sourceTo,
             BlockState material) {
         for (Direction face : Direction.values()) {
-            Appearance appearance = appearance(material, face);
-            float[] positions = ResourcePackSource.faceCorners(destFrom, destTo, face);
+            float[] positions = ResourcePackGeometry.faceCorners(destFrom, destTo, face);
             transform.apply(positions);
-            float[] uvs = ResourcePackSource.uvCorners(
-                    ResourcePackSource.autoUv(sourceFrom, sourceTo, face), 0);
+            float[] uvs = ResourcePackGeometry.uvCorners(
+                    ResourcePackGeometry.autoUv(sourceFrom, sourceTo, face), 0);
             if (transform.mirrored()) reverseWinding(positions, uvs);
-            out.add(new ModelQuad(null, null, positions, uvs,
+            // The copied material is evaluated in world orientation. Sampling
+            // the pre-rotation face used the wrong CT neighbors on assembled
+            // rotated byte panels, even when the underlying material matched.
+            Direction worldFace = physicalFace(positions, face);
+            Appearance appearance = appearance(material, worldFace);
+            out.add(new ModelQuad(null, worldFace, positions, uvs,
                     appearance.texture(), appearance.tint()));
         }
     }
@@ -396,9 +606,16 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         transform.apply(positions);
         float[] uvs = new float[]{0,16, 16,16, 16,0, 0,0};
         if (transform.mirrored()) reverseWinding(positions, uvs);
-        Appearance appearance = appearance(material, sourceFace);
-        out.add(new ModelQuad(null, null, positions, uvs,
+        Direction worldFace = physicalFace(positions, sourceFace);
+        Appearance appearance = appearance(material, worldFace);
+        out.add(new ModelQuad(null, worldFace, positions, uvs,
                 appearance.texture(), appearance.tint()));
+    }
+
+    /** Recover the outward face after copying, rotating or mirroring geometry. */
+    static Direction physicalFace(float[] vertices, Direction fallback) {
+        return Direction.valueOf(
+                CopycatsPhysicalFace.of(vertices, fallback.name()));
     }
 
     private static float[] p(float x, float y, float z) {
@@ -419,7 +636,10 @@ public final class CopycatsSpecialSource implements BlockModelSource {
     }
 
     private Appearance appearance(BlockState material, Direction surface) {
-        List<ModelQuad> quads = models.quadsFor(material);
+        BlockRenderContext context = renderContext.get();
+        List<ModelQuad> quads = context == null
+                ? models.quadsFor(material)
+                : models.quadsFor(context.withState(material));
         ModelQuad chosen = null;
         for (ModelQuad quad : quads) {
             if (quad.cullFace() == surface) {
@@ -430,6 +650,16 @@ public final class CopycatsSpecialSource implements BlockModelSource {
         }
         if (chosen == null && !quads.isEmpty()) chosen = quads.getFirst();
 
+        if (TRACE && TRACE_LINES.getAndIncrement() < 60) {
+            LOGGER.debug("COPYCATS-MOVING-TRACE phase=MATERIAL material={} face={} sampledQuads={} matchedTexture={} matchedExists={} chosenCull={} chosenShade={} sampledContext={}",
+                    BuiltInRegistries.BLOCK.getKey(material.getBlock()),
+                    surface, quads.size(), chosen == null ? "<null>" : chosen.texture(),
+                    chosen != null && chosen.texture() != null
+                            && models.texture(chosen.texture()) != null,
+                    chosen == null ? null : chosen.cullFace(),
+                    chosen == null ? null : chosen.shadeFace(),
+                    context == null ? "state-only" : "neighbor-aware");
+        }
         if (chosen != null && chosen.texture() != null && models.texture(chosen.texture()) != null) {
             return new Appearance(chosen.texture(), chosen.tint());
         }

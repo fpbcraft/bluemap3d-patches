@@ -41,9 +41,6 @@ public abstract class SableBlockChangeMixin {
         ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
         if (container == null) return;
 
-        // Resolve ownership from the plot chunk before Sable updates its bounding box.
-        // getContaining(position) is deliberately avoided here because removals can make
-        // that lookup false by the time handleBlockChange reaches TAIL.
         PlotChunkHolder holder = container.getChunkHolder(chunk.getPos());
         if (holder == null) return;
 

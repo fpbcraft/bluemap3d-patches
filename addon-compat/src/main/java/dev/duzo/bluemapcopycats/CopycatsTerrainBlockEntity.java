@@ -2,6 +2,9 @@ package dev.duzo.bluemapcopycats;
 
 import de.bluecolored.bluemap.core.world.mca.blockentity.MCABlockEntity;
 import de.bluecolored.bluenbt.NBTName;
+import de.bluecolored.bluemap.core.world.BlockEntity;
+import java.lang.reflect.Method;
+import java.util.Map;
 
 /**
  * BlueMap-side DTO for Copycats+/Create: Connected copycat block entities.
@@ -19,6 +22,39 @@ public final class CopycatsTerrainBlockEntity extends MCABlockEntity {
     private Object materialData;
 
     public CopycatsTerrainBlockEntity() {
+    }
+
+    /**
+     * BlueMap's chunk deserializer may have already selected CreateEntityAddon's
+     * copycat DTO before our own type registration is visible. Adapt it rather than
+     * dropping the entire block: both contain the same underlying Material compound.
+     * Other unrelated block entities are never adapted.
+     */
+    public static CopycatsTerrainBlockEntity from(BlockEntity raw) {
+        if (raw instanceof CopycatsTerrainBlockEntity own) return own;
+        if (raw == null || !raw.getClass().getName().equals(
+                "eu.cronmoth.createentityaddon.rendering.copycats.entitymodel.CopycatBlockEntity")) {
+            return null;
+        }
+        try {
+            Object material = raw.getClass().getMethod("getMaterial").invoke(raw);
+            if (material == null) return null;
+            Method getName = material.getClass().getMethod("getName");
+            Object name = getName.invoke(material);
+            if (!(name instanceof String id) || id.isBlank()) return null;
+            Object properties = material.getClass().getMethod("getProperties").invoke(material);
+
+            CopycatsTerrainBlockEntity adapted = new CopycatsTerrainBlockEntity();
+            adapted.material = Map.of(
+                    "Name", id,
+                    "Properties", properties instanceof Map<?, ?> ? properties : Map.of());
+            // The foreign DTO does not retain Copycats+ material_data. This salvages
+            // single-material blocks, while the full decoder remains authoritative
+            // for multi-material shapes.
+            return adapted;
+        } catch (ReflectiveOperationException | RuntimeException unsupported) {
+            return null;
+        }
     }
 
     public Object material() {

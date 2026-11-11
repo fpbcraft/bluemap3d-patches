@@ -11,9 +11,12 @@ The repository is intentionally split between **declarative compatibility rules*
 
 ## Supported baseline
 
-The authoritative release version and compatibility targets live in [`release.json`](release.json).
-The current release targets Minecraft 1.21.1, BlueMap 5.7, and a pinned BlueMap3D upstream
-commit. Do not assume compatibility with other targets unless `release.json` says so.
+The compatibility targets and baseline semantic version live in [`release.json`](release.json).
+Normal development/CI builds derive an immutable version from that baseline and the commit,
+for example `1.1.11-dev.a1b2c3d4`. Published releases use the exact `vMAJOR.MINOR.PATCH`
+tag version. The current baseline targets Minecraft 1.21.1, BlueMap 5.7, and a pinned
+BlueMap3D upstream commit. Do not assume compatibility with other targets unless
+`release.json` says so.
 
 ## Artifacts
 
@@ -21,14 +24,17 @@ The build produces two installable JARs:
 
 1. **`bluemap3d-bundle-*.jar`** — patched BlueMap3D bundle
    - persistent Sable/Create moving objects
+   - named Sable/Aeronautics ship markers; click a name for position and dimension
    - persistent Sable child contraptions (including Aeronautics propeller/sail assemblies), retained across distance unloads and server restarts
    - optional Create chain-conveyor and mechanical-belt animations (disabled by default)
    - live Create: Simulated physics ropes, using the server strand points and streamed segment transforms
    - live Create: Simulated springs, mirroring the renderer's Bézier curve across world/Sable endpoints
+   - Coasters Simulated Bézier tracks as banked, instanced rails, beams and ties (world and Sable sublevels)
    - generic restore-on-launch for persistent scene providers (position, rotation, scale and mesh version)
    - generic history eligibility for persistent scene providers
    - trains/bogeys
    - moving Copycats / Create Connected material support
+   - neighbour-aware Fusion 1.21 and Create connected textures on moving/Sable volumes
    - procedural and dynamic-texture adapters
    - config-driven moving tint rules
 
@@ -37,11 +43,20 @@ The build produces two installable JARs:
    - hot-reloaded server-local compatibility rules
    - Copycats+ / Create Connected copied-material adapter
    - Bits & Bobs girders and connected/diagonal fence-wall adapter
+   - native static Fusion 1.21 connected textures (full/simple/horizontal/vertical/compact/pieced/overlay + built-in predicates)
+   - native static Create connected textures for casings, windows/glass, scaffolds, chassis, tanks, vaults, copper roofs and palette stone CT families
    - TrafficCraft block-entity decoding and dynamic sign textures
 
 The former Copycats, foliage and TrafficCraft compatibility artifacts are consolidated into
 `bluemap-compat`. Specialized Java still exists where needed, but it is organized as an
 adapter inside the single addon rather than published as another JAR.
+
+Connected textures are resolved from the installed mod/resource-pack assets at load time.
+The addon does **not** generate or require a separate BlueMap resource pack. Fusion's
+built-in connection predicates and layouts are evaluated from `.png.mcmeta`; Create's
+client-only sprite-shift registry is mirrored from its stable 1.21.1 resource conventions.
+Third-party Fusion predicate types are intentionally fail-closed, and non-base nested
+`sub_texture` processors keep their source pixels/layout but are not executed as client code.
 
 ## Config-driven compatibility
 
@@ -70,7 +85,8 @@ Rules support:
 - separate `terrain` and `moving` scopes;
 - no tint / fixed RGB / NBT-or-adapter-backed palette tint;
 - wildcard moving-model namespace include/exclude policy;
-- moving runtime feature flags, including `simulated.ropeRendering` and `simulated.springRendering` (enabled by default).
+- moving runtime feature flags, including `simulated.ropeRendering`, `simulated.springRendering` and
+  `simulated.coasterTrackRendering` (enabled by default).
 
 Example:
 
@@ -117,6 +133,13 @@ Create: Simulated ropes use a small optional runtime adapter backed by the reusa
 `DynamicModelSegment` scene-object capability. Each physics edge keeps one stable mesh
 while BlueMap3D streams midpoint, orientation and scale. Rope/spring stretching therefore
 does not re-bake geometry, and a small overlap prevents cracks between adjacent segments.
+Coasters Simulated uses the same optional adapter approach. Its track anchor block
+entities supply primary Bézier connections; BlueMap3D samples Coasters' own banked
+curve frames to publish rail, beam and tie prototypes as GPU instances. These are
+approximated geometry, not exact Flywheel models or custom dyed track styles. Removing
+tracks explicitly drops their persistent snapshots; unloading a chunk does not. Coaster
+carts are Sable sublevels and are intentionally left to the existing Sable renderer.
+
 The Simulated-specific adapters are reflection-based, so Simulated is not a
 hard dependency of the bundle.
 
@@ -171,6 +194,18 @@ also includes the pinned upstream LGPL license.
 The build always clones the pinned upstream BlueMap3D commit, applies the base patch,
 copies maintained overrides and shared compatibility rules, runs the deterministic patch
 script, builds, and packages the result.
+
+### Releases
+
+`.github/workflows/release.yml` publishes immutable GitHub Releases. Pushing a
+`vMAJOR.MINOR.PATCH` (or SemVer prerelease) tag builds and publishes that exact version.
+The workflow can also be run manually from the default branch: choose a patch/minor/major
+bump, or provide an exact SemVer. Manual releases build successfully before the workflow
+creates the tag and release, and refuse to reuse an existing tag/version.
+
+Non-release builds never reuse the release version: they include the short commit SHA as a
+`-dev.<sha>` suffix. Re-running the same commit intentionally produces the same artifact
+identity; a different commit produces a different version.
 
 ## Installation
 

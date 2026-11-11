@@ -27,16 +27,16 @@ public final class SimulatedRopeRegistry {
 
         try {
             Method getOwnedStrand = holder.getClass().getMethod("getOwnedStrand");
-            Object strand = getOwnedStrand.invoke(holder);
+            Object strand = SimulatedReflection.invoke(getOwnedStrand, holder);
             if (strand == null) return;
 
             Method getUuid = strand.getClass().getMethod("getUUID");
-            Object id = getUuid.invoke(strand);
+            Object id = SimulatedReflection.invoke(getUuid, strand);
             if (!(id instanceof UUID uuid)) return;
 
             Method getLevel = holder.getClass().getDeclaredMethod("getLevel");
             getLevel.setAccessible(true);
-            Object level = getLevel.invoke(holder);
+            Object level = SimulatedReflection.invoke(getLevel, holder);
             if (!(level instanceof ServerLevel serverLevel)) return;
 
             REMOVED.computeIfAbsent(serverLevel, ignored -> ConcurrentHashMap.newKeySet())

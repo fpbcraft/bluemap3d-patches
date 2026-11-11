@@ -313,7 +313,7 @@ index a98a42e..6ecb9bf 100644
 +                        && COPYCATS_MISSING_METADATA.size() < 32
 +                        && COPYCATS_MISSING_METADATA.add(blockId)) {
 +                    CompoundTag full = entry.getValue().nbt();
-+                    LOGGER.info(
++                    LOGGER.debug(
 +                            "COPYCATS-V9 CREATE metadata missing block={} full={} update={}",
 +                            blockId,
 +                            full == null ? "<null>" : full.toString(),
@@ -330,7 +330,7 @@ index a98a42e..6ecb9bf 100644
          return new CarriageGeometry(volume, version);
      }
  
-@@ -812,6 +841,32 @@ public final class ContraptionProvider implements SceneObjectProvider {
+@@ -812,6 +841,37 @@ public final class ContraptionProvider implements SceneObjectProvider {
          return style == null ? STANDARD_BOGEY_STYLE : style;
      }
  
@@ -346,7 +346,12 @@ index a98a42e..6ecb9bf 100644
 +            CompoundTag updateTag, StructureTemplate.StructureBlockInfo info) {
 +        String namespace = net.minecraft.core.registries.BuiltInRegistries.BLOCK
 +                .getKey(info.state().getBlock()).getNamespace();
-+        if (!"copycats".equals(namespace)) {
++        String path = net.minecraft.core.registries.BuiltInRegistries.BLOCK
++                .getKey(info.state().getBlock()).getPath();
++        if (!"copycats".equals(namespace)
++                && !(("create".equals(namespace) || "create_connected".equals(namespace))
++                    && path.contains("copycat"))
++                && !("railways".equals(namespace) && path.startsWith("copycat_"))) {
 +            return null;
 +        }
 +
@@ -374,7 +379,7 @@ index a98a42e..6ecb9bf 100644
 +            if (BOGEY_V12_TRACE.add(traceKey)) {
 +                List<ModelAttachment> resolved =
 +                        BogeyStyles.attachmentsFor(style, pos, axis, state);
-+                LOGGER.info(
++                LOGGER.debug(
 +                        "BOGEY-V13 TRACE style={} block={} axis={} attachments={} models={}",
 +                        style,
 +                        blockId,
@@ -926,7 +931,7 @@ index e8199bf..f2a3e33 100644
  import dev.duzo.bluemap3d.bake.MapColorSource;
  import dev.duzo.bluemap3d.bake.ResourcePackSource;
  import dev.duzo.bluemap3d.bake.ShapeSource;
-@@ -72,7 +76,17 @@ public final class BlueMap3DMod {
+@@ -72,7 +76,21 @@ public final class BlueMap3DMod {
              if (Config.USE_RESOURCE_PACKS.get()) {
                  assets = AssetIndex.open(configuredSources(), blueMapRoot);
                  ResourcePackSource packs = new ResourcePackSource(assets);
@@ -937,10 +942,14 @@ index e8199bf..f2a3e33 100644
 +                // Dynamic Copycats+ boards have no JSON geometry; their material lives in
 +                // block-entity NBT, so they must be resolved before the ordinary pack path.
 +                sources.add(new CopycatsBoardSource(packs));
-                 sources.add(packs);
-+                // Copycats+ emits many models entirely in client code. If no real JSON
-+                // model exists, preserve its server VoxelShape and copied material.
++                // Railways headstocks have real JSON geometry, but their copycat skin is
++                // normally substituted by a client-only baked-model wrapper.
++                sources.add(new dev.duzo.bluemap3d.bake.RailwaysCopycatHeadstockSource(packs));
++                // A copycat JSON model may contain placeholder quads, so this must run
++                // before ordinary resource-pack selection rather than only on empty models.
 +                sources.add(new CopycatsShapeSource(packs));
+                 sources.add(packs);
++                sources.add(new dev.duzo.bluemap3d.bake.EntityModelSource(assets));
                  // Between the real models and the coloured cube: a block whose model has
                  // no geometry still has a voxel shape and a particle sprite.
                  if (Config.SHAPE_FALLBACK.get()) {
@@ -1424,7 +1433,7 @@ index 701a9da..7d0c82b 100644
  import net.minecraft.world.level.block.state.BlockState;
  
  import java.awt.image.BufferedImage;
-@@ -33,6 +34,16 @@ public interface BlockModelSource {
+@@ -33,6 +34,23 @@ public interface BlockModelSource {
       */
      List<ModelQuad> quadsFor(BlockState state);
  
@@ -1436,6 +1445,13 @@ index 701a9da..7d0c82b 100644
 +     */
 +    default List<ModelQuad> quadsFor(BlockState state, CompoundTag blockEntityData) {
 +        return quadsFor(state);
++    }
++
++    /**
++     * Position-aware variant used by neighbour-sensitive rendering such as connected textures.
++     */
++    default List<ModelQuad> quadsFor(BlockRenderContext context) {
++        return quadsFor(context.state(), context.blockEntityData());
 +    }
 +
      /**
@@ -1594,9 +1610,9 @@ index 0000000..d860ac3
 +            out.add(new ModelQuad(
 +                    cullFaceOf(from, to, surface),
 +                    surface,
-+                    ResourcePackSource.faceCorners(from, to, surface),
-+                    ResourcePackSource.uvCorners(
-+                            ResourcePackSource.autoUv(from, to, surface), 0),
++                    ResourcePackGeometry.faceCorners(from, to, surface),
++                    ResourcePackGeometry.uvCorners(
++                            ResourcePackGeometry.autoUv(from, to, surface), 0),
 +                    appearance.texture(),
 +                    appearance.tint()));
 +        }
@@ -1746,9 +1762,9 @@ index 0000000..c8bfbf8
 +                out.add(new ModelQuad(
 +                        cullFaceOf(from, to, face),
 +                        face,
-+                        ResourcePackSource.faceCorners(from, to, face),
-+                        ResourcePackSource.uvCorners(
-+                                ResourcePackSource.autoUv(from, to, face), 0),
++                        ResourcePackGeometry.faceCorners(from, to, face),
++                        ResourcePackGeometry.uvCorners(
++                                ResourcePackGeometry.autoUv(from, to, face), 0),
 +                        appearance.texture(),
 +                        appearance.tint()));
 +            }
@@ -2061,8 +2077,8 @@ index 0000000..9935e8e
 +            out.add(new ModelQuad(
 +                    null,
 +                    face,
-+                    ResourcePackSource.faceCorners(from, to, face),
-+                    ResourcePackSource.uvCorners(ResourcePackSource.autoUv(from, to, face), 0),
++                    ResourcePackGeometry.faceCorners(from, to, face),
++                    ResourcePackGeometry.uvCorners(ResourcePackGeometry.autoUv(from, to, face), 0),
 +                    appearance.texture(),
 +                    appearance.tint()));
 +        }
@@ -2079,13 +2095,13 @@ index 0000000..9935e8e
 +        for (Direction face : Direction.values()) {
 +            Direction rotatedFace = rotateY(face, turns);
 +            Appearance appearance = appearance(material, rotatedFace);
-+            float[] positions = ResourcePackSource.faceCorners(from, to, face);
++            float[] positions = ResourcePackGeometry.faceCorners(from, to, face);
 +            rotateY(positions, turns);
 +            out.add(new ModelQuad(
 +                    null,
 +                    rotatedFace,
 +                    positions,
-+                    ResourcePackSource.uvCorners(ResourcePackSource.autoUv(from, to, face), 0),
++                    ResourcePackGeometry.uvCorners(ResourcePackGeometry.autoUv(from, to, face), 0),
 +                    appearance.texture(),
 +                    appearance.tint()));
 +        }
@@ -2343,11 +2359,17 @@ index 14cc6cc..3ba2e04 100644
  
      private final List<BlockModelSource> sources;
      private final int maxBlocks;
-@@ -97,10 +102,33 @@ public final class VolumeMesher {
+@@ -97,10 +102,39 @@ public final class VolumeMesher {
          java.util.Set<String> unresolved = new java.util.TreeSet<>();
  
++        BlockRenderContext.BlockLookup blockLookup = (x, y, z) ->
++                CopiedMaterialResolver.effectiveState(
++                        volume.stateAt(x, y, z),
++                        volume.blockEntityDataAt(x, y, z));
          volume.forEachBlock((x, y, z, state) -> {
 +            CompoundTag blockEntityData = volume.blockEntityDataAt(x, y, z);
++            BlockRenderContext renderContext =
++                    new BlockRenderContext(state, blockEntityData, x, y, z, blockLookup);
 +
 +            String blockId = net.minecraft.core.registries.BuiltInRegistries.BLOCK
 +                    .getKey(state.getBlock()).toString();
@@ -2358,7 +2380,7 @@ index 14cc6cc..3ba2e04 100644
 +                for (BlockModelSource traceSource : sources) {
 +                    try {
 +                        traceSources.add(traceSource.getClass().getSimpleName() + "="
-+                                + traceSource.quadsFor(state, blockEntityData).size());
++                                + traceSource.quadsFor(renderContext).size());
 +                    } catch (RuntimeException error) {
 +                        traceSources.add(traceSource.getClass().getSimpleName() + "=ERROR:"
 +                                + error.getClass().getSimpleName());
@@ -2366,7 +2388,7 @@ index 14cc6cc..3ba2e04 100644
 +                }
 +                String metadata = blockEntityData == null ? "<null>" : blockEntityData.toString();
 +                if (metadata.length() > 2000) metadata = metadata.substring(0, 2000) + "...";
-+                LOGGER.info("COPYCATS-V13 TRACE block={} state={} metadata={} sources={}",
++                LOGGER.debug("COPYCATS-V13 TRACE block={} state={} metadata={} sources={}",
 +                        blockId, state, metadata, traceSources);
 +            }
 +
@@ -2374,7 +2396,7 @@ index 14cc6cc..3ba2e04 100644
              List<ModelQuad> quads = List.of();
              for (BlockModelSource candidate : sources) {
 -                List<ModelQuad> got = candidate.quadsFor(state);
-+                List<ModelQuad> got = candidate.quadsFor(state, blockEntityData);
++                List<ModelQuad> got = candidate.quadsFor(renderContext);
                  if (!got.isEmpty()) {
                      source = candidate;
                      quads = got;

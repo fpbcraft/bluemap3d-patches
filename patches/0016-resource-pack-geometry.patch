@@ -1,0 +1,14 @@
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/bake/ShapeSource.java b/core/src/main/java/dev/duzo/bluemap3d/bake/ShapeSource.java
+--- a/core/src/main/java/dev/duzo/bluemap3d/bake/ShapeSource.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/bake/ShapeSource.java
+@@ -119,8 +119,8 @@ public final class ShapeSource implements BlockModelSource {
+                 quads.add(new ModelQuad(
+                         cullFaceOf(from, to, face),
+                         face,
+-                        ResourcePackSource.faceCorners(from, to, face),
+-                        ResourcePackSource.uvCorners(ResourcePackSource.autoUv(from, to, face), 0),
++                        ResourcePackGeometry.faceCorners(from, to, face),
++                        ResourcePackGeometry.uvCorners(ResourcePackGeometry.autoUv(from, to, face), 0),
+                         particle,
+                         0xFFFFFF));
+             }

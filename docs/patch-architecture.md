@@ -1,0 +1,47 @@
+# Patch architecture
+
+The build reconstructs the FPB BlueMap3D variant from a pinned upstream commit. Changes are
+owned by one of three mechanisms, in preference order:
+
+1. **Whole-file overrides** for files that are maintained as FPB-owned implementations.
+2. **Numbered Git patches** for stable structural changes to upstream-owned files.
+3. **Dedicated transform modules** for behavior that is still too entangled to migrate safely
+   to a patch or whole-file override.
+4. **`scripts/patch-upstream.py`** as a small orchestrator for those transforms plus
+   release-metadata substitutions.
+
+## Patch series
+
+Patches in `patches/` are applied in filename order. Every patch is checked with
+`git apply --check` before it is applied, so upstream drift fails the build at the patch that
+no longer matches.
+
+Current ownership:
+
+- `0015-base.patch`: historical base integration patch.
+- `0020-build-and-provider-wiring.patch`: module inclusion, Create/Sable compile and mixin
+  wiring, Create provider registration, and core test wiring.
+- `0025-simulated-coasters.patch`: optional Coasters Simulated track provider registration,
+  after the base Create providers have been introduced.
+- `0030-core-runtime-wiring.patch`: generic persistent-provider lifecycle hooks, static
+  model-source registration, and dynamic model attachment translation.
+- `0040-sable-persistence.patch`: Sable deletion evidence, cache migration, and exact
+  structure-based geometry revisioning.
+- `0050-scene-object-publication.patch`: mesh-version suppression and live object scale
+  publication.
+- `0060-browser-dynamic-runtime.patch`: live/replay scale interpolation, loop motion, and
+  UV-scroll runtime behavior.
+
+## Remaining Python transformations
+
+The large remaining transformations are behavioral and should be migrated separately, with
+regression coverage around each migration:
+
+- `scripts/transforms/contraption_provider.py`: Sable projection, dynamic topology and
+  compatibility behavior. This is the remaining large transform and the next candidate for
+  replacement by a maintained override.
+- `BlueMap3DMod.java`: release-version startup marker only.
+- release-version/build-marker substitutions that depend on `release.json`.
+
+The next migrations should favor cohesive behavior slices rather than mechanically converting
+every string replacement into a patch.

@@ -9,7 +9,8 @@ class ScenePersistencePolicyTest {
     @Test
     void migrationsDropOnlyProvidersWhoseDeletionSemanticsChanged() {
         assertTrue(ScenePersistencePolicy.shouldDropForMigration("create_contraptions", 2));
-        assertFalse(ScenePersistencePolicy.shouldDropForMigration("create_contraptions", 3));
+        assertTrue(ScenePersistencePolicy.shouldDropForMigration("create_contraptions", 6));
+        assertFalse(ScenePersistencePolicy.shouldDropForMigration("create_contraptions", 7));
 
         assertTrue(ScenePersistencePolicy.shouldDropForMigration("simulated_springs", 2));
         assertFalse(ScenePersistencePolicy.shouldDropForMigration("simulated_springs", 3));

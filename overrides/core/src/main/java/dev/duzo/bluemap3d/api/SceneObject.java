@@ -19,6 +19,16 @@ public interface SceneObject {
     BlockVolume geometry();
 
     /**
+     * Stable identity of this object's immutable geometry.
+     *
+     * <p>Objects with identical geometry may return the same key so core publishes one
+     * shared .bm3d resource while preserving independent transforms and history ids.
+     */
+    default String geometryKey() {
+        return id();
+    }
+
+    /**
      * Whether core may ask this object to rebuild its geometry.
      *
      * <p>Normally true. A persisted object may have a valid published mesh on disk while

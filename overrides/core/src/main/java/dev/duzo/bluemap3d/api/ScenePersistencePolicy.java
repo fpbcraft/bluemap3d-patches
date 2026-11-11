@@ -20,9 +20,8 @@ final class ScenePersistencePolicy {
     }
 
     static boolean shouldDropForMigration(String provider, int sourceFormat) {
-        return (sourceFormat < 3
-                        && ("create_contraptions".equals(provider)
-                                || "simulated_springs".equals(provider)))
+        return (sourceFormat < 7 && "create_contraptions".equals(provider))
+                || (sourceFormat < 3 && "simulated_springs".equals(provider))
                 || (sourceFormat < 4 && "sable_ships".equals(provider))
                 || (sourceFormat < 5 && "simulated_ropes".equals(provider));
     }

@@ -1,6 +1,52 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:best-practices"
+  ],
+  "timezone": "America/Toronto",
+  "schedule": [
+    "* 0-5 * * 1"
+  ],
+  "updateNotScheduled": false,
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
+  "major": {
+    "dependencyDashboardApproval": true
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "* 0-5 1 * *"
+    ]
+  },
+  "vulnerabilityAlerts": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "Batch routine Gradle and Java dependency updates",
+      "matchManagers": [
+        "gradle",
+        "gradle-wrapper"
+      ],
+      "matchUpdateTypes": [
+        "patch",
+        "minor"
+      ],
+      "groupName": "Gradle and Java dependencies"
+    },
+    {
+      "description": "Batch routine GitHub Actions and workflow dependency updates",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "pinDigest",
+        "digest",
+        "patch",
+        "minor"
+      ],
+      "groupName": "GitHub Actions"
+    }
   ]
 }

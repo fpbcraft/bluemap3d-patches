@@ -1,0 +1,58 @@
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java b/core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java
+--- a/core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/runtime/SceneObjectTracker.java
+@@ -163,12 +163,11 @@
+             long version = object.geometryVersion();
+             Ready current = ready.get(key);
+ 
+-            if (current == null) {
++            if (current == null || current.version() != version) {
+                 String existing = publisher.existingMeshUrl(providerId, object.id(), version);
+                 if (existing != null) {
+                     current = new Ready(version, existing);
+                     ready.put(key, current);
+-                    // Keep mesh-archive consumers in sync even though no bake happened.
+                     BlueMap3D.meshPublished(providerId, object.id(), version, existing);
+                 }
+             }
+@@ -177,11 +176,17 @@
+                     && object.canBakeGeometry()) {
+                 requestBake(providerId, object, key, version);
+             }
++
++            // Never publish known-stale topology. The browser drops the old object now
++            // and it reappears only once the requested geometry version is actually ready.
++            if (current != null && current.version() != version) {
++                current = null;
++            }
+             if (current != null) {
+                 // Render the mesh we have, even if a newer one is on its way.
+                 rows.add(new Row(providerId, object.id(), object.label(),
+                         object.dimension().location().toString(),
+-                        current.meshUrl(), object.position(), object.rotation()));
++                        current.meshUrl(), object.position(), object.rotation(), object.scale()));
+             }
+         }
+         return any;
+@@ -315,6 +320,12 @@
+                         .value(round(rotation.z))
+                         .value(round(rotation.w))
+                         .endArray();
++                org.joml.Vector3f scale = row.scale();
++                json.name("scale").beginArray()
++                        .value(round(scale.x))
++                        .value(round(scale.y))
++                        .value(round(scale.z))
++                        .endArray();
+                 json.endObject();
+             }
+             json.endArray();
+@@ -337,6 +348,7 @@
+     }
+ 
+     private record Row(String provider, String id, String label, String dimension,
+-                       String meshUrl, Vec3 position, Quaternionf rotation) {
++                       String meshUrl, Vec3 position, Quaternionf rotation,
++                       org.joml.Vector3f scale) {
+     }
+ }

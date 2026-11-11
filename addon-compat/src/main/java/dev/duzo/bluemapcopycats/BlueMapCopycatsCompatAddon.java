@@ -1,12 +1,16 @@
 package dev.duzo.bluemapcopycats;
 
 import de.bluecolored.bluemap.api.BlueMapAPI;
+import de.bluecolored.bluemap.common.api.BlueMapAPIImpl;
 import de.bluecolored.bluemap.core.map.hires.block.BlockRendererType;
 import de.bluecolored.bluemap.core.util.Key;
 import de.bluecolored.bluemap.core.world.mca.blockentity.BlockEntityType;
 import de.bluecolored.bluemap.core.logger.Logger;
 
 import java.util.List;
+import java.util.Map;
+import java.lang.reflect.Field;
+import de.bluecolored.bluemap.core.util.Registry;
 
 /**
  * Native BlueMap addon entrypoint.
@@ -19,7 +23,10 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
 
     private static final Key RENDERER_KEY = new Key("bluemap_copycats", "terrain");
     private static final Key GIRDER_RENDERER_KEY = new Key("bluemap_copycats", "bits_n_bobs_girder");
+    private static final Key INVISIBLE_RENDERER_KEY = new Key("bluemap_copycats", "invisible");
     private static final Key CONNECTED_RENDERER_KEY = new Key("bluemap_copycats", "connected");
+    private static final Key HEADSTOCK_RENDERER_KEY = new Key("bluemap_copycats", "headstock");
+    private static final Key BLOCKS_BOGIES_RENDERER_KEY = new Key("bluemap_copycats", "blocks_bogies");
 
     private static final List<Key> BLOCK_ENTITY_IDS = List.of(
             new Key("copycats", "copycat"),
@@ -30,24 +37,41 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
             new Key("copycats", "copycat_fluid_pipe"),
             new Key("copycats", "copycat_glass_fluid_pipe"),
             new Key("copycats", "copycat_sliding_door"),
-            new Key("create_connected", "copycat")
+            new Key("create_connected", "copycat"),
+            new Key("create", "copycat"),
+            new Key("railways", "copycat_headstock")
     );
 
     @Override
     public void run() {
         registerRenderer();
         registerGirderRenderer();
+        registerInvisibleRenderer();
         registerConnectedRenderer();
+        registerHeadstockRenderer();
+        registerBlocksBogiesRenderer();
         registerBlockEntities();
+        registerBlocksBogiesBlockEntity();
         registerGirderBlockEntity();
 
         // Addons load before BlueMap loads its resources. The API enable callback runs
         // after those resources are baked but before the render manager starts, which is
         // the safe point to reroute every loaded fence/wall while retaining its original
         // parsed blockstate for material-specific rendering.
-        BlueMapAPI.onEnable(ConnectedTerrainDispatch::apply);
+        BlueMapAPI.onEnable(api -> {
+            registerBlockEntities();
+            registerBlocksBogiesBlockEntity();
+            // Some worlds may have decoded chunks before the competing decoder was
+            // replaced. Re-read their block-entity NBT with the authoritative registry
+            // before any static renderer starts using those cached instances.
+            if (api instanceof BlueMapAPIImpl implementation) {
+                implementation.blueMapService().getWorlds().values()
+                        .forEach(world -> world.invalidateChunkCache());
+            }
+            ConnectedTerrainDispatch.apply(api);
+        });
 
-        Logger.global.logInfo("BlueMap Copycats Compat loaded: full Copycats+/Create Connected coverage + Bits & Bobs girders + connected fences/walls");
+        Logger.global.logInfo("BlueMap Copycats Compat loaded: Copycats+/Create + Railway headstocks + Blocks & Bogies static bogies + connected fences/walls");
     }
 
     private static void registerRenderer() {
@@ -80,6 +104,16 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
         ));
     }
 
+    private static void registerInvisibleRenderer() {
+        BlockRendererType existing = BlockRendererType.REGISTRY.get(INVISIBLE_RENDERER_KEY);
+        if (existing != null) return;
+
+        BlockRendererType.REGISTRY.register(new BlockRendererType.Impl(
+                INVISIBLE_RENDERER_KEY,
+                InvisibleTerrainRenderer::new
+        ));
+    }
+
     private static void registerConnectedRenderer() {
         BlockRendererType existing = BlockRendererType.REGISTRY.get(CONNECTED_RENDERER_KEY);
         if (existing != null) {
@@ -93,6 +127,44 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
                 CONNECTED_RENDERER_KEY,
                 ConnectedTerrainRenderer::new
         ));
+    }
+
+    private static void registerHeadstockRenderer() {
+        if (BlockRendererType.REGISTRY.get(HEADSTOCK_RENDERER_KEY) != null) return;
+        BlockRendererType.REGISTRY.register(new BlockRendererType.Impl(
+                HEADSTOCK_RENDERER_KEY, HeadstockTerrainRenderer::new));
+    }
+
+    private static void registerBlocksBogiesRenderer() {
+        if (BlockRendererType.REGISTRY.get(BLOCKS_BOGIES_RENDERER_KEY) != null) return;
+        BlockRendererType.REGISTRY.register(new BlockRendererType.Impl(
+                BLOCKS_BOGIES_RENDERER_KEY, BlocksBogiesTerrainRenderer::new));
+    }
+
+    private static void registerBlocksBogiesBlockEntity() {
+        Key key = new Key("create_bb", "bogey");
+        BlockEntityType existing = BlockEntityType.REGISTRY.get(key);
+        if (existing != null
+                && BlocksBogiesTerrainBlockEntity.class.equals(existing.getBlockEntityClass()))
+            return;
+        try {
+            if (existing == null) {
+                BlockEntityType.REGISTRY.register(new BlockEntityType.Impl(
+                        key, BlocksBogiesTerrainBlockEntity.class));
+            } else {
+                // BlueMap's registry is insert-only. Retain the nested
+                // BogeyData.BogeyStyle even if another addon registered first.
+                Field field = Registry.class.getDeclaredField("entries");
+                field.setAccessible(true);
+                @SuppressWarnings("unchecked")
+                Map<Key, BlockEntityType> entries =
+                        (Map<Key, BlockEntityType>) field.get(BlockEntityType.REGISTRY);
+                entries.put(key, new BlockEntityType.Impl(
+                        key, BlocksBogiesTerrainBlockEntity.class));
+            }
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            Logger.global.logError("Cannot retain Blocks & Bogies style NBT", error);
+        }
     }
 
     private static void registerGirderBlockEntity() {
@@ -112,23 +184,38 @@ public final class BlueMapCopycatsCompatAddon implements Runnable {
         ));
     }
 
+    /**
+     * CreateEntityAddon registers its own copycat block-entity decoder. Its DTO retains
+     * "Material" but discards Copycats+'s "material_data" map, so our procedural terrain
+     * renderer cannot recover per-part materials. BlueMap's Registry is put-if-absent:
+     * simply registering our type cannot supersede an already-installed decoder.
+     *
+     * Install one comprehensive decoder for known copycat NBT IDs. Recheck on API enable
+     * as addon startup order is not defined. We leave all other block-entity types alone.
+     */
+    @SuppressWarnings("unchecked")
     private static void registerBlockEntities() {
-        for (Key key : BLOCK_ENTITY_IDS) {
-            BlockEntityType existing = BlockEntityType.REGISTRY.get(key);
-            if (existing != null) {
-                if (!CopycatsTerrainBlockEntity.class.equals(existing.getBlockEntityClass())) {
-                    Logger.global.logWarning(String.format(
-                            "Block entity %s is already registered to %s; "
-                                    + "Copycats NBT decoding for that id may be unavailable",
+        try {
+            Field entriesField = Registry.class.getDeclaredField("entries");
+            entriesField.setAccessible(true);
+            Map<Key, BlockEntityType> entries =
+                    (Map<Key, BlockEntityType>) entriesField.get(BlockEntityType.REGISTRY);
+            for (Key key : BLOCK_ENTITY_IDS) {
+                BlockEntityType existing = entries.get(key);
+                if (existing != null
+                        && CopycatsTerrainBlockEntity.class.equals(existing.getBlockEntityClass())) {
+                    continue;
+                }
+                entries.put(key, new BlockEntityType.Impl(key, CopycatsTerrainBlockEntity.class));
+                if (existing != null) {
+                    Logger.global.logInfo(String.format(
+                            "Copycat block entity %s: replaced %s with complete Material/material_data decoder",
                             key, existing.getBlockEntityClass().getName()));
                 }
-                continue;
             }
-
-            BlockEntityType.REGISTRY.register(new BlockEntityType.Impl(
-                    key,
-                    CopycatsTerrainBlockEntity.class
-            ));
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            Logger.global.logError(
+                    "Could not install full Copycats/Create copycat NBT decoder", error);
         }
     }
 }

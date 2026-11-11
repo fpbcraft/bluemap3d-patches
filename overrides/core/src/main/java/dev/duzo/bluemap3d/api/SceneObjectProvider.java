@@ -19,6 +19,11 @@ public interface SceneObjectProvider {
 
     Collection<? extends SceneObject> objects(ServerLevel level);
 
+    /** Whether this provider should publish or restore objects in this level. */
+    default boolean enabled(ServerLevel level) {
+        return true;
+    }
+
     /**
      * Lifecycle policy for every object returned by this provider.
      *
@@ -52,6 +57,18 @@ public interface SceneObjectProvider {
      */
     default Collection<String> authoritativeObjectPrefixes(ServerLevel level) {
         return List.of();
+    }
+
+    /**
+     * Positive evidence that a cached scene object no longer exists, even if a removal
+     * event was missed while its backing entity was unloaded.
+     *
+     * <p>Called only for saved objects absent from the current live provider snapshot.
+     * The default deliberately preserves objects across chunk unloads and restarts.
+     * Providers must return true only when an authoritative registry proves deletion.
+     */
+    default boolean isDefinitelyDeleted(ServerLevel level, String objectId) {
+        return false;
     }
 
     default Collection<ResourceLocation> hiddenBlocks() {

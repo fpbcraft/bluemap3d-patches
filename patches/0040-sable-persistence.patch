@@ -1,0 +1,101 @@
+diff --git a/addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java b/addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java
+--- a/addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java
++++ b/addon-sable/src/main/java/dev/duzo/bluemap3d/sable/ShipProvider.java
+@@ -110,6 +110,7 @@
+     private final Map<String, Footprint> lastSeen = new ConcurrentHashMap<>();
+ 
+     private final Map<String, SceneObject> lastObjects = new ConcurrentHashMap<>();
++    private final Map<ServerLevel, Set<String>> deletedShipIds = new ConcurrentHashMap<>();
+     private final Set<ServerSubLevelContainer> observedContainers =
+             Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
+ 
+@@ -206,6 +207,17 @@
+         return out;
+     }
+ 
++    @Override
++    public Collection<String> deletedObjectIds(ServerLevel level) {
++        Set<String> deleted = deletedShipIds.get(level);
++        if (deleted == null || deleted.isEmpty()) return List.of();
++
++        List<String> result = List.copyOf(deleted);
++        deleted.removeAll(result);
++        if (deleted.isEmpty()) deletedShipIds.remove(level, deleted);
++        return result;
++    }
++
+     private void observeContainer(ServerLevel level, ServerSubLevelContainer container) {
+         if (!observedContainers.add(container)) {
+             return;
+@@ -228,6 +240,10 @@
+                 lastObjects.remove(key);
+                 pendingSnapshots.remove(objectId);
+                 publishedVersions.remove(objectId);
++                ShipGeometryRevisionTracker.clear(uuid);
++                deletedShipIds
++                        .computeIfAbsent(level, ignored -> ConcurrentHashMap.newKeySet())
++                        .add(objectId);
+                 removePersisted(cacheFile(level), key);
+ 
+                 Footprint footprint = lastSeen.remove(key);
+@@ -281,7 +297,7 @@
+             if (Files.isRegularFile(file)) {
+                 try (var reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                     SnapshotFile state = GSON.fromJson(reader, SnapshotFile.class);
+-                    if (state != null && state.ships() != null) {
++                    if (state != null && state.format() >= 4 && state.ships() != null) {
+                         for (SavedShip ship : state.ships()) {
+                             if (ship != null && ship.id() != null && ship.dimension() != null) {
+                                 saved.put(ship.dimension() + "/" + ship.id(), ship);
+@@ -487,7 +503,7 @@
+             Files.createDirectories(file.getParent());
+             Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+             try (var writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
+-                GSON.toJson(new SnapshotFile(1, List.copyOf(saved.values())), writer);
++                GSON.toJson(new SnapshotFile(4, List.copyOf(saved.values())), writer);
+             }
+             try {
+                 Files.move(
+@@ -718,37 +734,11 @@
+      * interval, which is the whole cost this exists to avoid.
+      */
+     private static long geometryVersion(ServerSubLevel ship, BoundingBox3ic bounds) {
+-        long hash = 0xcbf29ce484222325L;
+-        hash = mix(hash, bounds.minX());
+-        hash = mix(hash, bounds.minY());
+-        hash = mix(hash, bounds.minZ());
+-        hash = mix(hash, bounds.maxX());
+-        hash = mix(hash, bounds.maxY());
+-        hash = mix(hash, bounds.maxZ());
+-
+-        MassData mass = ship.getSelfMassTracker();
+-        if (mass != null) {
+-            hash = mix(hash, Double.doubleToLongBits(mass.getMass()));
+-            Vector3dc centre = mass.getCenterOfMass();
+-            hash = mix(hash, Double.doubleToLongBits(centre.x()));
+-            hash = mix(hash, Double.doubleToLongBits(centre.y()));
+-            hash = mix(hash, Double.doubleToLongBits(centre.z()));
+-        }
+-
+-        long sections = 0L;
+-        for (PlotChunkHolder holder : ship.getPlot().getLoadedChunks()) {
+-            LevelChunk chunk = holder.getChunk();
+-            if (chunk == null) {
+-                continue;
+-            }
+-            long perChunk = mix(0xcbf29ce484222325L, holder.getPos().toLong());
+-            for (LevelChunkSection section : chunk.getSections()) {
+-                perChunk = mix(perChunk, section == null || section.hasOnlyAir()
+-                        ? 0 : section.getSerializedSize());
+-            }
+-            sections ^= perChunk;
+-        }
+-        return mix(mix(hash, sections), 15L);
++        // Exact hash is computed once on initial observation and again only after Sable
++        // reports a real plot block change. Ship movement never dirties it.
++        // Revision 36 invalidates meshes produced before the stale-topology/lifecycle fixes.
++        // Subsequent publishes return to hash-based reuse and only structural changes rebake.
++        return mix(ShipGeometryRevisionTracker.structureHash(ship), 36L);
+     }
+ 
+     /** FNV-1a, sixty-four bits of it. */
