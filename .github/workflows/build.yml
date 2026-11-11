@@ -34,8 +34,8 @@ jobs:
         id: release
         run: echo "version=$(python3 scripts/release_metadata.py --lines | sed -n '1p')" >> "$GITHUB_OUTPUT"
 
-      - name: Test named ship markers
-        run: node --test tests/named_ship_markers.test.cjs
+      - name: Test browser helpers
+        run: node --test tests/*.test.cjs
 
       - name: Build BlueMap compatibility artifacts
         run: ./build.sh

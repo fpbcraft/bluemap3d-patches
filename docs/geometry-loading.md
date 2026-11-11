@@ -1,0 +1,9 @@
+# Geometry loading draft
+
+The browser retains every object's latest transform from the live feed, but geometry downloads now use four concurrent slots. Queued live requests wait while their dimension is not selected. Eligible requests are ordered by current camera distance each time the queue is pumped; this is prioritization, not distance-based culling. Historical requests without a live owner bypass dimension gating. Requests sharing a mesh URL share a download and can be released by any eligible owner.
+
+A map switch releases waiting geometry within the queue's 100 ms scheduling interval. Already active downloads may finish after a switch. Removing the last owner cancels queued demand; teardown aborts active fetches and rejects waiting promises. Instance prototypes no longer attach another continuation on each feed while a download is pending. Rigid meshes use the latest row when geometry arrives, and failed requests retry on subsequent feed updates with a URL-level 1–15 second backoff.
+
+The stable loader revalidates a tiny build manifest and loads a SHA-256-named core script. The publisher writes the hashed file and legacy alias before publishing the manifest and new loader. Cached old loaders continue using the alias. Existing browsers may need their stable loader cache to expire before using the new manifest mechanism. Old hashed files are retained so already loaded manifests remain usable.
+
+Focused checks cover queue limits, priorities, dimension switches, duplicate demand, retry cooldown, removal, disposal, loader path validation, retry bounds and duplicate initialization. The patch series applies to the pinned upstream commit and generated JavaScript passes syntax checks. Full mod build, actual BlueMap camera behavior, historical integration and comparative network/CPU measurements still need validation. This draft does not reduce feed size or server-side entity tracking work.

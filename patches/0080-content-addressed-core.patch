@@ -1,0 +1,41 @@
+diff --git a/core/src/main/java/dev/duzo/bluemap3d/publish/WebRootPublisher.java b/core/src/main/java/dev/duzo/bluemap3d/publish/WebRootPublisher.java
+--- a/core/src/main/java/dev/duzo/bluemap3d/publish/WebRootPublisher.java
++++ b/core/src/main/java/dev/duzo/bluemap3d/publish/WebRootPublisher.java
+@@ -15,6 +15,9 @@
+ import java.nio.file.Path;
+ import java.nio.file.StandardCopyOption;
+ import java.util.Comparator;
++import java.util.HexFormat;
++import java.security.MessageDigest;
++import java.security.NoSuchAlgorithmException;
+ import java.util.stream.Stream;
+ 
+ /**
+@@ -157,8 +160,26 @@
+      * <p>Done on every startup so an updated mod ships an updated script.
+      */
+     private void copyScript() throws IOException {
++        byte[] core;
++        try (InputStream in = WebRootPublisher.class
++                .getResourceAsStream("/assets/bluemap3d/web/bluemap3d.core.js")) {
++            if (in == null) throw new IOException("bluemap3d.core.js is missing from the mod jar");
++            core = in.readAllBytes();
++        }
++        String hash;
++        try {
++            hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(core));
++        } catch (NoSuchAlgorithmException impossible) {
++            throw new IOException("SHA-256 unavailable", impossible);
++        }
++        Files.createDirectories(resolve(BASE));
++        String hashedUrl = BASE + "/bluemap3d.core-" + hash + ".js";
++        writeAtomically(resolve(hashedUrl), out -> out.write(core));
++        // Retain the stable alias for previously cached loaders.
++        writeAtomically(resolve(CORE_SCRIPT_URL), out -> out.write(core));
++        byte[] manifest = ("{\"script\":\"" + hashedUrl + "\"}").getBytes(StandardCharsets.UTF_8);
++        writeAtomically(resolve(BASE + "/bluemap3d-build.json"), out -> out.write(manifest));
+         copyResource("bluemap3d.js", resolve(SCRIPT_URL));
+-        copyResource("bluemap3d.core.js", resolve(CORE_SCRIPT_URL));
+     }
+ 
+     private static void copyResource(String name, Path target) throws IOException {

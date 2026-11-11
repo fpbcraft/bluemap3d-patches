@@ -48,3 +48,8 @@ runpy.run_path(
     Path(__file__).parent / "transforms" / "named_ship_markers.py",
     run_name="__bluemap3d_named_ship_markers__",
 )
+
+runpy.run_path(
+    Path(__file__).parent / "transforms" / "geometry_loading.py",
+    run_name="__bluemap3d_geometry_loading__",
+)
