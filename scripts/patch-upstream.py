@@ -53,3 +53,8 @@ runpy.run_path(
     Path(__file__).parent / "transforms" / "geometry_loading.py",
     run_name="__bluemap3d_geometry_loading__",
 )
+
+runpy.run_path(
+    Path(__file__).parent / "transforms" / "dirty_transforms.py",
+    run_name="__bluemap3d_dirty_transforms__",
+)

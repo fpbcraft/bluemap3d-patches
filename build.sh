@@ -201,6 +201,8 @@ cp "$ROOT/compat/local-template.json" addon-compat/src/main/resources/bluemap3d-
 cp "$ROOT/compat/local-template.json" core/src/main/resources/bluemap3d-compat/local-template.json
 
 python3 "$ROOT/scripts/patch-upstream.py"
+BLUEMAP3D_GENERATED_CORE="$PWD/core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js" \
+  node --test "$ROOT/tests/generated_scene_runtime.test.cjs"
 python3 "$ROOT/scripts/transforms/terrain_reload.py"
 
 # Shared-instance tracker is a maintained full override. Apply it after structural
