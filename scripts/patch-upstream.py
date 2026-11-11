@@ -58,3 +58,9 @@ runpy.run_path(
     Path(__file__).parent / "transforms" / "dirty_transforms.py",
     run_name="__bluemap3d_dirty_transforms__",
 )
+
+replace(
+    "core/src/main/resources/assets/bluemap3d/web/bluemap3d.core.js",
+    'var BUILD = "core-history-45-dirty-transforms";',
+    'var BUILD = "core-history-46-vehicle-indicators";',
+)

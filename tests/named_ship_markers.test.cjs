@@ -48,14 +48,14 @@ function fixture() {
         }
     }
     const root = new MarkerSet("main");
-    const app = {popupMarkerSet: root};
+    const app = {popupMarkerSet: root, mapViewer: {controlsManager: {distance: 300}}, events: new EventTarget()};
     const source = fs.readFileSync(
         path.join(__dirname, "../scripts/transforms/named_ship_markers.js"), "utf8");
     const context = {document, console, window: {}};
     vm.runInNewContext(source + "\nthis.makeMarkers = createNamedShipMarkers;", context);
     const manager = context.makeMarkers(app, {MarkerSet, HtmlMarker});
     const children = () => [...root.markers.values()][0].markers;
-    return {manager, document, listeners, root, children};
+    return {manager, document, listeners, root, children, app};
 }
 
 function shipRow(overrides = {}) {
@@ -158,5 +158,52 @@ test("flyover vehicles never get markers, including rename transitions", () => {
 
     manager.sync(entry, shipRow({label: "Flyover II"}));
     assert.equal(children().size, 1);
+    manager.dispose();
+});
+
+
+test("vehicle indicators use player zoom hysteresis and close hidden popups", () => {
+    const {manager, app} = fixture(); const entry = {};
+    manager.sync(entry, shipRow()); manager.show(entry, true);
+    const event = {preventDefault() {}, stopPropagation() {}};
+    entry.shipMarker.shipButton.handlers.click(event);
+    app.mapViewer.controlsManager.distance = 170;
+    app.events.dispatchEvent(new Event("bluemapRenderFrame"));
+    assert.equal(entry.shipMarker.visible, false);
+    assert.equal(entry.shipMarker.shipDetails.hidden, true);
+    app.mapViewer.controlsManager.distance = 200;
+    app.events.dispatchEvent(new Event("bluemapRenderFrame"));
+    assert.equal(entry.shipMarker.visible, false);
+    app.mapViewer.controlsManager.distance = 220;
+    app.events.dispatchEvent(new Event("bluemapRenderFrame"));
+    assert.equal(entry.shipMarker.visible, true);
+    manager.show(entry, false);
+    app.events.dispatchEvent(new Event("bluemapRenderFrame"));
+    assert.equal(entry.shipMarker.visible, false);
+    manager.dispose();
+});
+
+test("one train indicator per dimension follows the lowest available carriage", () => {
+    const {manager, children} = fixture();
+    const row = index => shipRow({provider: "create_contraptions", id: "create_contraptions/minecraft/overworld/12345678-1234-1234-1234-123456789abc/" + index, label: "Express"});
+    const first = {}, second = {};
+    manager.sync(second, row(1)); manager.show(second, true);
+    assert.equal(children().size, 1);
+    let marker = [...children().values()][0];
+    assert.equal(marker.shipButton.attributes["data-vehicle"], "train");
+    manager.sync(first, row(0)); manager.show(first, true);
+    assert.equal(children().size, 1);
+    manager.position(second, {x: 200, y: 80, z: 0});
+    assert.equal(marker.position.x, 100);
+    manager.position(first, {x: 120, y: 80, z: 0});
+    assert.equal(marker.position.x, 120);
+    manager.remove(first);
+    assert.equal(children().size, 1);
+    assert.equal(marker.position.x, 200);
+    manager.sync(second, {...row(1), dimension: "minecraft:the_nether", label: "Renamed Express"});
+    assert.equal(children().size, 1);
+    marker = [...children().values()][0];
+    assert.equal(marker.shipTitle.textContent, "Renamed Express");
+    manager.remove(second); assert.equal(children().size, 0);
     manager.dispose();
 });
