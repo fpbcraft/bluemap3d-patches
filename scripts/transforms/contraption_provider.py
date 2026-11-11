@@ -31,6 +31,7 @@ def apply() -> None:
     source = _apply_sable_integration(source)
     source = _apply_terrain_invalidation(source)
     source = _apply_train_snapshot_cleanup(source)
+    source = _apply_train_labels(source)
     TARGET.write_text(source)
 
 
@@ -879,3 +880,30 @@ def _apply_terrain_invalidation(s: str) -> str:
 '''
     s = s.replace(terrain_methods_anchor, terrain_methods + terrain_methods_anchor, 1)
     return s
+
+
+def _apply_train_labels(source: str) -> str:
+    call = """SceneObject object = sceneObjectOf(
+                        objectId, entry.volume, entry.version, position, rotation, level.dimension());"""
+    if source.count(call) != 1:
+        raise SystemExit("Train label call anchor not found")
+    source = source.replace(call, """SceneObject object = sceneObjectOf(
+                        objectId, entry.volume, entry.version, position, rotation, level.dimension(),
+                        train.name == null ? null : train.name.getString());""", 1)
+    signature = """    private static SceneObject sceneObjectOf(String objectId, BlockVolume volume, long version,
+                                              Vec3 position, Quaternionf rotation, ResourceKey<Level> dimension) {
+        return new SceneObject() {"""
+    if source.count(signature) != 1:
+        raise SystemExit("Train label SceneObject anchor not found")
+    return source.replace(signature, """    private static SceneObject sceneObjectOf(String objectId, BlockVolume volume, long version,
+                                              Vec3 position, Quaternionf rotation, ResourceKey<Level> dimension) {
+        return sceneObjectOf(objectId, volume, version, position, rotation, dimension, null);
+    }
+
+    private static SceneObject sceneObjectOf(String objectId, BlockVolume volume, long version,
+                                              Vec3 position, Quaternionf rotation, ResourceKey<Level> dimension,
+                                              String label) {
+        return new SceneObject() {
+            @Override
+            public String label() { return label; }
+""", 1)
